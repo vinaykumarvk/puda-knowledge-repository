@@ -1,4 +1,24 @@
+import { pgTable, text, varchar, timestamp, boolean, serial } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+
+// Conversations table for chat history
+export const conversations = pgTable("conversations", {
+  id: serial("id").primaryKey(),
+  question: text("question").notNull(),
+  mode: text("mode").notNull(), // "balanced" | "deep" | "concise"
+  useCache: boolean("use_cache").notNull().default(true),
+  response: text("response").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertConversationSchema = createInsertSchema(conversations).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertConversation = z.infer<typeof insertConversationSchema>;
+export type Conversation = typeof conversations.$inferSelect;
 
 // Query schema for graph database chatbot
 export const querySchema = z.object({
@@ -18,10 +38,16 @@ export const responseSchema = z.object({
 export type QueryResponse = z.infer<typeof responseSchema>;
 
 // User schema (keeping existing for compatibility)
-export const insertUserSchema = z.object({
-  username: z.string(),
-  password: z.string(),
+export const users = pgTable("users", {
+  id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  username: text("username").notNull().unique(),
+  password: text("password").notNull(),
+});
+
+export const insertUserSchema = createInsertSchema(users).pick({
+  username: true,
+  password: true,
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = InsertUser & { id: string };
+export type User = typeof users.$inferSelect;

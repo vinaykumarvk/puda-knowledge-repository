@@ -1,7 +1,8 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { Client } from "@gradio/client";
-import { querySchema } from "@shared/schema";
+import { querySchema, insertConversationSchema } from "@shared/schema";
+import { storage } from "./storage";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/query", async (req, res) => {
@@ -17,8 +18,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (result && result.data) {
         const responseData = Array.isArray(result.data) ? result.data[0] : result.data;
+        const responseText = typeof responseData === 'string' ? responseData : JSON.stringify(responseData);
+        
+        // Save to conversation history
+        await storage.createConversation({
+          question: validatedData.question,
+          mode: validatedData.mode,
+          useCache: !validatedData.refresh,
+          response: responseText,
+        });
+        
         res.json({
-          data: typeof responseData === 'string' ? responseData : JSON.stringify(responseData),
+          data: responseText,
         });
       } else {
         res.status(500).json({
@@ -32,6 +43,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
         data: "",
         error: error instanceof Error ? error.message : "Failed to process query",
       });
+    }
+  });
+
+  // Get all conversations
+  app.get("/api/conversations", async (req, res) => {
+    try {
+      const conversations = await storage.getConversations();
+      res.json(conversations);
+    } catch (error) {
+      console.error("Error fetching conversations:", error);
+      res.status(500).json({ error: "Failed to fetch conversations" });
+    }
+  });
+
+  // Get single conversation
+  app.get("/api/conversations/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const conversation = await storage.getConversation(id);
+      if (conversation) {
+        res.json(conversation);
+      } else {
+        res.status(404).json({ error: "Conversation not found" });
+      }
+    } catch (error) {
+      console.error("Error fetching conversation:", error);
+      res.status(500).json({ error: "Failed to fetch conversation" });
+    }
+  });
+
+  // Delete conversation
+  app.delete("/api/conversations/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteConversation(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting conversation:", error);
+      res.status(500).json({ error: "Failed to delete conversation" });
     }
   });
 
