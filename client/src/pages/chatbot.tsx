@@ -199,11 +199,35 @@ ${response}
     const maxWidth = pageWidth - 2 * margin;
     let yPosition = 20;
 
+    // Helper function to render text with markdown formatting
+    const renderMarkdownLine = (line: string, x: number, y: number) => {
+      let xPos = x;
+      // Split by bold markers while preserving them
+      const parts = line.split(/(\*\*.*?\*\*)/g);
+      
+      parts.forEach(part => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+          // Bold text
+          doc.setFont('helvetica', 'bold');
+          const text = part.slice(2, -2);
+          doc.text(text, xPos, y);
+          xPos += doc.getTextWidth(text);
+        } else if (part) {
+          // Normal text
+          doc.setFont('helvetica', 'normal');
+          doc.text(part, xPos, y);
+          xPos += doc.getTextWidth(part);
+        }
+      });
+    };
+
     doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
     doc.text("Graph Query Assistant Export", margin, yPosition);
     yPosition += 15;
 
     doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
     doc.text(`Timestamp: ${timestamp}`, margin, yPosition);
     yPosition += 7;
     doc.text(`Mode: ${mode}`, margin, yPosition);
@@ -212,10 +236,12 @@ ${response}
     yPosition += 12;
 
     doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
     doc.text("Question", margin, yPosition);
     yPosition += 8;
 
     doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
     const questionLines = doc.splitTextToSize(question, maxWidth);
     questionLines.forEach((line: string) => {
       if (yPosition > 270) {
@@ -228,18 +254,45 @@ ${response}
     yPosition += 8;
 
     doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
     doc.text("Response", margin, yPosition);
     yPosition += 8;
 
     doc.setFontSize(10);
-    const responseLines = doc.splitTextToSize(response, maxWidth);
+    // Process each line of response for markdown
+    const responseLines = response.split('\n');
     responseLines.forEach((line: string) => {
       if (yPosition > 270) {
         doc.addPage();
         yPosition = 20;
       }
-      doc.text(line, margin, yPosition);
-      yPosition += 6;
+      
+      // Handle bullet points
+      if (line.trim().startsWith('•')) {
+        const wrappedLines = doc.splitTextToSize(line, maxWidth);
+        wrappedLines.forEach((wrappedLine: string, index: number) => {
+          if (yPosition > 270) {
+            doc.addPage();
+            yPosition = 20;
+          }
+          if (index === 0) {
+            renderMarkdownLine(wrappedLine, margin, yPosition);
+          } else {
+            renderMarkdownLine(wrappedLine, margin + 5, yPosition);
+          }
+          yPosition += 6;
+        });
+      } else {
+        const wrappedLines = doc.splitTextToSize(line, maxWidth);
+        wrappedLines.forEach((wrappedLine: string) => {
+          if (yPosition > 270) {
+            doc.addPage();
+            yPosition = 20;
+          }
+          renderMarkdownLine(wrappedLine, margin, yPosition);
+          yPosition += 6;
+        });
+      }
     });
 
     doc.save(`query-${Date.now()}.pdf`);
