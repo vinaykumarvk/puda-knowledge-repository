@@ -22,7 +22,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowRight, Copy, Check, History, Download, FileText, FileDown, Settings, Key, CheckCircle2, XCircle } from "lucide-react";
+import { Loader2, ArrowRight, Copy, Check, History, Download, FileText, FileDown, Settings, Key } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { HistorySidebar } from "@/components/history-sidebar";
 import type { Query, QueryResponse, Conversation } from "@shared/schema";
@@ -285,29 +285,15 @@ ${response}
             </Button>
             <div>
               <h1 className="text-2xl font-semibold text-foreground" data-testid="text-title">
-                Graph Query Assistant
+                WealthForce Knowledge Agent
               </h1>
               <p className="text-sm text-muted-foreground">
-                Query your graph database with AI-powered insights
+                Query WealthForce Product Knowledge
               </p>
             </div>
           </div>
           
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border">
-              {apiKey ? (
-                <>
-                  <CheckCircle2 className="w-4 h-4 text-chart-2" data-testid="icon-auth-enabled" />
-                  <span className="text-xs text-muted-foreground">API Key Set</span>
-                </>
-              ) : (
-                <>
-                  <XCircle className="w-4 h-4 text-muted-foreground" data-testid="icon-auth-disabled" />
-                  <span className="text-xs text-muted-foreground">No API Key</span>
-                </>
-              )}
-            </div>
-
             <Dialog open={showSettings} onOpenChange={setShowSettings}>
               <DialogTrigger asChild>
                 <Button
@@ -428,39 +414,46 @@ ${response}
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="mode" className="text-sm font-medium uppercase tracking-wide">
-                    Mode
-                  </Label>
-                  <Select value={mode} onValueChange={(value) => setMode(value as typeof mode)} disabled={isLoading}>
-                    <SelectTrigger id="mode" data-testid="select-mode" className="rounded-lg">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="concise">Concise</SelectItem>
-                      <SelectItem value="balanced">Balanced</SelectItem>
-                      <SelectItem value="deep">Deep</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-center justify-between space-x-4 p-4 rounded-lg border border-border bg-card">
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="cache"
-                      data-testid="switch-cache"
-                      checked={useCache}
-                      onCheckedChange={setUseCache}
-                      disabled={isLoading}
-                      className="data-[state=checked]:bg-chart-2"
-                    />
-                    <Label htmlFor="cache" className="text-sm font-medium cursor-pointer">
-                      Use Cache
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="mode" className="text-sm font-medium uppercase tracking-wide">
+                      Mode
                     </Label>
+                    <Select value={mode} onValueChange={(value) => setMode(value as typeof mode)} disabled={isLoading}>
+                      <SelectTrigger id="mode" data-testid="select-mode" className="rounded-lg">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="concise">Concise</SelectItem>
+                        <SelectItem value="balanced">Balanced</SelectItem>
+                        <SelectItem value="deep">Deep</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  {useCache && (
-                    <Check className="w-4 h-4 text-chart-2" data-testid="icon-cache-enabled" />
-                  )}
+
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium uppercase tracking-wide">
+                      Cache
+                    </Label>
+                    <div className="flex items-center justify-between space-x-4 h-9 px-4 rounded-lg border border-border bg-card">
+                      <div className="flex items-center space-x-2">
+                        <Switch
+                          id="cache"
+                          data-testid="switch-cache"
+                          checked={useCache}
+                          onCheckedChange={setUseCache}
+                          disabled={isLoading}
+                          className="data-[state=checked]:bg-chart-2"
+                        />
+                        <Label htmlFor="cache" className="text-sm font-medium cursor-pointer">
+                          Use Cache
+                        </Label>
+                      </div>
+                      {useCache && (
+                        <Check className="w-4 h-4 text-chart-2" data-testid="icon-cache-enabled" />
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 <Button
