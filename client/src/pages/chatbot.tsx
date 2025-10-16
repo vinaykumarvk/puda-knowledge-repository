@@ -437,9 +437,9 @@ ${response}
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="concise">Concise</SelectItem>
                       <SelectItem value="balanced">Balanced</SelectItem>
                       <SelectItem value="deep">Deep</SelectItem>
-                      <SelectItem value="concise">Customer-Selected</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

@@ -117,9 +117,9 @@ export function HistorySidebar({ onSelectConversation, selectedId }: HistorySide
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Modes</SelectItem>
+              <SelectItem value="concise">Concise</SelectItem>
               <SelectItem value="balanced">Balanced</SelectItem>
               <SelectItem value="deep">Deep</SelectItem>
-              <SelectItem value="concise">Customer-Selected</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -138,7 +138,7 @@ export function HistorySidebar({ onSelectConversation, selectedId }: HistorySide
               <p className="text-sm text-center px-4">No conversations match your filters</p>
               <Button
                 data-testid="button-reset-filters"
-                variant="link"
+                variant="ghost"
                 size="sm"
                 onClick={handleClearSearch}
                 className="mt-2"
