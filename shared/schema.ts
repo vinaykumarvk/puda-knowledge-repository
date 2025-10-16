@@ -32,6 +32,7 @@ export type Query = z.infer<typeof querySchema>;
 // Response schema
 export const responseSchema = z.object({
   data: z.string(), // Markdown formatted response
+  citations: z.string().optional(), // Citations if available
   error: z.string().optional(),
 });
 

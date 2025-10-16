@@ -33,6 +33,7 @@ export default function ChatbotPage() {
   const [mode, setMode] = useState<"balanced" | "deep" | "concise">("balanced");
   const [useCache, setUseCache] = useState(true);
   const [response, setResponse] = useState<string>("");
+  const [citations, setCitations] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [copied, setCopied] = useState(false);
   const [selectedConversationId, setSelectedConversationId] = useState<number>();
@@ -60,6 +61,7 @@ export default function ChatbotPage() {
       if (data.error) {
         setError(data.error);
         setResponse("");
+        setCitations("");
         toast({
           title: "Error",
           description: data.error,
@@ -67,6 +69,7 @@ export default function ChatbotPage() {
         });
       } else {
         setResponse(data.data);
+        setCitations(data.citations || "");
         setError("");
         queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
         toast({
@@ -79,6 +82,7 @@ export default function ChatbotPage() {
       const errorMessage = error.message || "Failed to execute query";
       setError(errorMessage);
       setResponse("");
+      setCitations("");
       toast({
         title: "Error",
         description: errorMessage,
@@ -92,6 +96,7 @@ export default function ChatbotPage() {
     setMode(conversation.mode as "balanced" | "deep" | "concise");
     setUseCache(conversation.useCache);
     setResponse(conversation.response);
+    setCitations(""); // Citations not stored in history yet
     setError("");
     setSelectedConversationId(conversation.id);
   };
@@ -528,9 +533,19 @@ ${response}
                       <p className="text-destructive text-center">{error}</p>
                     </div>
                   ) : response ? (
-                    <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:font-semibold prose-code:font-mono prose-code:text-sm prose-pre:bg-muted prose-pre:p-4 prose-pre:rounded-lg">
-                      <ReactMarkdown data-testid="text-response">{response}</ReactMarkdown>
-                    </div>
+                    <>
+                      <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:font-semibold prose-code:font-mono prose-code:text-sm prose-pre:bg-muted prose-pre:p-4 prose-pre:rounded-lg">
+                        <ReactMarkdown data-testid="text-response">{response}</ReactMarkdown>
+                      </div>
+                      {citations && (
+                        <div className="mt-6 pt-6 border-t border-border">
+                          <h3 className="text-sm font-semibold uppercase tracking-wide mb-3">Citations</h3>
+                          <div className="prose prose-sm max-w-none dark:prose-invert text-muted-foreground">
+                            <ReactMarkdown data-testid="text-citations">{citations}</ReactMarkdown>
+                          </div>
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <div className="flex items-center justify-center h-full text-muted-foreground text-sm" data-testid="text-empty-state">
                       Response will appear here

@@ -17,8 +17,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       if (result && result.data) {
-        const responseData = Array.isArray(result.data) ? result.data[0] : result.data;
-        const responseText = typeof responseData === 'string' ? responseData : JSON.stringify(responseData);
+        // Log the full response to understand the structure
+        console.log("Full Gradio API response:", JSON.stringify(result.data, null, 2));
+        
+        let responseText = "";
+        let citations = "";
+        
+        if (Array.isArray(result.data)) {
+          // First element is the answer, second might be citations
+          responseText = typeof result.data[0] === 'string' ? result.data[0] : JSON.stringify(result.data[0]);
+          if (result.data.length > 1 && result.data[1]) {
+            citations = typeof result.data[1] === 'string' ? result.data[1] : JSON.stringify(result.data[1]);
+          }
+        } else {
+          responseText = typeof result.data === 'string' ? result.data : JSON.stringify(result.data);
+        }
         
         // Save to conversation history
         await storage.createConversation({
@@ -30,6 +43,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         res.json({
           data: responseText,
+          citations: citations || undefined,
         });
       } else {
         res.status(500).json({
