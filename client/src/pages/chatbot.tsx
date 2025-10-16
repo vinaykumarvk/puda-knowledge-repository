@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   DropdownMenu,
@@ -22,11 +23,50 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowRight, Copy, Check, History, Download, FileText, FileDown, Settings, Key } from "lucide-react";
+import { 
+  Loader2, 
+  Send, 
+  Copy, 
+  Check, 
+  History, 
+  Download, 
+  FileText, 
+  FileDown, 
+  Settings, 
+  Key,
+  Sparkles,
+  TrendingUp,
+  FileQuestion,
+  Shield
+} from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { HistorySidebar } from "@/components/history-sidebar";
 import type { Query, QueryResponse, Conversation } from "@shared/schema";
 import jsPDF from "jspdf";
+
+// Suggested prompts for onboarding (ChatGPT-inspired)
+const SUGGESTED_PROMPTS = [
+  {
+    icon: TrendingUp,
+    text: "What are the steps in mutual funds order placement?",
+    description: "Process workflow"
+  },
+  {
+    icon: Shield,
+    text: "Explain the compliance requirements for transactions",
+    description: "Regulatory compliance"
+  },
+  {
+    icon: FileQuestion,
+    text: "How does the OTP verification process work?",
+    description: "Security process"
+  },
+  {
+    icon: Sparkles,
+    text: "What is the risk profiling process?",
+    description: "Risk assessment"
+  }
+];
 
 export default function ChatbotPage() {
   const [question, setQuestion] = useState("");
@@ -123,6 +163,10 @@ export default function ChatbotPage() {
     });
   };
 
+  const handleSuggestedPrompt = (promptText: string) => {
+    setQuestion(promptText);
+  };
+
   const handleCopy = async () => {
     if (response) {
       await navigator.clipboard.writeText(response);
@@ -153,7 +197,7 @@ export default function ChatbotPage() {
     }
 
     const timestamp = new Date().toLocaleString();
-    const content = `# Graph Query Assistant Export
+    const content = `# WealthForce Knowledge Agent Export
 ## Query Details
 - **Timestamp**: ${timestamp}
 - **Mode**: ${mode}
@@ -170,7 +214,7 @@ ${response}
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `query-${Date.now()}.md`;
+    a.download = `wealthforce-query-${Date.now()}.md`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -223,7 +267,7 @@ ${response}
 
     doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
-    doc.text("Graph Query Assistant Export", margin, yPosition);
+    doc.text("WealthForce Knowledge Agent Export", margin, yPosition);
     yPosition += 15;
 
     doc.setFontSize(10);
@@ -295,7 +339,7 @@ ${response}
       }
     });
 
-    doc.save(`query-${Date.now()}.pdf`);
+    doc.save(`wealthforce-query-${Date.now()}.pdf`);
 
     toast({
       title: "Export Successful",
@@ -325,6 +369,7 @@ ${response}
 
   const charCount = question.length;
   const isLoading = queryMutation.isPending;
+  const hasResponse = response || error;
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -336,139 +381,184 @@ ${response}
       )}
       
       <div className="flex-1 flex flex-col">
-        <header className="p-6 border-b border-border flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button
-              data-testid="button-toggle-history"
-              variant="ghost"
-              size="icon"
-              onClick={() => setShowHistory(!showHistory)}
-            >
-              <History className="w-5 h-5" />
-            </Button>
-            <div>
-              <h1 className="text-2xl font-semibold text-foreground" data-testid="text-title">
-                WealthForce Knowledge Agent
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                Query WealthForce Product Knowledge
-              </p>
+        {/* Professional Enterprise Header */}
+        <header className="border-b border-border bg-card/30 backdrop-blur-sm">
+          <div className="px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Button
+                data-testid="button-toggle-history"
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowHistory(!showHistory)}
+                className="hover-elevate active-elevate-2"
+              >
+                <History className="w-5 h-5" />
+              </Button>
+              <div>
+                <h1 className="text-2xl font-bold text-foreground flex items-center gap-2" data-testid="text-title">
+                  <Sparkles className="w-6 h-6 text-primary" />
+                  WealthForce Knowledge Agent
+                </h1>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Query WealthForce Product Knowledge
+                </p>
+              </div>
             </div>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <Dialog open={showSettings} onOpenChange={setShowSettings}>
-              <DialogTrigger asChild>
-                <Button
-                  data-testid="button-settings"
-                  variant="ghost"
-                  size="icon"
-                >
-                  <Settings className="w-5 h-5" />
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                  <DialogTitle>API Settings</DialogTitle>
-                  <DialogDescription>
-                    Configure your Gradio API authentication. This is optional and will be used for future authenticated endpoints.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="api-key" className="text-sm font-medium">
-                      API Key
-                    </Label>
-                    <div className="relative">
-                      <Key className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
-                      <Input
-                        id="api-key"
-                        data-testid="input-api-key"
-                        type="password"
-                        placeholder="Enter your Gradio API key"
-                        value={apiKeyInput}
-                        onChange={(e) => setApiKeyInput(e.target.value)}
-                        className="pl-9"
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Your API key is stored securely in your browser's local storage
-                    </p>
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      data-testid="button-cancel-settings"
-                      variant="outline"
-                      onClick={() => {
-                        setApiKeyInput(apiKey);
-                        setShowSettings(false);
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      data-testid="button-save-api-key"
-                      onClick={handleSaveApiKey}
-                    >
-                      Save
-                    </Button>
-                  </div>
+            
+            <div className="flex items-center gap-2">
+              {apiKey && (
+                <div className="text-xs text-muted-foreground px-3 py-1.5 rounded-md bg-muted/50 border border-border" data-testid="text-auth-status">
+                  <Key className="w-3 h-3 inline mr-1.5" />
+                  Authenticated
                 </div>
-              </DialogContent>
-            </Dialog>
+              )}
+              
+              <Dialog open={showSettings} onOpenChange={setShowSettings}>
+                <DialogTrigger asChild>
+                  <Button
+                    data-testid="button-settings"
+                    variant="ghost"
+                    size="icon"
+                    className="hover-elevate active-elevate-2"
+                  >
+                    <Settings className="w-5 h-5" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>API Settings</DialogTitle>
+                    <DialogDescription>
+                      Configure your Gradio API authentication. This is optional and will be used for future authenticated endpoints.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="api-key" className="text-sm font-medium">
+                        API Key
+                      </Label>
+                      <div className="relative">
+                        <Key className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
+                        <Input
+                          id="api-key"
+                          data-testid="input-api-key"
+                          type="password"
+                          placeholder="Enter your Gradio API key"
+                          value={apiKeyInput}
+                          onChange={(e) => setApiKeyInput(e.target.value)}
+                          className="pl-9"
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Your API key is stored securely in your browser's local storage
+                      </p>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        data-testid="button-cancel-settings"
+                        variant="outline"
+                        onClick={() => {
+                          setApiKeyInput(apiKey);
+                          setShowSettings(false);
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        data-testid="button-save-api-key"
+                        onClick={handleSaveApiKey}
+                      >
+                        Save
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  data-testid="button-export"
-                  variant="outline"
-                  className="gap-2"
-                  disabled={!response}
-                >
-                  <Download className="w-4 h-4" />
-                  Export
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  data-testid="menu-export-markdown"
-                  onClick={handleExportMarkdown}
-                  className="gap-2"
-                >
-                  <FileText className="w-4 h-4" />
-                  Export as Markdown
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  data-testid="menu-export-pdf"
-                  onClick={handleExportPDF}
-                  className="gap-2"
-                >
-                  <FileDown className="w-4 h-4" />
-                  Export as PDF
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    data-testid="button-export"
+                    variant="outline"
+                    className="gap-2"
+                    disabled={!response}
+                  >
+                    <Download className="w-4 h-4" />
+                    Export
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    data-testid="menu-export-markdown"
+                    onClick={handleExportMarkdown}
+                    className="gap-2"
+                  >
+                    <FileText className="w-4 h-4" />
+                    Export as Markdown
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    data-testid="menu-export-pdf"
+                    onClick={handleExportPDF}
+                    className="gap-2"
+                  >
+                    <FileDown className="w-4 h-4" />
+                    Export as PDF
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         </header>
 
-        <div className="flex-1 overflow-auto p-6">
-          <div className="max-w-5xl mx-auto">
-            <div className="grid lg:grid-cols-2 gap-8">
-              {/* Input Section */}
-              <div className="space-y-6">
+        {/* Main Content Area - Claude-inspired clean layout */}
+        <div className="flex-1 overflow-auto">
+          <div className="max-w-4xl mx-auto px-6 py-8">
+            
+            {/* Suggested Prompts - ChatGPT-inspired onboarding (shown when empty) */}
+            {!hasResponse && !isLoading && !question && (
+              <div className="mb-8">
+                <h2 className="text-lg font-semibold text-foreground mb-4">Get Started</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {SUGGESTED_PROMPTS.map((prompt, index) => {
+                    const Icon = prompt.icon;
+                    return (
+                      <Card
+                        key={index}
+                        className="cursor-pointer transition-all hover-elevate active-elevate-2 border-border"
+                        onClick={() => handleSuggestedPrompt(prompt.text)}
+                        data-testid={`card-suggested-prompt-${index}`}
+                      >
+                        <CardContent className="p-4 flex items-start gap-3">
+                          <div className="p-2 rounded-lg bg-primary/10">
+                            <Icon className="w-5 h-5 text-primary" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-foreground line-clamp-2">{prompt.text}</p>
+                            <p className="text-xs text-muted-foreground mt-1">{prompt.description}</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Query Input Section */}
+            <Card className="mb-6 border-border shadow-sm">
+              <CardContent className="p-6 space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="question" className="text-sm font-medium uppercase tracking-wide">
-                    Question
+                  <Label htmlFor="question" className="text-sm font-semibold uppercase tracking-wider text-foreground">
+                    Your Question
                   </Label>
                   <div className="relative">
                     <Textarea
                       id="question"
                       data-testid="input-question"
-                      placeholder="Ask a question about your graph database..."
+                      placeholder="Ask about wealth management processes..."
                       value={question}
                       onChange={(e) => setQuestion(e.target.value)}
                       onKeyDown={handleKeyDown}
-                      className="min-h-32 resize-none rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                      className="min-h-24 resize-none rounded-lg focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                       disabled={isLoading}
                     />
                     <span className="absolute bottom-2 right-2 text-xs text-muted-foreground" data-testid="text-char-count">
@@ -477,148 +567,160 @@ ${response}
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="mode" className="text-sm font-medium uppercase tracking-wide">
-                      Mode
-                    </Label>
-                    <Select value={mode} onValueChange={(value) => setMode(value as typeof mode)} disabled={isLoading}>
-                      <SelectTrigger id="mode" data-testid="select-mode" className="rounded-lg">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="concise">Concise</SelectItem>
-                        <SelectItem value="balanced">Balanced</SelectItem>
-                        <SelectItem value="deep">Deep</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="flex items-end gap-3">
+                  <div className="flex-1 grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="mode" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Mode
+                      </Label>
+                      <Select value={mode} onValueChange={(value) => setMode(value as typeof mode)} disabled={isLoading}>
+                        <SelectTrigger id="mode" data-testid="select-mode" className="h-9">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="concise">Concise</SelectItem>
+                          <SelectItem value="balanced">Balanced</SelectItem>
+                          <SelectItem value="deep">Deep</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium uppercase tracking-wide">
-                      Cache
-                    </Label>
-                    <div className="flex items-center justify-between space-x-4 h-9 px-4 rounded-lg border border-border bg-card">
-                      <div className="flex items-center space-x-2">
-                        <Switch
-                          id="cache"
-                          data-testid="switch-cache"
-                          checked={useCache}
-                          onCheckedChange={setUseCache}
-                          disabled={isLoading}
-                          className="data-[state=checked]:bg-chart-2"
-                        />
-                        <Label htmlFor="cache" className="text-sm font-medium cursor-pointer">
-                          Use Cache
-                        </Label>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Cache
+                      </Label>
+                      <div className="flex items-center justify-between h-9 px-3 rounded-lg border border-border bg-card">
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            id="cache"
+                            data-testid="switch-cache"
+                            checked={useCache}
+                            onCheckedChange={setUseCache}
+                            disabled={isLoading}
+                            className="data-[state=checked]:bg-chart-2"
+                          />
+                          <Label htmlFor="cache" className="text-sm font-medium cursor-pointer">
+                            {useCache ? 'Enabled' : 'Disabled'}
+                          </Label>
+                        </div>
+                        {useCache && (
+                          <Check className="w-4 h-4 text-chart-2" data-testid="icon-cache-enabled" />
+                        )}
                       </div>
-                      {useCache && (
-                        <Check className="w-4 h-4 text-chart-2" data-testid="icon-cache-enabled" />
-                      )}
                     </div>
                   </div>
+
+                  <Button
+                    data-testid="button-submit"
+                    onClick={handleSubmit}
+                    disabled={!question.trim() || isLoading}
+                    size="lg"
+                    className="min-w-32"
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        Send
+                        <Send className="w-4 h-4" />
+                      </>
+                    )}
+                  </Button>
                 </div>
+              </CardContent>
+            </Card>
 
-                <Button
-                  data-testid="button-submit"
-                  onClick={handleSubmit}
-                  disabled={!question.trim() || isLoading}
-                  className="w-full lg:w-auto lg:min-w-32"
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      Send Query
-                      <ArrowRight className="w-4 h-4" />
-                    </>
-                  )}
-                </Button>
-              </div>
-
-              {/* Response Section */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium uppercase tracking-wide">Response</Label>
-                  {response && (
-                    <Button
-                      data-testid="button-copy"
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleCopy}
-                      className="gap-2"
-                    >
-                      {copied ? (
-                        <>
-                          <Check className="w-3 h-3" />
-                          Copied
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3 h-3" />
-                          Copy
-                        </>
-                      )}
-                    </Button>
-                  )}
-                </div>
-
-                <div
-                  className={`min-h-96 max-h-[600px] overflow-y-auto rounded-lg border p-6 bg-card ${
+            {/* Response Section - Card-based display (ChatGPT/Intellect style) */}
+            {(isLoading || hasResponse) && (
+              <div className="space-y-4">
+                {/* Main Response Card */}
+                <Card
+                  className={`border shadow-sm ${
                     error
-                      ? "border-destructive"
+                      ? "border-destructive/50 bg-destructive/5"
                       : response
-                      ? "border-chart-2/30"
-                      : "border-card-border"
+                      ? "border-primary/20 bg-primary/5"
+                      : "border-border"
                   }`}
                   data-testid="container-response"
                 >
-                  {isLoading ? (
-                    <div className="space-y-4 animate-pulse">
-                      <div className="h-4 bg-muted rounded w-3/4"></div>
-                      <div className="h-4 bg-muted rounded w-full"></div>
-                      <div className="h-4 bg-muted rounded w-5/6"></div>
-                      <div className="h-4 bg-muted rounded w-2/3"></div>
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-sm font-semibold uppercase tracking-wider text-foreground">Response</h3>
+                      {response && (
+                        <Button
+                          data-testid="button-copy"
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleCopy}
+                          className="gap-2 hover-elevate active-elevate-2"
+                        >
+                          {copied ? (
+                            <>
+                              <Check className="w-3 h-3" />
+                              Copied
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3 h-3" />
+                              Copy
+                            </>
+                          )}
+                        </Button>
+                      )}
                     </div>
-                  ) : error ? (
-                    <div className="flex flex-col items-center justify-center h-full space-y-4" data-testid="text-error">
-                      <svg className="w-12 h-12 text-destructive" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <p className="text-destructive text-center">{error}</p>
-                    </div>
-                  ) : response ? (
-                    <>
-                      <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:font-semibold prose-code:font-mono prose-code:text-sm prose-pre:bg-muted prose-pre:p-4 prose-pre:rounded-lg">
+
+                    {isLoading ? (
+                      <div className="space-y-3 animate-pulse">
+                        <div className="h-4 bg-muted rounded w-3/4"></div>
+                        <div className="h-4 bg-muted rounded w-full"></div>
+                        <div className="h-4 bg-muted rounded w-5/6"></div>
+                        <div className="h-4 bg-muted rounded w-2/3"></div>
+                      </div>
+                    ) : error ? (
+                      <div className="flex flex-col items-center justify-center py-8 space-y-3" data-testid="text-error">
+                        <div className="p-3 rounded-full bg-destructive/10">
+                          <svg className="w-8 h-8 text-destructive" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                        <p className="text-destructive text-center text-sm font-medium">{error}</p>
+                      </div>
+                    ) : response ? (
+                      <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:font-semibold prose-code:font-mono prose-code:text-sm prose-pre:bg-muted prose-pre:p-4 prose-pre:rounded-lg prose-p:text-foreground prose-li:text-foreground">
                         <ReactMarkdown data-testid="text-response">{response}</ReactMarkdown>
                       </div>
-                      {metadata && (
-                        <div className="mt-4 pt-4 border-t border-border/50">
-                          <div className="text-xs text-muted-foreground">
-                            <ReactMarkdown data-testid="text-metadata">{metadata}</ReactMarkdown>
-                          </div>
-                        </div>
-                      )}
-                      {citations && (citations.includes('→') || citations.includes('[1]')) && citations.length > 15 && (
-                        <div className="mt-6 pt-6 border-t border-border">
-                          <h3 className="text-sm font-semibold uppercase tracking-wide mb-3">Sources</h3>
-                          <div className="prose prose-sm max-w-none dark:prose-invert text-muted-foreground">
-                            <ReactMarkdown data-testid="text-citations">{citations}</ReactMarkdown>
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <div className="flex items-center justify-center h-full text-muted-foreground text-sm" data-testid="text-empty-state">
-                      Response will appear here
-                    </div>
-                  )}
-                </div>
+                    ) : null}
+                  </CardContent>
+                </Card>
+
+                {/* Metadata Card */}
+                {metadata && (
+                  <Card className="border-border shadow-sm">
+                    <CardContent className="p-4">
+                      <div className="text-xs text-muted-foreground">
+                        <ReactMarkdown data-testid="text-metadata">{metadata}</ReactMarkdown>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Sources Card */}
+                {citations && (citations.includes('→') || citations.includes('[1]')) && citations.length > 15 && (
+                  <Card className="border-border shadow-sm">
+                    <CardContent className="p-6">
+                      <h3 className="text-sm font-semibold uppercase tracking-wider text-foreground mb-3">Sources</h3>
+                      <div className="prose prose-sm max-w-none dark:prose-invert prose-p:text-muted-foreground prose-strong:text-foreground">
+                        <ReactMarkdown data-testid="text-citations">{citations}</ReactMarkdown>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
-            </div>
+            )}
           </div>
         </div>
       </div>
