@@ -9,8 +9,10 @@ A beautiful, production-ready chatbot interface for querying graph databases usi
 - Three query modes: Balanced, Deep, Concise
 - Cache toggle for refresh control
 - Markdown-formatted response display with citation markers [1], [2]
-- **Metadata display** (Mode, Model, Generated timestamp)
-- **Sources section** (displays API-provided sources when available)
+- **Metadata display** (Mode, Model, Generated timestamp) below each response
+- **Sources section** (displays API-provided sources with document names when available)
+  - Intelligently hides when API returns only header without actual sources
+  - Shows formatted citations like "**[1]** → filename.pdf"
 - Copy to clipboard functionality
 - **Chat history with PostgreSQL database persistence**
 - **Advanced search and filtering in history sidebar**

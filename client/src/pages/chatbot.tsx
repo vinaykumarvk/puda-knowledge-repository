@@ -549,7 +549,7 @@ ${response}
                           </div>
                         </div>
                       )}
-                      {citations && (
+                      {citations && (citations.includes('→') || citations.includes('[1]')) && citations.length > 15 && (
                         <div className="mt-6 pt-6 border-t border-border">
                           <h3 className="text-sm font-semibold uppercase tracking-wide mb-3">Sources</h3>
                           <div className="prose prose-sm max-w-none dark:prose-invert text-muted-foreground">
