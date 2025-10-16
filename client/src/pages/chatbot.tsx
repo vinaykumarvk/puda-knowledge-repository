@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   DropdownMenu,
@@ -12,8 +13,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowRight, Copy, Check, History, Download, FileText, FileDown } from "lucide-react";
+import { Loader2, ArrowRight, Copy, Check, History, Download, FileText, FileDown, Settings, Key, CheckCircle2, XCircle } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { HistorySidebar } from "@/components/history-sidebar";
 import type { Query, QueryResponse, Conversation } from "@shared/schema";
@@ -28,7 +37,18 @@ export default function ChatbotPage() {
   const [copied, setCopied] = useState(false);
   const [selectedConversationId, setSelectedConversationId] = useState<number>();
   const [showHistory, setShowHistory] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
+  const [apiKey, setApiKey] = useState("");
+  const [apiKeyInput, setApiKeyInput] = useState("");
   const { toast } = useToast();
+
+  useEffect(() => {
+    const savedApiKey = localStorage.getItem("gradio_api_key");
+    if (savedApiKey) {
+      setApiKey(savedApiKey);
+      setApiKeyInput(savedApiKey);
+    }
+  }, []);
 
   const queryMutation = useMutation({
     mutationFn: async (payload: Query) => {
@@ -220,6 +240,26 @@ ${response}
     });
   };
 
+  const handleSaveApiKey = () => {
+    if (apiKeyInput.trim()) {
+      localStorage.setItem("gradio_api_key", apiKeyInput.trim());
+      setApiKey(apiKeyInput.trim());
+      setShowSettings(false);
+      toast({
+        title: "API Key Saved",
+        description: "Your API key has been saved securely in local storage",
+      });
+    } else {
+      localStorage.removeItem("gradio_api_key");
+      setApiKey("");
+      setShowSettings(false);
+      toast({
+        title: "API Key Removed",
+        description: "API key has been removed",
+      });
+    }
+  };
+
   const charCount = question.length;
   const isLoading = queryMutation.isPending;
 
@@ -253,37 +293,113 @@ ${response}
             </div>
           </div>
           
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                data-testid="button-export"
-                variant="outline"
-                className="gap-2"
-                disabled={!response}
-              >
-                <Download className="w-4 h-4" />
-                Export
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                data-testid="menu-export-markdown"
-                onClick={handleExportMarkdown}
-                className="gap-2"
-              >
-                <FileText className="w-4 h-4" />
-                Export as Markdown
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                data-testid="menu-export-pdf"
-                onClick={handleExportPDF}
-                className="gap-2"
-              >
-                <FileDown className="w-4 h-4" />
-                Export as PDF
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border">
+              {apiKey ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4 text-chart-2" data-testid="icon-auth-enabled" />
+                  <span className="text-xs text-muted-foreground">API Key Set</span>
+                </>
+              ) : (
+                <>
+                  <XCircle className="w-4 h-4 text-muted-foreground" data-testid="icon-auth-disabled" />
+                  <span className="text-xs text-muted-foreground">No API Key</span>
+                </>
+              )}
+            </div>
+
+            <Dialog open={showSettings} onOpenChange={setShowSettings}>
+              <DialogTrigger asChild>
+                <Button
+                  data-testid="button-settings"
+                  variant="ghost"
+                  size="icon"
+                >
+                  <Settings className="w-5 h-5" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>API Settings</DialogTitle>
+                  <DialogDescription>
+                    Configure your Gradio API authentication. This is optional and will be used for future authenticated endpoints.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="api-key" className="text-sm font-medium">
+                      API Key
+                    </Label>
+                    <div className="relative">
+                      <Key className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        id="api-key"
+                        data-testid="input-api-key"
+                        type="password"
+                        placeholder="Enter your Gradio API key"
+                        value={apiKeyInput}
+                        onChange={(e) => setApiKeyInput(e.target.value)}
+                        className="pl-9"
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Your API key is stored securely in your browser's local storage
+                    </p>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      data-testid="button-cancel-settings"
+                      variant="outline"
+                      onClick={() => {
+                        setApiKeyInput(apiKey);
+                        setShowSettings(false);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      data-testid="button-save-api-key"
+                      onClick={handleSaveApiKey}
+                    >
+                      Save
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  data-testid="button-export"
+                  variant="outline"
+                  className="gap-2"
+                  disabled={!response}
+                >
+                  <Download className="w-4 h-4" />
+                  Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  data-testid="menu-export-markdown"
+                  onClick={handleExportMarkdown}
+                  className="gap-2"
+                >
+                  <FileText className="w-4 h-4" />
+                  Export as Markdown
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  data-testid="menu-export-pdf"
+                  onClick={handleExportPDF}
+                  className="gap-2"
+                >
+                  <FileDown className="w-4 h-4" />
+                  Export as PDF
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </header>
 
         <div className="flex-1 overflow-auto p-6">
