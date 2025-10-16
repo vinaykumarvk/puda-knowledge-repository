@@ -6,11 +6,18 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowRight, Copy, Check, History } from "lucide-react";
+import { Loader2, ArrowRight, Copy, Check, History, Download, FileText, FileDown } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { HistorySidebar } from "@/components/history-sidebar";
 import type { Query, QueryResponse, Conversation } from "@shared/schema";
+import jsPDF from "jspdf";
 
 export default function ChatbotPage() {
   const [question, setQuestion] = useState("");
@@ -105,6 +112,114 @@ export default function ChatbotPage() {
     }
   };
 
+  const handleExportMarkdown = () => {
+    if (!question || !response) {
+      toast({
+        title: "No Content",
+        description: "Please generate a response first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const timestamp = new Date().toLocaleString();
+    const content = `# Graph Query Assistant Export
+## Query Details
+- **Timestamp**: ${timestamp}
+- **Mode**: ${mode}
+- **Cache**: ${useCache ? 'Enabled' : 'Disabled'}
+
+## Question
+${question}
+
+## Response
+${response}
+`;
+
+    const blob = new Blob([content], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `query-${Date.now()}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: "Export Successful",
+      description: "Conversation exported as Markdown",
+    });
+  };
+
+  const handleExportPDF = () => {
+    if (!question || !response) {
+      toast({
+        title: "No Content",
+        description: "Please generate a response first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const doc = new jsPDF();
+    const timestamp = new Date().toLocaleString();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 20;
+    const maxWidth = pageWidth - 2 * margin;
+    let yPosition = 20;
+
+    doc.setFontSize(18);
+    doc.text("Graph Query Assistant Export", margin, yPosition);
+    yPosition += 15;
+
+    doc.setFontSize(10);
+    doc.text(`Timestamp: ${timestamp}`, margin, yPosition);
+    yPosition += 7;
+    doc.text(`Mode: ${mode}`, margin, yPosition);
+    yPosition += 7;
+    doc.text(`Cache: ${useCache ? 'Enabled' : 'Disabled'}`, margin, yPosition);
+    yPosition += 12;
+
+    doc.setFontSize(14);
+    doc.text("Question", margin, yPosition);
+    yPosition += 8;
+
+    doc.setFontSize(10);
+    const questionLines = doc.splitTextToSize(question, maxWidth);
+    questionLines.forEach((line: string) => {
+      if (yPosition > 270) {
+        doc.addPage();
+        yPosition = 20;
+      }
+      doc.text(line, margin, yPosition);
+      yPosition += 6;
+    });
+    yPosition += 8;
+
+    doc.setFontSize(14);
+    doc.text("Response", margin, yPosition);
+    yPosition += 8;
+
+    doc.setFontSize(10);
+    const responseLines = doc.splitTextToSize(response, maxWidth);
+    responseLines.forEach((line: string) => {
+      if (yPosition > 270) {
+        doc.addPage();
+        yPosition = 20;
+      }
+      doc.text(line, margin, yPosition);
+      yPosition += 6;
+    });
+
+    doc.save(`query-${Date.now()}.pdf`);
+
+    toast({
+      title: "Export Successful",
+      description: "Conversation exported as PDF",
+    });
+  };
+
   const charCount = question.length;
   const isLoading = queryMutation.isPending;
 
@@ -137,6 +252,38 @@ export default function ChatbotPage() {
               </p>
             </div>
           </div>
+          
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                data-testid="button-export"
+                variant="outline"
+                className="gap-2"
+                disabled={!response}
+              >
+                <Download className="w-4 h-4" />
+                Export
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                data-testid="menu-export-markdown"
+                onClick={handleExportMarkdown}
+                className="gap-2"
+              >
+                <FileText className="w-4 h-4" />
+                Export as Markdown
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                data-testid="menu-export-pdf"
+                onClick={handleExportPDF}
+                className="gap-2"
+              >
+                <FileDown className="w-4 h-4" />
+                Export as PDF
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </header>
 
         <div className="flex-1 overflow-auto p-6">
