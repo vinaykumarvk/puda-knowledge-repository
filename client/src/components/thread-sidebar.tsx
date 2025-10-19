@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
-import { Trash2, MessageSquarePlus, Search } from "lucide-react";
+import { X, MessageSquarePlus, Search } from "lucide-react";
 import { useState } from "react";
 import type { Thread } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
@@ -84,13 +84,13 @@ export function ThreadSidebar({ onSelectThread, onNewChat, onDeleteThread, selec
                   data-testid={`button-delete-thread-${thread.id}`}
                   variant="ghost"
                   size="icon"
-                  className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
+                  className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
                   onClick={(e) => {
                     e.stopPropagation();
                     onDeleteThread(thread.id);
                   }}
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <X className="w-4 h-4" />
                 </Button>
               </div>
             ))

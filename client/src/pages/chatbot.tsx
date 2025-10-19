@@ -54,7 +54,7 @@ export default function ChatbotPage() {
   const [question, setQuestion] = useState("");
   const [currentThreadId, setCurrentThreadId] = useState<number | undefined>();
   const [messages, setMessages] = useState<Message[]>([]);
-  const [mode, setMode] = useState<"concise" | "balanced" | "deep">("balanced");
+  const [mode, setMode] = useState<"concise" | "balanced" | "deep">("concise"); // Short is default
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -234,18 +234,18 @@ export default function ChatbotPage() {
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">Mode:</span>
               <Select value={mode} onValueChange={(value) => setMode(value as "concise" | "balanced" | "deep")}>
-                <SelectTrigger className="w-[140px]" data-testid="select-mode">
+                <SelectTrigger className="w-[160px]" data-testid="select-mode">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="concise" data-testid="option-concise">
-                    Concise
+                  <SelectItem value="concise" data-testid="option-short">
+                    Short
                   </SelectItem>
-                  <SelectItem value="balanced" data-testid="option-balanced">
-                    Balanced
+                  <SelectItem value="balanced" data-testid="option-standard">
+                    Standard
                   </SelectItem>
-                  <SelectItem value="deep" data-testid="option-deep">
-                    Deep
+                  <SelectItem value="deep" data-testid="option-comprehensive">
+                    Comprehensive
                   </SelectItem>
                 </SelectContent>
               </Select>
@@ -351,15 +351,12 @@ export default function ChatbotPage() {
                 onClick={handleSubmit}
                 disabled={!question.trim() || isLoading}
                 size="lg"
-                className="h-[60px] px-6"
+                className="h-[60px] w-[60px] p-0"
               >
                 {isLoading ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
-                  <>
-                    Send
-                    <Send className="w-4 h-4 ml-2" />
-                  </>
+                  <Send className="w-5 h-5" />
                 )}
               </Button>
             </div>
