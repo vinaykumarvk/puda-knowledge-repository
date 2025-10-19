@@ -52,6 +52,31 @@ function cleanupCitations(text: string): string {
   return cleaned;
 }
 
+// Helper function to format API responses professionally
+function formatProfessionally(text: string): string {
+  let formatted = text;
+  
+  // Remove "Direct Answer:" label and just show the content
+  formatted = formatted.replace(/^##?\s*\*?\*?Direct Answer:?\*?\*?\s*/im, '');
+  formatted = formatted.replace(/\n##?\s*\*?\*?Direct Answer:?\*?\*?\s*/im, '\n');
+  
+  // Convert "Point 1:", "Point 2:" etc. to bullet points
+  formatted = formatted.replace(/^Point\s+(\d+):\s*/gim, '- ');
+  formatted = formatted.replace(/\n\s*Point\s+(\d+):\s*/gim, '\n- ');
+  
+  // Convert "Finding 1/", "Finding 2/" etc. to bullet points
+  formatted = formatted.replace(/^Finding\s+(\d+)\/?\s*/gim, '- ');
+  formatted = formatted.replace(/\n\s*Finding\s+(\d+)\/?\s*/gim, '\n- ');
+  
+  // Convert numbered list format "1.", "2." at start of line to bullet points (only if standalone)
+  formatted = formatted.replace(/^\d+\.\s+/gm, '- ');
+  
+  // Clean up any "**Direct Answer**" that might still be in the text
+  formatted = formatted.replace(/\*\*Direct Answer:?\*\*/gi, '');
+  
+  return formatted;
+}
+
 // Helper function to download a single message exchange
 function downloadMessage(userMessage: string, assistantMessage: string, timestamp: string) {
   const content = `WealthForce Knowledge Agent - Conversation Export
@@ -382,7 +407,7 @@ export default function ChatbotPage() {
                             rehypePlugins={[rehypeRaw]}
                             remarkPlugins={[remarkGfm]}
                           >
-                            {cleanupCitations(removeKGTags(decodeHTMLEntities(message.content)))}
+                            {formatProfessionally(cleanupCitations(removeKGTags(decodeHTMLEntities(message.content))))}
                           </ReactMarkdown>
                         </div>
                       )}
@@ -399,7 +424,7 @@ export default function ChatbotPage() {
                           onClick={() => downloadMessage(
                             userMessage.content,
                             message.content,
-                            message.createdAt
+                            typeof message.createdAt === 'string' ? message.createdAt : message.createdAt.toISOString()
                           )}
                         >
                           <Download className="w-3 h-3 mr-1" />

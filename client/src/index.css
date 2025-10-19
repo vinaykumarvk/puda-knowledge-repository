@@ -358,19 +358,30 @@
     @apply bg-transparent px-0 py-0;
   }
   
-  /* Compact citations display - reduce gaps between items */
+  /* Compact citations display - remove ALL gaps between items */
   .prose h2#citations + p,
   .prose h2 + p:has(a[id^="cite-"]) {
-    @apply mb-1;
+    @apply mb-0 leading-tight;
   }
   
-  /* Make citation entries more compact */
+  /* Make citation entries completely compact - no gaps */
   .prose p:has(a[id^="cite-"]) {
-    @apply mb-1 leading-snug;
+    @apply mb-0 leading-tight;
+  }
+  
+  /* Also target citations section heading */
+  .prose h2:has(+ p a[id^="cite-"]),
+  .prose h2#citations {
+    @apply mb-1;
   }
   
   /* Remove bold from citation filenames */
   .prose p:has(a[id^="cite-"]) strong {
     @apply font-normal;
+  }
+  
+  /* Ensure tight spacing for citation lines */
+  .prose :is(h2 + p, p + p):has(a[id^="cite-"]) {
+    @apply mt-0;
   }
 }
