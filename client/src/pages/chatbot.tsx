@@ -238,6 +238,7 @@ export default function ChatbotPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [mode, setMode] = useState<"concise" | "balanced" | "deep">("concise"); // Short is default
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const lastAssistantMessageRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
   // Fetch current thread details
@@ -261,12 +262,17 @@ export default function ChatbotPage() {
     }
   }, [fetchedMessages]);
 
-  // Auto-scroll to bottom when messages change
+  // Auto-scroll to show top of new assistant messages
   useEffect(() => {
-    if (scrollAreaRef.current) {
-      const scrollContainer = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
-      if (scrollContainer) {
-        scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    if (lastAssistantMessageRef.current && messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      
+      // Only scroll if the last message is an assistant message (new answer)
+      if (lastMessage.role === "assistant") {
+        lastAssistantMessageRef.current.scrollIntoView({ 
+          behavior: "smooth", 
+          block: "start" 
+        });
       }
     }
   }, [messages]);
@@ -474,9 +480,13 @@ export default function ChatbotPage() {
               // Find the corresponding user message for this assistant message
               const userMessage = message.role === "assistant" && index > 0 ? messages[index - 1] : null;
               
+              // Check if this is the last assistant message
+              const isLastAssistantMessage = message.role === "assistant" && index === messages.length - 1;
+              
               return (
                 <div
                   key={message.id}
+                  ref={isLastAssistantMessage ? lastAssistantMessageRef : null}
                   className={`mb-6 flex gap-4 ${
                     message.role === "user" ? "justify-end" : "justify-start"
                   }`}
