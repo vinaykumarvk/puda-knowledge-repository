@@ -25,13 +25,14 @@ A professional, enterprise-grade conversational AI chatbot interface inspired by
 ### Conversational Threading
 The application uses a hybrid approach to maintain conversation context:
 
-1. **API Context Chaining**: The EKG API maintains server-side context using `response_id`
-   - First question in thread: No `response_id` sent
-   - Follow-up questions: Last assistant message's `response_id` sent to API
-   - API uses `response_id` to maintain conversation context
+1. **API Context Chaining**: The EKG API maintains server-side context using `conversation_id` (primary) or `response_id` (fallback)
+   - First question in thread: No context IDs sent
+   - Follow-up questions: Send `conversation_id` if available (for long-running context), otherwise send `response_id`
+   - API returns `conversation_id` which is stored in thread for subsequent requests
+   - `conversation_id` is prioritized over `response_id` for better context maintenance
 
 2. **Database Persistence**: PostgreSQL stores all threads and messages
-   - Threads: Conversation sessions with title and timestamps
+   - Threads: Conversation sessions with title, conversationId, and timestamps
    - Messages: Individual Q&A pairs with role (user/assistant) and response_id
    - Enables thread switching and conversation history retrieval
 
@@ -60,10 +61,11 @@ The application uses a hybrid approach to maintain conversation context:
    - Thread list shows last activity timestamp
 
 3. **Context Maintenance**
-   - Follow-up questions automatically include response_id
-   - API maintains conversation context server-side
-   - Context persists across thread switches
-   - Context survives page refreshes
+   - Follow-up questions automatically include conversation_id (primary) or response_id (fallback)
+   - API maintains conversation context server-side via conversation_id
+   - conversation_id is captured from API responses and stored in thread
+   - Context persists across thread switches and page refreshes
+   - Prioritizes conversation_id over response_id for better long-running context
 
 4. **Message Display**
    - User messages: Plain text in blue bubbles
@@ -114,7 +116,7 @@ The application uses a hybrid approach to maintain conversation context:
 
 ### Database (`shared/`)
 - **schema.ts** - Drizzle ORM schema
-  - **threads** table: id, title, createdAt, updatedAt
+  - **threads** table: id, title, conversationId, createdAt, updatedAt
   - **messages** table: id, threadId, role, content, responseId, sources, metadata, createdAt
   - Relationships: thread has many messages
   - Cascading delete: deleting thread deletes all messages
@@ -184,17 +186,19 @@ The application uses a hybrid approach to maintain conversation context:
 1. **New Thread**:
    - User asks question (no threadId)
    - Backend creates new thread with title from question
-   - API request sent without response_id
+   - API request sent without context IDs (no response_id or conversation_id)
    - User message saved
    - Assistant message saved with response_id from API
+   - conversation_id captured from API response and stored in thread
    - Frontend displays both messages
 
 2. **Follow-up Question**:
    - User asks question (with threadId)
-   - Backend gets last assistant message's response_id
-   - API request sent WITH response_id
+   - Backend gets thread's conversation_id (if stored) and last assistant message's response_id
+   - API request sent WITH conversation_id (primary) or response_id (fallback)
    - User message saved
    - Assistant message saved with new response_id
+   - conversation_id captured from API response if not already stored
    - Thread timestamp updated
    - Frontend displays updated conversation
 
