@@ -14,7 +14,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let previousResponseId: string | undefined;
       let existingConversationId: string | undefined;
       
-      // If threadId provided, get the last assistant message for response_id and thread conversationId
+      // If threadId provided, get conversation context
+      let chatHistory: Array<{question: string; answer: string}> = [];
+      
       if (threadId) {
         const thread = await storage.getThread(threadId);
         if (thread && thread.conversationId) {
@@ -24,6 +26,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const lastMessage = await storage.getLastAssistantMessage(threadId);
         if (lastMessage && lastMessage.responseId) {
           previousResponseId = lastMessage.responseId;
+        }
+        
+        // Get last 5 Q&A pairs for context window
+        const recentMessages = await storage.getRecentMessagePairs(threadId, 5);
+        
+        // Format as Q&A pairs
+        for (let i = 0; i < recentMessages.length; i += 2) {
+          const userMsg = recentMessages[i];
+          const assistantMsg = recentMessages[i + 1];
+          
+          if (userMsg && assistantMsg && userMsg.role === "user" && assistantMsg.role === "assistant") {
+            chatHistory.push({
+              question: userMsg.content,
+              answer: assistantMsg.content
+            });
+          }
         }
       } else {
         // Create a new thread with title from question (truncated)
@@ -49,6 +67,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else if (previousResponseId) {
         // Add response_id if this is a follow-up question without conversation_id
         apiPayload.response_id = previousResponseId;
+      }
+      
+      // Add chat history (last 5 Q&A pairs) for better context
+      if (chatHistory.length > 0) {
+        apiPayload.chat_history = chatHistory;
+        console.log(`Including ${chatHistory.length} previous Q&A pairs in context`);
       }
       
       console.log("EKG API request payload:", JSON.stringify(apiPayload, null, 2));
