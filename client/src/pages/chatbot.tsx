@@ -12,14 +12,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { 
   Loader2, 
   Send, 
   Sparkles,
   User,
   Download,
-  RefreshCw
+  RefreshCw,
+  FileText,
+  FileType
 } from "lucide-react";
+import jsPDF from "jspdf";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
@@ -56,6 +65,19 @@ function cleanupCitations(text: string): string {
 function formatProfessionally(text: string): string {
   let formatted = text;
   
+  // Remove the KG + VectorStore header and context ID
+  formatted = formatted.replace(/^#\s*\*\*KG \+ VectorStore Answer[\s\S]*?\*\*\n*/im, '');
+  
+  // Remove "Question:" label and keep just the question text
+  formatted = formatted.replace(/Question:\s*/gi, '');
+  
+  // Move "Generated:" timestamp to the end - first capture it, then move it
+  let generatedTimestamp = '';
+  formatted = formatted.replace(/_Generated:\s*([^\n]+)_\n*/gi, (match, timestamp) => {
+    generatedTimestamp = `\n\n---\n\n*Generated: ${timestamp}*`;
+    return '';
+  });
+  
   // Remove "Direct Answer:" label and just show the content
   formatted = formatted.replace(/^##?\s*\*?\*?Direct Answer:?\*?\*?\s*/im, '');
   formatted = formatted.replace(/\n##?\s*\*?\*?Direct Answer:?\*?\*?\s*/im, '\n');
@@ -74,34 +96,109 @@ function formatProfessionally(text: string): string {
   // Clean up any "**Direct Answer**" that might still be in the text
   formatted = formatted.replace(/\*\*Direct Answer:?\*\*/gi, '');
   
+  // Append the timestamp at the end if we found one
+  if (generatedTimestamp) {
+    formatted += generatedTimestamp;
+  }
+  
   return formatted;
 }
 
-// Helper function to download a single message exchange
-function downloadMessage(userMessage: string, assistantMessage: string, timestamp: string) {
-  const content = `WealthForce Knowledge Agent - Conversation Export
-Generated: ${new Date(timestamp).toLocaleString()}
+// Helper function to download a single message exchange as Markdown
+function downloadMessageMarkdown(userMessage: string, assistantMessage: string, timestamp: string) {
+  const content = `# WealthForce Knowledge Agent - Conversation Export
 
-========================================
-Question:
+**Generated:** ${new Date(timestamp).toLocaleString()}
+
+---
+
+## Question
+
 ${userMessage}
 
-========================================
-Answer:
+---
+
+## Answer
+
 ${assistantMessage}
 
-========================================
+---
 `;
 
-  const blob = new Blob([content], { type: 'text/plain' });
+  const blob = new Blob([content], { type: 'text/markdown' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `answer-${new Date(timestamp).toISOString().slice(0, 10)}.txt`;
+  a.download = `answer-${new Date(timestamp).toISOString().slice(0, 10)}.md`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+// Helper function to download a single message exchange as PDF
+function downloadMessagePDF(userMessage: string, assistantMessage: string, timestamp: string) {
+  const pdf = new jsPDF();
+  const margin = 20;
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const maxWidth = pageWidth - (margin * 2);
+  let yPosition = margin;
+
+  // Title
+  pdf.setFontSize(16);
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('WealthForce Knowledge Agent', margin, yPosition);
+  yPosition += 10;
+
+  pdf.setFontSize(10);
+  pdf.setFont('helvetica', 'normal');
+  pdf.text(`Generated: ${new Date(timestamp).toLocaleString()}`, margin, yPosition);
+  yPosition += 15;
+
+  // Question
+  pdf.setFontSize(12);
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('Question:', margin, yPosition);
+  yPosition += 7;
+
+  pdf.setFontSize(10);
+  pdf.setFont('helvetica', 'normal');
+  const questionLines = pdf.splitTextToSize(userMessage, maxWidth);
+  pdf.text(questionLines, margin, yPosition);
+  yPosition += (questionLines.length * 5) + 10;
+
+  // Answer
+  pdf.setFontSize(12);
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('Answer:', margin, yPosition);
+  yPosition += 7;
+
+  pdf.setFontSize(10);
+  pdf.setFont('helvetica', 'normal');
+  
+  // Clean the assistant message for PDF (remove markdown)
+  const cleanAnswer = assistantMessage
+    .replace(/[#*_`]/g, '')
+    .replace(/\[(\d+)\]/g, '[$1]')
+    .replace(/<[^>]*>/g, '');
+  
+  const answerLines = pdf.splitTextToSize(cleanAnswer, maxWidth);
+  const lineHeight = 5;
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  
+  // Write answer with pagination
+  for (let i = 0; i < answerLines.length; i++) {
+    // Check if we need a new page
+    if (yPosition + lineHeight > pageHeight - margin) {
+      pdf.addPage();
+      yPosition = margin;
+    }
+    
+    pdf.text(answerLines[i], margin, yPosition);
+    yPosition += lineHeight;
+  }
+
+  pdf.save(`answer-${new Date(timestamp).toISOString().slice(0, 10)}.pdf`);
 }
 
 // Helper function to download entire thread conversation
@@ -185,7 +282,7 @@ export default function ChatbotPage() {
       const result = await response.json();
       return result;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       if (data.error) {
         toast({
           title: "Error",
@@ -198,12 +295,12 @@ export default function ChatbotPage() {
           setCurrentThreadId(data.threadId);
         }
         
-        // Add user message
+        // Add user message - use the question from variables instead of state
         const userMessage: Message = {
           id: Date.now(),
           threadId: data.threadId,
           role: "user",
-          content: question,
+          content: variables.question,
           responseId: null,
           sources: null,
           metadata: null,
@@ -416,30 +513,55 @@ export default function ChatbotPage() {
                     {/* Action buttons for assistant messages */}
                     {message.role === "assistant" && userMessage && (
                       <div className="flex gap-2 mt-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 text-xs"
-                          data-testid={`button-download-message-${message.id}`}
-                          onClick={() => downloadMessage(
-                            userMessage.content,
-                            message.content,
-                            typeof message.createdAt === 'string' ? message.createdAt : message.createdAt.toISOString()
-                          )}
-                        >
-                          <Download className="w-3 h-3 mr-1" />
-                          Download
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 text-xs"
+                              data-testid={`button-download-message-${message.id}`}
+                            >
+                              <Download className="w-3 h-3 mr-1" />
+                              Download
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent>
+                            <DropdownMenuItem 
+                              onClick={() => downloadMessageMarkdown(
+                                userMessage.content,
+                                message.content,
+                                typeof message.createdAt === 'string' ? message.createdAt : message.createdAt.toISOString()
+                              )}
+                            >
+                              <FileText className="w-4 h-4 mr-2" />
+                              Download as Markdown (.md)
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => downloadMessagePDF(
+                                userMessage.content,
+                                message.content,
+                                typeof message.createdAt === 'string' ? message.createdAt : message.createdAt.toISOString()
+                              )}
+                            >
+                              <FileType className="w-4 h-4 mr-2" />
+                              Download as PDF (.pdf)
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                        
                         <Button
                           variant="ghost"
                           size="sm"
                           className="h-8 text-xs"
                           data-testid={`button-refresh-message-${message.id}`}
                           onClick={() => {
-                            toast({
-                              title: "Regenerate Answer",
-                              description: "This feature will regenerate the answer with the same question.",
-                            });
+                            if (userMessage) {
+                              // Directly call mutation with the stored question
+                              queryMutation.mutate({
+                                question: userMessage.content,
+                                threadId: currentThreadId,
+                              });
+                            }
                           }}
                         >
                           <RefreshCw className="w-3 h-3 mr-1" />
