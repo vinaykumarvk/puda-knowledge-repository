@@ -1,8 +1,45 @@
-import { pgTable, text, varchar, timestamp, boolean, serial } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, boolean, serial, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// Conversations table for chat history
+// Threads table - represents conversation threads (like chat sessions)
+export const threads = pgTable("threads", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(), // Generated from first question
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertThreadSchema = createInsertSchema(threads).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertThread = z.infer<typeof insertThreadSchema>;
+export type Thread = typeof threads.$inferSelect;
+
+// Messages table - individual messages within threads
+export const messages = pgTable("messages", {
+  id: serial("id").primaryKey(),
+  threadId: integer("thread_id").notNull().references(() => threads.id, { onDelete: "cascade" }),
+  role: text("role").notNull(), // "user" | "assistant"
+  content: text("content").notNull(),
+  responseId: text("response_id"), // EKG API response_id for conversational chaining
+  sources: text("sources"), // JSON string of sources/citations
+  metadata: text("metadata"), // JSON string of metadata
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertMessageSchema = createInsertSchema(messages).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertMessage = z.infer<typeof insertMessageSchema>;
+export type Message = typeof messages.$inferSelect;
+
+// Old conversations table - kept for backward compatibility
 export const conversations = pgTable("conversations", {
   id: serial("id").primaryKey(),
   question: text("question").notNull(),
@@ -25,6 +62,7 @@ export const querySchema = z.object({
   question: z.string().min(1, "Question is required"),
   mode: z.enum(["balanced", "deep", "concise"]),
   refresh: z.boolean(),
+  threadId: z.number().optional(), // Optional thread ID for conversational mode
 });
 
 export type Query = z.infer<typeof querySchema>;
