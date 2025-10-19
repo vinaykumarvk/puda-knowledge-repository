@@ -15,6 +15,8 @@ The WealthForce Knowledge Agent is an enterprise-grade conversational AI chatbot
 - **Meta-Instruction Prompting**: Follow-up questions automatically include meta-instructions that ask the LLM to evaluate and clarify ambiguous pronoun references ("this", "it", "that") before answering. This hybrid approach combines clean text context with LLM self-evaluation for improved contextual understanding.
 - **Focus Directives**: Implemented comprehensive focus directives for both initial and follow-up questions. The LLM is instructed to answer only the specific question asked, include only immediately relevant information, exclude tangential details, and prioritize clarity and relevance. This makes responses sharper and more directly relevant to each question.
 - **30-Day Thread Retention**: Limited thread history access to the last 30 days to maintain optimal performance and relevant conversation history.
+- **Sidebar Improvements**: Enhanced thread sidebar with always-visible red trash icons for thread deletion, 2-line text wrapping for full thread titles, and collapsible sidebar functionality with collapse/expand buttons.
+- **Improved Scroll Position**: Fixed auto-scroll behavior to position cursor at the top of new assistant answers instead of the bottom, providing better reading experience by showing the start of responses immediately.
 
 ## User Preferences
 I prefer simple language and detailed explanations. I want iterative development with frequent, small updates rather than large, infrequent ones. Ask before making major changes to the architecture or core functionalities. Do not make changes to the `shared/` folder without explicit instruction.
