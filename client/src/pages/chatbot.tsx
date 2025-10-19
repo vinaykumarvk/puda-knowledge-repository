@@ -24,7 +24,7 @@ export default function ChatbotPage() {
 
   // Fetch messages when thread is selected
   const { data: fetchedMessages, refetch: refetchMessages } = useQuery<Message[]>({
-    queryKey: ["/api/threads", currentThreadId, "messages"],
+    queryKey: [`/api/threads/${currentThreadId}/messages`],
     enabled: !!currentThreadId,
   });
 
