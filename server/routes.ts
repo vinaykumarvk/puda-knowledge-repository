@@ -76,18 +76,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
         threadId = thread.id;
       }
       
-      // Prepare the question with meta-instructions for follow-up questions
+      // Prepare the question with meta-instructions for focused responses
       let questionToSend = validatedData.question;
       
       if (chatHistory.length > 0) {
-        // Add meta-instructions for LLM to evaluate and clarify ambiguous references
-        questionToSend = `[Context-Aware Follow-up Question]
+        // Add meta-instructions for context understanding and focused responses
+        questionToSend = `[Context-Aware Follow-up Question with Focus Directives]
 
-Previous conversation history is provided for context. Before answering, please:
-1. Evaluate if this question contains pronouns or unclear references (e.g., "this", "it", "that", "these", "the above")
-2. If such references exist, identify what they refer to based on the conversation history
-3. Internally clarify the question to make it self-contained and explicit
-4. Then provide your answer to the clarified question
+Previous conversation history is provided for context. Please follow these instructions:
+
+STEP 1 - Context Understanding:
+• Evaluate if this question contains pronouns or unclear references (e.g., "this", "it", "that", "these", "the above")
+• If such references exist, identify what they refer to based on the conversation history
+• Internally clarify the question to make it self-contained and explicit
+
+STEP 2 - Focused Response Generation:
+• Answer ONLY the specific question asked - be precise and direct
+• Include ONLY information that is immediately relevant to this specific question
+• Exclude tangential details, background context, or loosely related information
+• Be concise while remaining comprehensive on the core topic
+• Prioritize clarity and relevance over exhaustive coverage
+
+User's Question: ${validatedData.question}`;
+      } else {
+        // Add focus directives for initial questions
+        questionToSend = `[Focused Response Directive]
+
+Please follow these instructions when answering:
+• Answer ONLY the specific question asked - be precise and direct
+• Include ONLY information that is immediately relevant to this specific question
+• Exclude tangential details, background context, or loosely related information
+• Be concise while remaining comprehensive on the core topic
+• Prioritize clarity and relevance over exhaustive coverage
 
 User's Question: ${validatedData.question}`;
       }
