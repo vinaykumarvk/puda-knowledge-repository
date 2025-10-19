@@ -64,7 +64,7 @@ export function ThreadSidebar({ onSelectThread, onNewChat, onDeleteThread, selec
             filteredThreads.map((thread) => (
               <div
                 key={thread.id}
-                className={`group relative flex items-center gap-2 rounded-lg p-3 cursor-pointer transition-colors ${
+                className={`group relative flex items-center justify-between gap-2 rounded-lg p-3 cursor-pointer transition-colors ${
                   selectedThreadId === thread.id
                     ? "bg-primary/10 border border-primary/20"
                     : "hover:bg-muted/50"
@@ -84,7 +84,7 @@ export function ThreadSidebar({ onSelectThread, onNewChat, onDeleteThread, selec
                   data-testid={`button-delete-thread-${thread.id}`}
                   variant="ghost"
                   size="icon"
-                  className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+                  className="h-7 w-7 flex-shrink-0 hover:bg-destructive/20 hover:text-destructive text-muted-foreground/60"
                   onClick={(e) => {
                     e.stopPropagation();
                     onDeleteThread(thread.id);
