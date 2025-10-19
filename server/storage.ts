@@ -32,6 +32,7 @@ export interface IStorage {
   getMessages(threadId: number): Promise<Message[]>;
   createMessage(message: InsertMessage): Promise<Message>;
   getLastAssistantMessage(threadId: number): Promise<Message | undefined>;
+  getRecentMessagePairs(threadId: number, pairCount: number): Promise<Message[]>;
   
   // Old conversation methods (kept for backward compatibility)
   getConversations(): Promise<Conversation[]>;
@@ -120,6 +121,19 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(messages.createdAt))
       .limit(1);
     return message || undefined;
+  }
+
+  async getRecentMessagePairs(threadId: number, pairCount: number): Promise<Message[]> {
+    // Get the last N*2 messages (pairs of user + assistant messages)
+    const recentMessages = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.threadId, threadId))
+      .orderBy(desc(messages.createdAt))
+      .limit(pairCount * 2);
+    
+    // Reverse to get chronological order (oldest first)
+    return recentMessages.reverse();
   }
 
   // Old conversation methods (kept for backward compatibility)
