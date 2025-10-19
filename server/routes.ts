@@ -28,10 +28,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         threadId = thread.id;
       }
       
-      // Prepare API request payload
+      // Prepare API request payload with correct structure
       const apiPayload: any = {
         question: validatedData.question,
         domain: "wealth_management",
+        params: {
+          _mode: validatedData.mode || "balanced"  // Send mode in params object
+        }
       };
       
       // Add response_id if this is a follow-up question
@@ -58,8 +61,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await response.json();
       console.log("EKG API response:", JSON.stringify(result, null, 2));
 
-      if (result && result.answer) {
-        const responseText = result.answer;
+      // Handle both 'answer' and 'markdown' fields (API documentation shows 'markdown', but actual API returns 'answer')
+      const responseText = result.markdown || result.answer;
+      
+      if (result && responseText) {
         
         // Format sources if available
         let sources = "";

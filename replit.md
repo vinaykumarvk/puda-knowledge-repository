@@ -140,23 +140,36 @@ The application uses a hybrid approach to maintain conversation context:
 {
   question: string,
   domain: "wealth_management",
-  response_id?: string // Optional, for follow-up questions
+  params: {
+    _mode: "balanced" | "concise" | "deep"  // Controls KG depth + vector store + LLM integration
+  },
+  response_id?: string,      // Optional, for follow-up questions (conversational context)
+  conversation_id?: string   // Optional, alternative conversation tracking
 }
 ```
+
+**Mode Settings:**
+- **concise**: 1 hop KG, 6 chunks, 1500 tokens, gpt-5-mini (fastest)
+- **balanced**: 1 hop KG, 10 chunks, 6000 tokens, gpt-5 (default)
+- **deep**: 2 hops KG, 22 chunks, 20000 tokens, gpt-5 (most comprehensive)
 
 ### Response Format
 ```typescript
 {
-  answer: string, // Markdown-formatted response
-  response_id: string, // For context chaining
-  sources: Array<any>, // Citation sources
-  entities: Array<string>, // Related entities
+  answer: string,           // Markdown-formatted response (also may be 'markdown' field)
+  response_id: string,      // Unique ID for this response (for context chaining)
+  sources: Array<any>,      // Citation sources from vector store
+  entities: Array<string>,  // Related knowledge graph entities
   meta: {
     model: string,
     nodes: number,
     edges: number,
     mode: string,
-    is_conversational: boolean,
+    is_conversational: boolean,  // True if response_id was provided in request
+    previous_response_id?: string,  // Previous response ID (if provided)
+    conversation_id?: string,       // Conversation ID (if provided)
+    domain: string,
+    vectorstore_id: string,
     suggested_entities: Array<string>,
     seed_ids: Array<string>,
     expanded_nodes: number,
