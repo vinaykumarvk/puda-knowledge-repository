@@ -35,73 +35,11 @@ import remarkGfm from "remark-gfm";
 import { ThreadSidebar } from "@/components/thread-sidebar";
 import type { Thread, Message } from "@shared/schema";
 
-// Helper function to decode HTML entities
+// Helper function to decode HTML entities (minimal formatting utility)
 function decodeHTMLEntities(text: string): string {
   const textarea = document.createElement('textarea');
   textarea.innerHTML = text;
   return textarea.value;
-}
-
-// Helper function to remove Knowledge Graph tags like [KG: otp]
-function removeKGTags(text: string): string {
-  return text.replace(/\s*\[KG:\s*[^\]]+\]/gi, '');
-}
-
-// Helper function to remove "Sources by File" section and clean up citations
-function cleanupCitations(text: string): string {
-  // Remove the entire "Sources by File" section
-  let cleaned = text.replace(/---\s*##\s*\*\*Sources by File\*\*[\s\S]*$/i, '');
-  
-  // Remove bold formatting from citation filenames (e.g., **[1]** → [1])
-  cleaned = cleaned.replace(/\*\*\[(\d+)\]\*\*/g, '[$1]');
-  
-  // Remove bold from citation filenames (e.g., **filename.pdf** → filename.pdf)
-  cleaned = cleaned.replace(/\*\*([^*]+\.(pdf|docx|doc|xlsx)[^*]*)\*\*/gi, '$1');
-  
-  return cleaned;
-}
-
-// Helper function to format API responses professionally
-function formatProfessionally(text: string): string {
-  let formatted = text;
-  
-  // Remove the KG + VectorStore header and context ID
-  formatted = formatted.replace(/^#\s*\*\*KG \+ VectorStore Answer[\s\S]*?\*\*\n*/im, '');
-  
-  // Remove "Question:" label and keep just the question text
-  formatted = formatted.replace(/Question:\s*/gi, '');
-  
-  // Move "Generated:" timestamp to the end - first capture it, then move it
-  let generatedTimestamp = '';
-  formatted = formatted.replace(/_Generated:\s*([^\n]+)_\n*/gi, (match, timestamp) => {
-    generatedTimestamp = `\n\n---\n\n*Generated: ${timestamp}*`;
-    return '';
-  });
-  
-  // Remove "Direct Answer:" label and just show the content
-  formatted = formatted.replace(/^##?\s*\*?\*?Direct Answer:?\*?\*?\s*/im, '');
-  formatted = formatted.replace(/\n##?\s*\*?\*?Direct Answer:?\*?\*?\s*/im, '\n');
-  
-  // Convert "Point 1:", "Point 2:" etc. to bullet points
-  formatted = formatted.replace(/^Point\s+(\d+):\s*/gim, '- ');
-  formatted = formatted.replace(/\n\s*Point\s+(\d+):\s*/gim, '\n- ');
-  
-  // Convert "Finding 1/", "Finding 2/" etc. to bullet points
-  formatted = formatted.replace(/^Finding\s+(\d+)\/?\s*/gim, '- ');
-  formatted = formatted.replace(/\n\s*Finding\s+(\d+)\/?\s*/gim, '\n- ');
-  
-  // Convert numbered list format "1.", "2." at start of line to bullet points (only if standalone)
-  formatted = formatted.replace(/^\d+\.\s+/gm, '- ');
-  
-  // Clean up any "**Direct Answer**" that might still be in the text
-  formatted = formatted.replace(/\*\*Direct Answer:?\*\*/gi, '');
-  
-  // Append the timestamp at the end if we found one
-  if (generatedTimestamp) {
-    formatted += generatedTimestamp;
-  }
-  
-  return formatted;
 }
 
 // Helper function to download a single message exchange as Markdown
@@ -514,7 +452,7 @@ export default function ChatbotPage() {
                             rehypePlugins={[rehypeRaw]}
                             remarkPlugins={[remarkGfm]}
                           >
-                            {formatProfessionally(cleanupCitations(removeKGTags(decodeHTMLEntities(message.content))))}
+                            {decodeHTMLEntities(message.content)}
                           </ReactMarkdown>
                         </div>
                       )}

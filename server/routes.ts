@@ -5,22 +5,10 @@ import { storage } from "./storage";
 
 const EKG_API_URL = "https://ekg-service-47249889063.europe-west6.run.app";
 
-// Helper function to clean answer text by removing formatting noise
+// Helper function to pass raw answer content (no modification)
 function cleanAnswer(markdown: string): string {
-  return markdown
-    .replace(/^#.*KG \+ VectorStore Answer.*$/gm, '')  // Remove KG answer headers
-    .replace(/^_Generated:.*$/gm, '')                   // Remove timestamp lines
-    .replace(/^##\s*\*\*Answer\*\*\s*$/gm, '')         // Remove "## **Answer**" subheader
-    .replace(/<sup>.*?<\/sup>/g, '')                    // Remove citation superscripts (includes links)
-    .replace(/<a\s+id="cite-\d+">\s*<\/a>/g, '')       // Remove citation anchor definitions
-    .replace(/<a[^>]*>(.*?)<\/a>/g, '$1')              // Extract text from remaining anchor tags
-    .replace(/<[^>]*>/g, '')                            // Remove remaining HTML tags
-    .replace(/\*\*([^*]+)\*\*/g, '$1')                  // Remove bold (**text** -> text)
-    .replace(/\[[\d,\s]+\]/g, '')                       // Remove inline citations [1], [2]
-    .replace(/\[KG:.*?\]/gi, '')                        // Remove Knowledge Graph tags
-    .replace(/---\s*##\s*\*\*Sources by File\*\*[\s\S]*$/, '') // Remove citations section
-    .replace(/\n{3,}/g, '\n\n')                         // Collapse multiple newlines
-    .trim();
+  // Return raw content as-is from API
+  return markdown;
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -76,41 +64,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         threadId = thread.id;
       }
       
-      // Prepare the question with meta-instructions for focused responses
-      let questionToSend = validatedData.question;
-      
-      if (chatHistory.length > 0) {
-        // Add meta-instructions for context understanding and focused responses
-        questionToSend = `[Context-Aware Follow-up Question with Focus Directives]
-
-Previous conversation history is provided for context. Please follow these instructions:
-
-STEP 1 - Context Understanding:
-• Evaluate if this question contains pronouns or unclear references (e.g., "this", "it", "that", "these", "the above")
-• If such references exist, identify what they refer to based on the conversation history
-• Internally clarify the question to make it self-contained and explicit
-
-STEP 2 - Focused Response Generation:
-• Answer ONLY the specific question asked - be precise and direct
-• Include ONLY information that is immediately relevant to this specific question
-• Exclude tangential details, background context, or loosely related information
-• Be concise while remaining comprehensive on the core topic
-• Prioritize clarity and relevance over exhaustive coverage
-
-User's Question: ${validatedData.question}`;
-      } else {
-        // Add focus directives for initial questions
-        questionToSend = `[Focused Response Directive]
-
-Please follow these instructions when answering:
-• Answer ONLY the specific question asked - be precise and direct
-• Include ONLY information that is immediately relevant to this specific question
-• Exclude tangential details, background context, or loosely related information
-• Be concise while remaining comprehensive on the core topic
-• Prioritize clarity and relevance over exhaustive coverage
-
-User's Question: ${validatedData.question}`;
-      }
+      // Send user's question exactly as received (no meta-instructions)
+      const questionToSend = validatedData.question;
       
       // Prepare API request payload with correct structure
       const apiPayload: any = {
@@ -132,7 +87,7 @@ User's Question: ${validatedData.question}`;
       // Add chat history (last 3 Q&A pairs) for better context
       if (chatHistory.length > 0) {
         apiPayload.chat_history = chatHistory;
-        console.log(`Including ${chatHistory.length} previous Q&A pairs with meta-instructions`);
+        console.log(`Including ${chatHistory.length} previous Q&A pairs for context`);
       }
       
       console.log("EKG API request payload:", JSON.stringify(apiPayload, null, 2));
