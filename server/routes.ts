@@ -42,10 +42,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           previousResponseId = lastMessage.responseId;
         }
         
-        // Get last 5 Q&A pairs for context window
-        const recentMessages = await storage.getRecentMessagePairs(threadId, 5);
+        // Get last 3 Q&A pairs for focused context window
+        const recentMessages = await storage.getRecentMessagePairs(threadId, 3);
         
-        // Format as Q&A pairs
+        // Format as Q&A pairs with cleaned answers
         for (let i = 0; i < recentMessages.length; i += 2) {
           const userMsg = recentMessages[i];
           const assistantMsg = recentMessages[i + 1];
@@ -53,7 +53,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (userMsg && assistantMsg && userMsg.role === "user" && assistantMsg.role === "assistant") {
             chatHistory.push({
               question: userMsg.content,
-              answer: assistantMsg.content
+              answer: cleanAnswer(assistantMsg.content)  // Clean formatting from answer
             });
           }
         }
@@ -66,9 +66,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         threadId = thread.id;
       }
       
+      // Prepare the question with meta-instructions for follow-up questions
+      let questionToSend = validatedData.question;
+      
+      if (chatHistory.length > 0) {
+        // Add meta-instructions for LLM to evaluate and clarify ambiguous references
+        questionToSend = `[Context-Aware Follow-up Question]
+
+Previous conversation history is provided for context. Before answering, please:
+1. Evaluate if this question contains pronouns or unclear references (e.g., "this", "it", "that", "these", "the above")
+2. If such references exist, identify what they refer to based on the conversation history
+3. Internally clarify the question to make it self-contained and explicit
+4. Then provide your answer to the clarified question
+
+User's Question: ${validatedData.question}`;
+      }
+      
       // Prepare API request payload with correct structure
       const apiPayload: any = {
-        question: validatedData.question,
+        question: questionToSend,
         domain: "wealth_management",
         params: {
           _mode: validatedData.mode || "balanced"  // Send mode in params object
@@ -83,10 +99,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         apiPayload.response_id = previousResponseId;
       }
       
-      // Add chat history (last 5 Q&A pairs) for better context
+      // Add chat history (last 3 Q&A pairs) for better context
       if (chatHistory.length > 0) {
         apiPayload.chat_history = chatHistory;
-        console.log(`Including ${chatHistory.length} previous Q&A pairs in context`);
+        console.log(`Including ${chatHistory.length} previous Q&A pairs with meta-instructions`);
       }
       
       console.log("EKG API request payload:", JSON.stringify(apiPayload, null, 2));
