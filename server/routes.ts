@@ -1,47 +1,60 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { Client } from "@gradio/client";
 import { querySchema, insertConversationSchema } from "@shared/schema";
 import { storage } from "./storage";
+
+const EKG_API_URL = "https://ekg-service-47249889063.europe-west6.run.app";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/query", async (req, res) => {
     try {
       const validatedData = querySchema.parse(req.body);
       
-      const client = await Client.connect("vinaykumarvk/WealthEKG");
-      const result = await client.predict("/process_question", {
-        question: validatedData.question,
-        mode: validatedData.mode,
-        refresh: validatedData.refresh,
+      // Call the new REST API endpoint
+      const response = await fetch(`${EKG_API_URL}/v1/answer`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          question: validatedData.question,
+          mode: validatedData.mode,
+          use_cache: !validatedData.refresh, // Invert the refresh logic
+        }),
       });
 
-      if (result && result.data) {
-        // Log the full response to understand the structure
-        console.log("Full Gradio API response:", JSON.stringify(result.data, null, 2));
-        console.log("Response array length:", Array.isArray(result.data) ? result.data.length : "Not an array");
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("EKG API error:", response.status, errorText);
+        throw new Error(`EKG API error: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log("EKG API response:", JSON.stringify(result, null, 2));
+
+      if (result && result.answer) {
+        const responseText = result.answer;
         
-        let responseText = "";
+        // Format metadata from the response
         let metadata = "";
-        let sources = "";
+        if (result.meta) {
+          metadata = `**Mode**: ${result.mode}\n**Timestamp**: ${result.timestamp}`;
+          if (result.meta.model) {
+            metadata += `\n**Model**: ${result.meta.model}`;
+          }
+        }
         
-        if (Array.isArray(result.data)) {
-          // Index 0: Main answer with citation markers [1], [2], etc.
-          responseText = typeof result.data[0] === 'string' ? result.data[0] : JSON.stringify(result.data[0]);
-          
-          // Index 1: Metadata (Mode, Model, Generated timestamp)
-          if (result.data.length > 1 && result.data[1]) {
-            metadata = typeof result.data[1] === 'string' ? result.data[1] : JSON.stringify(result.data[1]);
-          }
-          
-          // Index 2 onwards: Citations/Sources
-          if (result.data.length > 2) {
-            const sourceParts = result.data.slice(2).filter(item => item && item.trim());
-            sources = sourceParts.join('\n\n');
-            console.log("Extracted sources:", sources);
-          }
-        } else {
-          responseText = typeof result.data === 'string' ? result.data : JSON.stringify(result.data);
+        // Format entities/sources if available
+        let sources = "";
+        if (result.entities && Array.isArray(result.entities) && result.entities.length > 0) {
+          sources = "**Sources:**\n\n" + result.entities.map((entity: any, index: number) => {
+            if (typeof entity === 'string') {
+              return `[${index + 1}] ${entity}`;
+            } else if (entity && typeof entity === 'object') {
+              return `[${index + 1}] ${JSON.stringify(entity)}`;
+            }
+            return '';
+          }).filter(Boolean).join('\n\n');
         }
         
         // Save to conversation history
@@ -60,7 +73,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         res.status(500).json({
           data: "",
-          error: "No response from the service",
+          error: "No answer in response from the service",
         });
       }
     } catch (error) {
