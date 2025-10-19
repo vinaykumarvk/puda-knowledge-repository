@@ -5,11 +5,12 @@ A professional, enterprise-grade conversational AI chatbot interface inspired by
 
 ## Current State (October 19, 2025)
 ✅ **Conversational Threading Architecture Complete** - ChatGPT-style interface with running context
-- **NEW: Full conversational threading** with context maintained across questions via response_id
+- **NEW: Full conversational threading** with context maintained across questions via conversation_id
 - **NEW: ChatGPT-style UI** with scrolling messages, fixed bottom input, and thread sidebar
 - **NEW: Thread management** - Create, switch, search, and delete conversation threads
-- **NEW: Hybrid context system** - API maintains context via response_id, database stores history
+- **NEW: Hybrid context system** - API maintains context via conversation_id (primary) or response_id (fallback)
 - **NEW: Message-based architecture** - User/assistant message bubbles with role-based styling
+- **NEW: Mode selector dropdown** - Choose between concise, balanced, or deep modes in header
 - **REST API integration** - Using EKG service endpoint (https://ekg-service-47249889063.europe-west6.run.app/v1/answer)
 - **Professional typography** (Inter for UI, markdown rendering for responses)
 - Markdown-formatted responses with proper styling

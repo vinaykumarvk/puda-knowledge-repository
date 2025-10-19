@@ -5,6 +5,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { 
   Loader2, 
   Send, 
@@ -19,6 +26,7 @@ export default function ChatbotPage() {
   const [question, setQuestion] = useState("");
   const [currentThreadId, setCurrentThreadId] = useState<number | undefined>();
   const [messages, setMessages] = useState<Message[]>([]);
+  const [mode, setMode] = useState<"concise" | "balanced" | "deep">("balanced");
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -51,7 +59,7 @@ export default function ChatbotPage() {
     mutationFn: async (payload: { question: string; threadId?: number }) => {
       const response = await apiRequest("POST", "/api/query", {
         question: payload.question,
-        mode: "balanced",
+        mode: mode,
         refresh: false,
         threadId: payload.threadId,
       });
@@ -181,15 +189,38 @@ export default function ChatbotPage() {
       <div className="flex-1 flex flex-col">
         {/* Header */}
         <header className="border-b border-border bg-card/30 backdrop-blur-sm px-6 py-4">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-6 h-6 text-primary" />
-            <div>
-              <h1 className="text-2xl font-bold text-foreground" data-testid="text-title">
-                WealthForce Knowledge Agent
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                Conversational Wealth Management Knowledge
-              </p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-6 h-6 text-primary" />
+              <div>
+                <h1 className="text-2xl font-bold text-foreground" data-testid="text-title">
+                  WealthForce Knowledge Agent
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  Conversational Wealth Management Knowledge
+                </p>
+              </div>
+            </div>
+            
+            {/* Mode Selector */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Mode:</span>
+              <Select value={mode} onValueChange={(value) => setMode(value as "concise" | "balanced" | "deep")}>
+                <SelectTrigger className="w-[140px]" data-testid="select-mode">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="concise" data-testid="option-concise">
+                    Concise
+                  </SelectItem>
+                  <SelectItem value="balanced" data-testid="option-balanced">
+                    Balanced
+                  </SelectItem>
+                  <SelectItem value="deep" data-testid="option-deep">
+                    Deep
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </header>
