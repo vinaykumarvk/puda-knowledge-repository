@@ -5,6 +5,7 @@ A professional, enterprise-grade conversational AI chatbot interface inspired by
 
 ## Current State (October 19, 2025)
 ✅ **Conversational Threading Architecture Complete** - ChatGPT-style interface with running context
+- **NEW: Vector Store Sources Display** - Shows source documents with relevance scores for each answer
 - **NEW: Full conversational threading** with context maintained across questions via conversation_id
 - **NEW: ChatGPT-style UI** with scrolling messages, fixed bottom input, and thread sidebar
 - **NEW: Thread management** - Create, switch, search, and delete conversation threads
@@ -12,6 +13,7 @@ A professional, enterprise-grade conversational AI chatbot interface inspired by
 - **NEW: Message-based architecture** - User/assistant message bubbles with role-based styling
 - **NEW: Mode selector dropdown** - Choose between concise, balanced, or deep modes in header
 - **REST API integration** - Using EKG service endpoint (https://ekg-service-47249889063.europe-west6.run.app/v1/answer)
+- **Vector Store Integration** - API returns sources from document retrieval with relevance scoring
 - **Professional typography** (Inter for UI, markdown rendering for responses)
 - Markdown-formatted responses with proper styling
 - **Database persistence** - PostgreSQL with threads and messages tables
@@ -71,6 +73,9 @@ The application uses a hybrid approach to maintain conversation context:
 4. **Message Display**
    - User messages: Plain text in blue bubbles
    - Assistant messages: Markdown-rendered with code blocks
+   - **Sources display**: Shows up to 3 source documents with filenames and relevance scores
+   - Sources appear below assistant messages in a compact card format
+   - Full source count shown (e.g., "Sources (8)")
    - Loading indicator while API processes
    - Error messages displayed inline
    - Empty state for new conversations
@@ -159,26 +164,26 @@ The application uses a hybrid approach to maintain conversation context:
 ### Response Format
 ```typescript
 {
-  answer: string,           // Markdown-formatted response (also may be 'markdown' field)
+  markdown: string,         // Markdown-formatted response (or 'answer' field for compatibility)
   response_id: string,      // Unique ID for this response (for context chaining)
-  sources: Array<any>,      // Citation sources from vector store
-  entities: Array<string>,  // Related knowledge graph entities
+  sources: Array<{          // Citation sources from vector store
+    filename: string,       // Source document filename
+    file_id: string,        // OpenAI file ID
+    score: number,          // Vector similarity score (0-1)
+    text: string,           // Relevant excerpt from document
+    relevance_score: number // Relevance score (0-1)
+  }>,
   meta: {
-    model: string,
-    nodes: number,
-    edges: number,
-    mode: string,
-    is_conversational: boolean,  // True if response_id was provided in request
+    model: string,          // GPT model used (gpt-5-nano, gpt-5-mini, gpt-5)
+    mode: string,           // Answer mode (concise, balanced, deep)
+    is_conversational: boolean,  // True if response_id/conversation_id was provided
     previous_response_id?: string,  // Previous response ID (if provided)
     conversation_id?: string,       // Conversation ID (if provided)
-    domain: string,
-    vectorstore_id: string,
-    suggested_entities: Array<string>,
-    seed_ids: Array<string>,
-    expanded_nodes: number,
-    expanded_edges: number
+    domain: string,         // Domain queried (wealth_management, apf)
+    vectorstore_id: string, // OpenAI vector store ID
+    processing_time_seconds: number,
+    request_id: string
   },
-  mode: string,
   timestamp: string
 }
 ```
