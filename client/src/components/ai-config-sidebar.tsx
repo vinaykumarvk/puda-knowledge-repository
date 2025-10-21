@@ -61,12 +61,12 @@ export function AIConfigSidebar({ onConfigChange }: AIConfigSidebarProps) {
 
   return (
     <div className="w-80 border-l border-border bg-card flex flex-col h-full">
-      <div className="p-4 border-b border-border">
-        <div className="flex items-center justify-between mb-2">
+      <div className="px-3 py-2.5 border-b border-border">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Settings className="w-5 h-5 text-primary" />
-            <h3 className="text-sm font-medium text-foreground" data-testid="text-config-title">
-              AI Model Configuration
+            <Settings className="w-4 h-4 text-primary" />
+            <h3 className="text-xs font-medium text-foreground" data-testid="text-config-title">
+              AI Configuration
             </h3>
           </div>
           <Button
@@ -75,26 +75,24 @@ export function AIConfigSidebar({ onConfigChange }: AIConfigSidebarProps) {
             onClick={() => setIsCollapsed(true)}
             data-testid="button-collapse-config-sidebar"
             title="Collapse sidebar"
+            className="h-6 w-6"
           >
-            <ChevronRight className="w-5 h-5" />
+            <ChevronRight className="w-4 h-4" />
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Customize AI behavior and performance
-        </p>
       </div>
 
-      <div className="flex-1 overflow-auto p-4 space-y-6">
+      <div className="flex-1 overflow-auto px-3 py-3 space-y-3">
         {/* Model Selection */}
-        <div className="space-y-2">
-          <Label htmlFor="model-select" className="text-sm font-normal">
+        <div className="space-y-1.5">
+          <Label htmlFor="model-select" className="text-xs font-normal">
             LLM Model
           </Label>
           <Select
             value={config.model}
             onValueChange={(value) => updateConfig({ model: value })}
           >
-            <SelectTrigger id="model-select" data-testid="select-model">
+            <SelectTrigger id="model-select" data-testid="select-model" className="h-8">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -112,18 +110,15 @@ export function AIConfigSidebar({ onConfigChange }: AIConfigSidebarProps) {
               </SelectItem>
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">
-            Select the language model to use
-          </p>
         </div>
 
         {/* Temperature Slider */}
-        <div className="space-y-3">
+        <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <Label htmlFor="temperature-slider" className="text-sm font-normal">
+            <Label htmlFor="temperature-slider" className="text-xs font-normal">
               Temperature
             </Label>
-            <span className="text-sm font-mono text-muted-foreground" data-testid="text-temperature-value">
+            <span className="text-xs font-mono text-muted-foreground" data-testid="text-temperature-value">
               {config.temperature.toFixed(2)}
             </span>
           </div>
@@ -137,18 +132,15 @@ export function AIConfigSidebar({ onConfigChange }: AIConfigSidebarProps) {
             step={0.01}
             className="w-full"
           />
-          <p className="text-xs text-muted-foreground">
-            Controls randomness: Lower is more focused, higher is more creative
-          </p>
         </div>
 
         {/* Hops Slider */}
-        <div className="space-y-3">
+        <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <Label htmlFor="hops-slider" className="text-sm font-normal">
+            <Label htmlFor="hops-slider" className="text-xs font-normal">
               Hops
             </Label>
-            <span className="text-sm font-mono text-muted-foreground" data-testid="text-hops-value">
+            <span className="text-xs font-mono text-muted-foreground" data-testid="text-hops-value">
               {config.hops}
             </span>
           </div>
@@ -162,18 +154,15 @@ export function AIConfigSidebar({ onConfigChange }: AIConfigSidebarProps) {
             step={1}
             className="w-full"
           />
-          <p className="text-xs text-muted-foreground">
-            Number of knowledge graph traversal steps
-          </p>
         </div>
 
         {/* Token Limit */}
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <Label htmlFor="token-limit" className="text-sm font-normal">
+            <Label htmlFor="token-limit" className="text-xs font-normal">
               Token Limit
             </Label>
-            <span className="text-sm font-mono text-muted-foreground" data-testid="text-token-limit-value">
+            <span className="text-xs font-mono text-muted-foreground" data-testid="text-token-limit-value">
               {config.tokenLimit.toLocaleString()}
             </span>
           </div>
@@ -186,16 +175,13 @@ export function AIConfigSidebar({ onConfigChange }: AIConfigSidebarProps) {
             min={128}
             max={32000}
             step={128}
-            className="w-full"
+            className="w-full h-8"
           />
-          <p className="text-xs text-muted-foreground">
-            Maximum tokens for model response
-          </p>
         </div>
 
         {/* System Prompt */}
-        <div className="space-y-2">
-          <Label htmlFor="system-prompt" className="text-sm font-normal">
+        <div className="space-y-1.5">
+          <Label htmlFor="system-prompt" className="text-xs font-normal">
             System Prompt
           </Label>
           <Textarea
@@ -203,12 +189,9 @@ export function AIConfigSidebar({ onConfigChange }: AIConfigSidebarProps) {
             data-testid="textarea-system-prompt"
             value={config.systemPrompt}
             onChange={(e) => updateConfig({ systemPrompt: e.target.value })}
-            className="min-h-[120px] resize-none font-mono text-sm"
+            className="min-h-[70px] resize-none font-mono text-xs"
             placeholder="Enter custom system prompt..."
           />
-          <p className="text-xs text-muted-foreground">
-            Define the AI assistant's behavior and context
-          </p>
         </div>
       </div>
     </div>
