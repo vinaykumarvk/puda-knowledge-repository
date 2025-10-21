@@ -3,6 +3,20 @@
 ## Overview
 The WealthForce Knowledge Agent is an enterprise-grade conversational AI chatbot, inspired by ChatGPT and Claude, designed to provide an intelligent knowledge base for wealth management professionals. Its primary purpose is to offer a sophisticated interface with full conversational threading, context maintenance, and persistent chat history, enhancing knowledge retrieval and interaction for financial experts. The project aims to deliver a professional, intuitive, and highly functional AI assistant, ultimately boosting efficiency and knowledge accessibility for wealth management professionals.
 
+## Recent Changes
+
+### October 21, 2025
+- **AI Configuration Sidebar Optimization**: Redesigned the right sidebar to display all configuration options on a single page without scrolling:
+  - Reduced header title from "AI Model Configuration" to "AI Configuration" with smaller text (text-xs)
+  - Compacted all typography from text-sm to text-xs throughout the sidebar
+  - Reduced spacing between sections from space-y-6 to space-y-3
+  - Reduced spacing within form elements from space-y-2/3 to space-y-1.5
+  - Removed verbose helper text under each control for cleaner presentation
+  - Reduced System Prompt textarea height from 120px to 70px
+  - Made all input fields more compact (h-8 height for inputs and selects)
+  - Reduced header and content padding for better space efficiency
+  - All five configuration options (LLM Model, Temperature, Hops, Token Limit, System Prompt) now fit in the viewport without scrolling
+
 ## User Preferences
 I prefer simple language and detailed explanations. I want iterative development with frequent, small updates rather than large, infrequent ones. Ask before making major changes to the architecture or core functionalities. Do not make changes to the `shared/` folder without explicit instruction.
 
