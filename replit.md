@@ -6,6 +6,16 @@ The WealthForce Knowledge Agent is an enterprise-grade conversational AI chatbot
 ## Recent Changes
 
 ### October 21, 2025
+- **Workshop Page Templates**: Implemented 6 pre-developed template tiles for wealth management professionals:
+  - **New Report**: Generate comprehensive financial or market analysis reports
+  - **Client Proposal**: Craft compelling proposals for new clients or projects
+  - **Strategic Memo**: Compose internal memos for strategic initiatives or announcements
+  - **Presentation Deck**: Create visually engaging presentations for meetings or conferences
+  - **RFP Response**: Develop detailed responses to Request for Proposals efficiently
+  - **Case Study**: Document successful projects and client outcomes
+  - Each template tile features an appropriate icon, title, and description in a responsive 3-column grid layout
+  - Cards include hover effects (shadow and border highlight) for interactivity
+  - Updated page subtitle to "Pre-developed templates for wealth management professionals"
 - **AI Configuration Sidebar Optimization**: Redesigned the right sidebar to display all configuration options on a single page without scrolling:
   - Reduced header title from "AI Model Configuration" to "AI Configuration" with smaller text (text-xs)
   - Compacted all typography from text-sm to text-xs throughout the sidebar
@@ -44,7 +54,8 @@ The UI features a comprehensive layout with a **Global Top Header**, a **Main Na
 
 ### Feature Specifications
 -   **Global Header**: Persistent top bar with "Questions Asked" and "Quizzes Completed" counters, global search, and user menu.
--   **Multi-Section Navigation**: Main navigation sidebar with "Explore" (conversational AI), "Workshop" (tools), "Quiz" (knowledge testing), and "Atlas" (knowledge map) sections.
+-   **Multi-Section Navigation**: Main navigation sidebar with "Explore" (conversational AI), "Workshop" (pre-developed templates), "Quiz" (knowledge testing), and "Atlas" (knowledge map) sections.
+-   **Workshop Templates**: 6 pre-developed template tiles for document creation including New Report, Client Proposal, Strategic Memo, Presentation Deck, RFP Response, and Case Study.
 -   **AI Model Configuration**: Collapsible right sidebar with controls for LLM model selection, temperature, knowledge graph hops, token limits, and custom system prompts.
 -   **Core Conversational Interface**: ChatGPT-style scrolling message view with fixed input, auto-scroll, and keyboard shortcuts.
 -   **Markdown Rendering**: Robust markdown rendering for assistant messages, supporting GitHub-flavored markdown, HTML rendering, and HTML entity decoding.
