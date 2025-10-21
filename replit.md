@@ -11,6 +11,13 @@ The WealthForce Knowledge Agent is an enterprise-grade conversational AI chatbot
 - **Workshop Section**: Created placeholder page for interactive tools and utilities including Calculator, Document Builder, and Analytics Dashboard (marked as coming soon).
 - **Quiz Section**: Created placeholder page for knowledge testing with three quiz categories: Wealth Management Basics, Investment Strategies, and Financial Products, each with difficulty levels and question counts.
 - **Atlas Section**: Created placeholder page for knowledge mapping and resource library with tabs for Overview, Resources, and Data Sources.
+- **AI Model Configuration Sidebar**: Added a collapsible configuration panel on the right side of the Explore page with:
+  - LLM model selection (GraphRAG, OpenAI, GPT-4o, GPT-5)
+  - Temperature slider (0-2 range, 0.01 step) for controlling response randomness
+  - Hops slider (1-10 range) for knowledge graph traversal depth
+  - Token limit input for maximum response length
+  - System prompt textarea for custom AI behavior instructions
+  - Collapse/expand functionality to save screen space (320px expanded, 48px collapsed)
 - **Routing Updates**: Updated the application routing to support multiple sections while maintaining the existing Explore/chatbot functionality.
 
 ### October 19, 2025
@@ -33,7 +40,7 @@ I prefer simple language and detailed explanations. I want iterative development
 The application employs a professional, enterprise-grade architecture focused on conversational AI.
 
 ### UI/UX Decisions
-The UI is inspired by ChatGPT, featuring a multi-section layout with a main navigation sidebar (80px width) on the far left for section switching (Explore, Workshop, Quiz, Atlas), followed by a thread sidebar (256px) in the Explore section, and the main content area. It includes a fixed header and footer for consistent navigation and input.
+The UI is inspired by ChatGPT, featuring a multi-section layout with a main navigation sidebar (80px width) on the far left for section switching (Explore, Workshop, Quiz, Atlas), followed by a thread sidebar (256px) in the Explore section, the main content area (flex-1), and an AI configuration sidebar (320px, collapsible to 48px) on the right. It includes a fixed header and footer for consistent navigation and input.
 - **Color Palette**: Uses a vibrant blue for primary actions and user messages, gray tones for assistant messages, and a deep charcoal background with elevated surfaces for dark mode.
 - **Typography**: Employs Inter for UI text and system fonts for messages, with a monospace font for code blocks.
 - **Message Display**: User messages are displayed in blue bubbles on the right, while assistant messages are in gray bubbles on the left, rendered with comprehensive markdown support including HTML, citation superscripts, and code blocks with syntax highlighting. Source documents with relevance scores are displayed below assistant messages.
@@ -54,6 +61,7 @@ The UI is inspired by ChatGPT, featuring a multi-section layout with a main navi
 
 ### Feature Specifications
 - **Multi-Section Navigation**: Main navigation sidebar with four sections - Explore (conversational AI), Workshop (tools), Quiz (knowledge testing), and Atlas (knowledge map). Active section is highlighted with primary color.
+- **AI Model Configuration**: Collapsible right sidebar with controls for LLM model selection, temperature adjustment, knowledge graph hops, token limits, and custom system prompts. Configuration changes are tracked in local state for future backend integration.
 - **Core Conversational Interface**: ChatGPT-style scrolling message view with fixed input, auto-scroll, and keyboard shortcuts (Enter to send, Shift+Enter for newlines).
 - **Context Maintenance**: Automatic inclusion of `conversation_id` or `response_id` in follow-up questions to maintain server-side context.
 - **Markdown Rendering**: Robust markdown rendering for assistant messages, supporting GitHub-flavored markdown, HTML rendering (citations, links), HTML entity decoding, and removal of Knowledge Graph tags.
