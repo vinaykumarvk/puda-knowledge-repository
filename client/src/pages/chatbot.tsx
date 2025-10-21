@@ -400,7 +400,7 @@ export default function ChatbotPage() {
   const hasMessages = messages.length > 0;
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex flex-1 bg-background">
       <ThreadSidebar
         onSelectThread={handleSelectThread}
         onNewChat={handleNewChat}
