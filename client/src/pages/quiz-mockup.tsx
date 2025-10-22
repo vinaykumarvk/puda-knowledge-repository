@@ -105,7 +105,7 @@ export default function QuizMockupPage() {
 
       <div className="flex-1 overflow-auto p-4">
         <div className="max-w-6xl mx-auto">
-          <Tabs defaultValue="structured" className="w-full">
+          <Tabs defaultValue="flashcards" className="w-full">
             <TabsList className="grid w-full max-w-md mx-auto grid-cols-2 mb-6">
               <TabsTrigger value="structured" className="gap-2">
                 <Layers className="w-4 h-4" />
