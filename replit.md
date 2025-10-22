@@ -6,6 +6,23 @@ The WealthForce Knowledge Agent is an enterprise-grade conversational AI chatbot
 ## Recent Changes
 
 ### October 22, 2025
+- **Quiz Tab Dual-Mode Implementation**: Redesigned Quiz page with two learning modes for knowledge retention and self-assessment:
+  - **Structured Quiz Section**: 500+ questions across 5 comprehensive categories
+    - Wealth Management Fundamentals (85 questions, Beginner, 25 min)
+    - Investment Products & Strategies (120 questions, Intermediate, 35 min)
+    - Client Relationship Management (95 questions, Intermediate, 30 min)
+    - Regulatory & Compliance (110 questions, Advanced, 40 min)
+    - Global Markets & Economics (90 questions, Advanced, 30 min)
+  - **Flashcards Section**: 4 self-paced study decks for active recall
+    - Quick Concepts Review (50 cards, All Topics)
+    - Investment Terminology (75 cards, Investments)
+    - Regulatory Definitions (60 cards, Compliance)
+    - Financial Ratios & Metrics (40 cards, Analysis)
+  - Tab-based navigation with icons (Layers for Structured Quiz, GraduationCap for Flashcards)
+  - Each category/deck displays topic tags, difficulty, question/card counts, and estimated time
+  - Compact layout matching Workshop page design (py-2.5 header, p-4 container, gap-3 spacing)
+  - Info boxes explaining how each mode works
+  - All interactive elements include proper test IDs for automation
 - **Workshop Page Compact Layout**: Redesigned the Workshop page grid to display all 6 templates at one glance without scrolling:
   - Reduced header padding from py-4 to py-2.5
   - Reduced header title from text-2xl to text-xl
@@ -67,8 +84,11 @@ The UI features a comprehensive layout with a **Global Top Header**, a **Main Na
 
 ### Feature Specifications
 -   **Global Header**: Persistent top bar with "Questions Asked" and "Quizzes Completed" counters, global search, and user menu.
--   **Multi-Section Navigation**: Main navigation sidebar with "Explore" (conversational AI), "Workshop" (pre-developed templates), "Quiz" (knowledge testing), and "Atlas" (knowledge map) sections.
+-   **Multi-Section Navigation**: Main navigation sidebar with "Explore" (conversational AI), "Workshop" (pre-developed templates), "Quiz" (knowledge testing and self-assessment), and "Atlas" (knowledge map) sections.
 -   **Workshop Templates**: 6 pre-developed template tiles for document creation including New Report, Client Proposal, Strategic Memo, Presentation Deck, RFP Response, and Case Study.
+-   **Quiz & Assessment Dual-Mode System**: Tab-based interface with two learning modes:
+    -   **Structured Quiz**: 500+ questions across 5 categories (Wealth Management Fundamentals, Investment Products & Strategies, Client Relationship Management, Regulatory & Compliance, Global Markets & Economics) with difficulty levels, topic tags, and estimated completion times.
+    -   **Flashcards**: 4 self-paced study decks (Quick Concepts Review, Investment Terminology, Regulatory Definitions, Financial Ratios & Metrics) for active recall and knowledge retention tracking.
 -   **AI Model Configuration**: Collapsible right sidebar with controls for LLM model selection, temperature, knowledge graph hops, token limits, and custom system prompts.
 -   **Core Conversational Interface**: ChatGPT-style scrolling message view with fixed input, auto-scroll, and keyboard shortcuts.
 -   **Markdown Rendering**: Robust markdown rendering for assistant messages, supporting GitHub-flavored markdown, HTML rendering, and HTML entity decoding.
