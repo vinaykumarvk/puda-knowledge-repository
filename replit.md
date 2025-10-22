@@ -5,6 +5,19 @@ The WealthForce Knowledge Agent is an enterprise-grade conversational AI chatbot
 
 ## Recent Changes
 
+### October 22, 2025
+- **Workshop Page Compact Layout**: Redesigned the Workshop page grid to display all 6 templates at one glance without scrolling:
+  - Reduced header padding from py-4 to py-2.5
+  - Reduced header title from text-2xl to text-xl
+  - Reduced header subtitle from text-sm to text-xs
+  - Reduced main container padding from p-6 to p-4
+  - Reduced grid gap from gap-6 to gap-4
+  - Reduced card padding and spacing (p-4, space-y-2.5)
+  - Reduced icon boxes from w-12 h-12 to w-10 h-10
+  - Reduced card titles from text-lg to text-base
+  - Kept descriptions readable at text-sm with leading-snug
+  - All 6 template tiles now fit in viewport without scrolling while maintaining readability
+
 ### October 21, 2025
 - **Workshop Page Templates**: Implemented 6 pre-developed template tiles for wealth management professionals:
   - **New Report**: Generate comprehensive financial or market analysis reports
