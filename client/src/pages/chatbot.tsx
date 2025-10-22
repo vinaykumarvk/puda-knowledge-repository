@@ -712,7 +712,7 @@ export default function ChatbotPage() {
               </div>
               
               {/* Quiz Me Button - Shows when there's enough conversation */}
-              {hasMessages && messages.length >= 4 && (
+              {hasMessages && messages.length >= 2 && (
                 <Button
                   data-testid="button-quiz-me"
                   onClick={handleGenerateQuiz}
