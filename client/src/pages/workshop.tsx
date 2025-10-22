@@ -36,7 +36,7 @@ export default function WorkshopPage() {
   ];
 
   return (
-    <div className="flex-1 flex flex-col h-screen bg-background">
+    <div className="flex-1 flex flex-col bg-background">
       <header className="border-b border-border bg-card/30 backdrop-blur-sm px-6 py-2.5">
         <div className="flex items-center gap-2.5">
           <Wrench className="w-5 h-5 text-primary" />

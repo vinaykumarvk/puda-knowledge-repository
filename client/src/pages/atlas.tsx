@@ -19,7 +19,7 @@ export default function AtlasPage() {
   ];
 
   return (
-    <div className="flex-1 flex flex-col h-screen bg-background">
+    <div className="flex-1 flex flex-col bg-background">
       <header className="border-b border-border bg-card/30 backdrop-blur-sm px-6 py-4">
         <div className="flex items-center gap-3">
           <Map className="w-6 h-6 text-primary" />
