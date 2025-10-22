@@ -37,23 +37,23 @@ export default function WorkshopPage() {
 
   return (
     <div className="flex-1 flex flex-col h-screen bg-background">
-      <header className="border-b border-border bg-card/30 backdrop-blur-sm px-6 py-4">
-        <div className="flex items-center gap-3">
-          <Wrench className="w-6 h-6 text-primary" />
+      <header className="border-b border-border bg-card/30 backdrop-blur-sm px-6 py-2.5">
+        <div className="flex items-center gap-2.5">
+          <Wrench className="w-5 h-5 text-primary" />
           <div>
-            <h1 className="text-2xl font-bold text-foreground" data-testid="text-workshop-title">
+            <h1 className="text-xl font-bold text-foreground" data-testid="text-workshop-title">
               Workshop
             </h1>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Pre-developed templates for wealth management professionals
             </p>
           </div>
         </div>
       </header>
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto p-4">
         <div className="max-w-6xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {templates.map((template) => {
               const Icon = template.icon;
               return (
@@ -62,13 +62,13 @@ export default function WorkshopPage() {
                   className="hover:shadow-lg hover:border-primary/50 transition-all cursor-pointer bg-card"
                   data-testid={`card-template-${template.name.toLowerCase().replace(/\s+/g, '-')}`}
                 >
-                  <CardHeader className="space-y-4">
-                    <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <Icon className="w-6 h-6 text-primary" />
+                  <CardHeader className="space-y-2.5 p-4">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Icon className="w-5 h-5 text-primary" />
                     </div>
                     <div>
-                      <CardTitle className="text-lg font-semibold">{template.name}</CardTitle>
-                      <CardDescription className="mt-2 text-sm leading-relaxed">
+                      <CardTitle className="text-base font-semibold">{template.name}</CardTitle>
+                      <CardDescription className="mt-1.5 text-sm leading-snug">
                         {template.description}
                       </CardDescription>
                     </div>
