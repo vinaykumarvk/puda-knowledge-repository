@@ -44,11 +44,13 @@ The UI features a comprehensive layout comprising a **Global Top Header**, a **M
 -   **Download & Export**: Individual answers can be exported as Markdown (.md) or PDF (.pdf).
 -   **Regenerate Functionality**: A "Regenerate" button for assistant messages to resubmit questions while maintaining context.
 -   **Wealth Mastery Tracking System**: Tracks user proficiency across five levels (Novice to Expert) based on quiz performance, topic coverage, and retention, with a compact, color-coded progress indicator in the global header.
--   **Interactive Knowledge Mindmap**: Hierarchical visualization of 938 wealth management concepts organized into a 3-level tree structure:
+-   **Interactive Knowledge Mindmap**: Hierarchical visualization of 938 wealth management concepts organized into a 3-level tree structure with progressive reveal:
     -   **Level 0 (Root)**: "Order Management & Wealth Operations" serves as the central anchor
     -   **Level 1 (Categories)**: 7 semantic categories (Order Journey, Customer Management, Products & Securities, Transactions, Systems, Compliance, Reports)
-    -   **Level 2 (Items)**: Top 5 most relevant items per category (34 total nodes displayed for performance)
-    -   Features: Semi-circular tree layout, search functionality, zoom/pan controls, color-coded levels (blue root, blue categories, green items), statistics panel, and minimap navigation using React Flow visualization.
+    -   **Level 2 (Items)**: Top 5 most relevant items per category (34 total nodes when fully expanded)
+    -   **Progressive Reveal**: Nodes are hidden by default and only appear when their parent is clicked; clicking again collapses the node and all its descendants
+    -   **Smart Search**: Search automatically expands ancestor nodes to reveal matches while hiding unrelated branches for focused exploration
+    -   Features: Semi-circular tree layout, click-to-expand interaction, intelligent search filtering, zoom/pan controls, color-coded levels (blue root, blue categories, green items), expansion indicators (chevron icons), statistics panel, and minimap navigation using React Flow visualization.
 
 ### System Design Choices
 -   **Schema-first development**: Uses TypeScript and Zod for strict schema validation.
