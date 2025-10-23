@@ -8,11 +8,12 @@ The WealthForce Knowledge Agent is an enterprise-grade conversational AI chatbot
 ### October 22, 2025
 - **Flash Quiz Feature**: Implemented inline quiz generation from conversation context:
   - "Quiz Me" button (⚡ icon) appears in input area after 1 Q&A exchange (2+ messages)
-  - Uses OpenAI GPT-4o-mini to generate 3-5 multiple-choice questions based on conversation history
+  - Uses the same EKG REST Service to generate 3-5 multiple-choice questions based on conversation history
+  - No additional API keys required - fully integrated with existing knowledge service
   - Questions appear inline in chat thread as QuizMessage component
   - Interactive UI with instant feedback (✅ Correct / ❌ Incorrect) and explanations
   - Score display when all questions are answered
-  - Defensive JSON parsing handles markdown-wrapped responses from OpenAI
+  - Defensive JSON parsing handles markdown-wrapped responses from EKG service
   - Shared types in `client/src/types/quiz.ts` for type safety
   - Backend endpoint `/api/generate-quiz` with error handling and validation
   - Removed "Press Enter to send" helper text for cleaner input area alignment

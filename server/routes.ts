@@ -234,11 +234,6 @@ User's Question: ${validatedData.question}`;
         return res.status(400).json({ error: "threadId is required" });
       }
 
-      // Check if OPENAI_API_KEY is available
-      if (!process.env.OPENAI_API_KEY) {
-        return res.status(500).json({ error: "OpenAI API key not configured" });
-      }
-
       // Get recent messages from the thread
       const messages = await storage.getRecentMessagePairs(threadId, 10); // Get up to 10 Q&A pairs
       
@@ -246,7 +241,7 @@ User's Question: ${validatedData.question}`;
         return res.status(400).json({ error: "Not enough conversation history to generate a quiz" });
       }
 
-      // Format messages for OpenAI
+      // Format messages for context
       const conversationContext = [];
       for (let i = 0; i < messages.length; i += 2) {
         const userMsg = messages[i];
@@ -260,27 +255,20 @@ User's Question: ${validatedData.question}`;
         }
       }
 
-      // Import OpenAI
-      const { default: OpenAI } = await import('openai');
-      const openai = new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY,
-      });
+      // Create quiz generation prompt for EKG service
+      const quizPrompt = `Based on the following conversation about wealth management, generate 3-5 multiple-choice quiz questions to test understanding of the key concepts discussed.
 
-      // Generate quiz using OpenAI
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content: `You are a quiz generator for a wealth management knowledge base. Generate 3-5 multiple-choice questions based on the conversation provided. 
+CONVERSATION HISTORY:
+${conversationContext.map((ctx, i) => `Q${i + 1}: ${ctx.question}\nA${i + 1}: ${ctx.answer}`).join('\n\n')}
 
-Each question should:
-- Test understanding of key concepts discussed
+INSTRUCTIONS:
+Generate quiz questions that:
+- Test understanding of key concepts from the conversation
 - Have 4 answer options (A, B, C, D)
 - Include the correct answer
 - Include a brief explanation (2-3 sentences) of why the answer is correct
 
-Return ONLY valid JSON in this exact format:
+Return your response as valid JSON in this EXACT format (no additional text before or after):
 {
   "questions": [
     {
@@ -295,19 +283,31 @@ Return ONLY valid JSON in this exact format:
       "explanation": "Explanation why A is correct."
     }
   ]
-}`
-          },
-          {
-            role: "user",
-            content: `Generate a quiz based on this conversation:\n\n${conversationContext.map((ctx, i) => 
-              `Q${i + 1}: ${ctx.question}\nA${i + 1}: ${ctx.answer}`
-            ).join('\n\n')}`
+}`;
+
+      // Call EKG service to generate quiz
+      const ekgResponse = await fetch(`${EKG_API_URL}/v1/answer`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          question: quizPrompt,
+          domain: "wealth_management",
+          params: {
+            _mode: "concise"
           }
-        ],
-        temperature: 0.7,
+        }),
       });
 
-      const quizData = completion.choices[0]?.message?.content;
+      if (!ekgResponse.ok) {
+        const errorText = await ekgResponse.text();
+        console.error("EKG API error:", errorText);
+        return res.status(500).json({ error: "Quiz generation service unavailable" });
+      }
+
+      const ekgResult = await ekgResponse.json();
+      const quizData = ekgResult.answer || ekgResult.data;
       
       if (!quizData) {
         return res.status(500).json({ error: "Failed to generate quiz" });
@@ -316,12 +316,22 @@ Return ONLY valid JSON in this exact format:
       // Parse the quiz data with defensive handling for backtick-wrapped JSON
       let parsedQuiz;
       try {
-        // Remove potential markdown code block wrappers
+        // Remove potential markdown code block wrappers and extract JSON
         let cleanedData = quizData.trim();
-        if (cleanedData.startsWith('```json')) {
-          cleanedData = cleanedData.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-        } else if (cleanedData.startsWith('```')) {
-          cleanedData = cleanedData.replace(/^```\s*/, '').replace(/\s*```$/, '');
+        
+        // Handle various markdown formats
+        if (cleanedData.includes('```json')) {
+          const match = cleanedData.match(/```json\s*([\s\S]*?)\s*```/);
+          cleanedData = match ? match[1] : cleanedData.replace(/```json\s*/, '').replace(/\s*```/, '');
+        } else if (cleanedData.includes('```')) {
+          const match = cleanedData.match(/```\s*([\s\S]*?)\s*```/);
+          cleanedData = match ? match[1] : cleanedData.replace(/```\s*/, '').replace(/\s*```/, '');
+        }
+        
+        // Remove any leading/trailing non-JSON text
+        const jsonMatch = cleanedData.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          cleanedData = jsonMatch[0];
         }
         
         parsedQuiz = JSON.parse(cleanedData);
@@ -334,7 +344,7 @@ Return ONLY valid JSON in this exact format:
         console.error("Failed to parse quiz JSON:", quizData);
         console.error("Parse error:", parseError);
         return res.status(500).json({ 
-          error: "Failed to parse quiz data. The AI returned an invalid format. Please try again." 
+          error: "Failed to parse quiz data. Please try again." 
         });
       }
 
