@@ -1,8 +1,18 @@
-import { Map, Globe, BookMarked, Database } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Map, Globe, BookMarked, Database, Network } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { KnowledgeMindmap } from "@/components/knowledge-mindmap";
+import knowledgeGraphJson from "@assets/master_knowledge_graph (7)_1761244211425.json";
 
 export default function AtlasPage() {
+  const [knowledgeGraph, setKnowledgeGraph] = useState<any>(null);
+
+  useEffect(() => {
+    // Load the knowledge graph data
+    setKnowledgeGraph(knowledgeGraphJson);
+  }, []);
+
   const resources = [
     {
       category: "Knowledge Base",
@@ -35,9 +45,13 @@ export default function AtlasPage() {
       </header>
 
       <div className="flex-1 overflow-auto p-6">
-        <div className="max-w-6xl mx-auto">
-          <Tabs defaultValue="overview" className="w-full">
+        <div className="max-w-full mx-auto">
+          <Tabs defaultValue="mindmap" className="w-full">
             <TabsList className="mb-6" data-testid="tabs-atlas">
+              <TabsTrigger value="mindmap" data-testid="tab-mindmap">
+                <Network className="w-4 h-4 mr-2" />
+                Knowledge Mindmap
+              </TabsTrigger>
               <TabsTrigger value="overview" data-testid="tab-overview">
                 <Globe className="w-4 h-4 mr-2" />
                 Overview
@@ -52,23 +66,68 @@ export default function AtlasPage() {
               </TabsTrigger>
             </TabsList>
 
+            <TabsContent value="mindmap" className="space-y-6">
+              <Card className="border-border">
+                <CardHeader className="pb-3">
+                  <CardTitle>Interactive Knowledge Graph</CardTitle>
+                  <CardDescription>
+                    Explore the wealth management knowledge base with {knowledgeGraph?.metadata?.consolidation_stats?.consolidated_nodes || 0} interconnected concepts
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="h-[calc(100vh-280px)] min-h-[600px]" data-testid="mindmap-container">
+                    {knowledgeGraph ? (
+                      <KnowledgeMindmap knowledgeGraphData={knowledgeGraph} />
+                    ) : (
+                      <div className="h-full flex items-center justify-center bg-muted">
+                        <div className="text-center space-y-3">
+                          <Network className="w-16 h-16 text-muted-foreground mx-auto animate-pulse" />
+                          <p className="text-muted-foreground">Loading knowledge graph...</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
             <TabsContent value="overview" className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Knowledge Map</CardTitle>
+                  <CardTitle>Knowledge Map Statistics</CardTitle>
                   <CardDescription>
-                    Visual representation of the wealth management knowledge base
+                    Overview of the consolidated knowledge base
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="h-[400px] rounded-lg bg-muted flex items-center justify-center">
-                    <div className="text-center space-y-3">
-                      <Map className="w-16 h-16 text-muted-foreground mx-auto" />
-                      <p className="text-muted-foreground">
-                        Interactive knowledge map coming soon
-                      </p>
+                  {knowledgeGraph?.metadata && (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="p-4 rounded-lg border border-border bg-card/50">
+                        <div className="text-2xl font-bold text-primary">
+                          {knowledgeGraph.metadata.consolidation_stats.consolidated_nodes}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">Total Nodes</div>
+                      </div>
+                      <div className="p-4 rounded-lg border border-border bg-card/50">
+                        <div className="text-2xl font-bold text-primary">
+                          {knowledgeGraph.metadata.consolidation_stats.consolidated_edges}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">Relationships</div>
+                      </div>
+                      <div className="p-4 rounded-lg border border-border bg-card/50">
+                        <div className="text-2xl font-bold text-primary">
+                          {knowledgeGraph.metadata.total_source_documents}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">Source Documents</div>
+                      </div>
+                      <div className="p-4 rounded-lg border border-border bg-card/50">
+                        <div className="text-2xl font-bold text-primary">
+                          {knowledgeGraph.metadata.consolidation_stats.duplicates_merged}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">Duplicates Merged</div>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>

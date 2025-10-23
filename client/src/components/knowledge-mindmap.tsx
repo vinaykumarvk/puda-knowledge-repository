@@ -129,7 +129,7 @@ export function KnowledgeMindmap({ knowledgeGraphData }: KnowledgeMindmapProps) 
   // Filter nodes based on search
   const filteredNodes = nodes.map(node => ({
     ...node,
-    hidden: searchTerm && !node.data.label.toLowerCase().includes(searchTerm.toLowerCase()),
+    hidden: searchTerm ? !node.data.label.toLowerCase().includes(searchTerm.toLowerCase()) : false,
   }));
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
