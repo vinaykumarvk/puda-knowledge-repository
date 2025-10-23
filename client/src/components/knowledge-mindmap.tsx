@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import ReactFlow, {
   Node,
   Edge,
@@ -103,6 +103,7 @@ export function KnowledgeMindmap({ knowledgeGraphData }: KnowledgeMindmapProps) 
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const [allNodes, setAllNodes] = useState<Node[]>([]);
   const [allEdges, setAllEdges] = useState<Edge[]>([]);
+  const childrenMapRef = useRef<Record<string, string[]>>({});
 
   // Build hierarchical tree structure from knowledge graph
   useEffect(() => {
@@ -264,9 +265,7 @@ export function KnowledgeMindmap({ knowledgeGraphData }: KnowledgeMindmapProps) 
 
     setAllNodes(graphNodes);
     setAllEdges(graphEdges);
-    
-    // Store children mapping for expansion logic
-    (window as any).__childrenMap = childrenMap;
+    childrenMapRef.current = childrenMap;
   }, [knowledgeGraphData]);
 
   // Handle node click to expand/collapse
@@ -277,7 +276,7 @@ export function KnowledgeMindmap({ knowledgeGraphData }: KnowledgeMindmapProps) 
         // Collapse: remove this node and all descendants
         newExpanded.delete(nodeId);
         const removeDescendants = (id: string) => {
-          const children = (window as any).__childrenMap?.[id] || [];
+          const children = childrenMapRef.current[id] || [];
           children.forEach((childId: string) => {
             newExpanded.delete(childId);
             removeDescendants(childId);
@@ -301,7 +300,7 @@ export function KnowledgeMindmap({ knowledgeGraphData }: KnowledgeMindmapProps) 
     
     const addVisibleChildren = (nodeId: string) => {
       if (expandedNodes.has(nodeId)) {
-        const children = (window as any).__childrenMap?.[nodeId] || [];
+        const children = childrenMapRef.current[nodeId] || [];
         children.forEach((childId: string) => {
           visibleNodeIds.add(childId);
         });
@@ -336,12 +335,88 @@ export function KnowledgeMindmap({ knowledgeGraphData }: KnowledgeMindmapProps) 
     setEdges(visibleEdges);
   }, [expandedNodes, allNodes, allEdges, setNodes, setEdges, handleNodeClick]);
 
-  // Filter nodes based on search (override expansion)
+  // Filter nodes based on search - expand ancestors of matching nodes
+  useEffect(() => {
+    if (!searchTerm || allNodes.length === 0) return;
+
+    const searchLower = searchTerm.toLowerCase();
+    const matchingNodeIds = new Set<string>();
+    
+    // Find all nodes that match the search
+    allNodes.forEach(node => {
+      if (node.data.label.toLowerCase().includes(searchLower)) {
+        matchingNodeIds.add(node.id);
+      }
+    });
+
+    // Build parent map from children map
+    const parentMap: Record<string, string> = {};
+    Object.entries(childrenMapRef.current).forEach(([parentId, children]) => {
+      children.forEach(childId => {
+        parentMap[childId] = parentId;
+      });
+    });
+
+    // Expand all ancestors of matching nodes
+    const nodesToExpand = new Set<string>();
+    matchingNodeIds.forEach(nodeId => {
+      let currentId: string | undefined = nodeId;
+      while (currentId && currentId !== 'root') {
+        const parentId: string | undefined = parentMap[currentId];
+        if (parentId) {
+          nodesToExpand.add(parentId);
+        }
+        currentId = parentId;
+      }
+    });
+
+    // Apply expansion for search results
+    if (nodesToExpand.size > 0) {
+      setExpandedNodes(prev => {
+        const newExpanded = new Set(prev);
+        nodesToExpand.forEach(id => newExpanded.add(id));
+        return newExpanded;
+      });
+    }
+  }, [searchTerm, allNodes]);
+
+  // Apply search filtering - keep matching nodes AND their ancestors visible
   const displayNodes = searchTerm 
-    ? nodes.map(node => ({
-        ...node,
-        hidden: !node.data.label.toLowerCase().includes(searchTerm.toLowerCase()),
-      }))
+    ? (() => {
+        const searchLower = searchTerm.toLowerCase();
+        const matchingNodeIds = new Set<string>();
+        
+        // Find all nodes that match the search
+        nodes.forEach(node => {
+          if (node.data.label.toLowerCase().includes(searchLower)) {
+            matchingNodeIds.add(node.id);
+          }
+        });
+
+        // Build parent map
+        const parentMap: Record<string, string> = {};
+        Object.entries(childrenMapRef.current).forEach(([parentId, children]) => {
+          children.forEach(childId => {
+            parentMap[childId] = parentId;
+          });
+        });
+
+        // Include all ancestors of matching nodes
+        const nodesToShow = new Set<string>(matchingNodeIds);
+        matchingNodeIds.forEach(nodeId => {
+          let currentId: string | undefined = nodeId;
+          while (currentId) {
+            nodesToShow.add(currentId);
+            currentId = parentMap[currentId];
+          }
+        });
+
+        // Apply visibility filter
+        return nodes.map(node => ({
+          ...node,
+          hidden: node.hidden || !nodesToShow.has(node.id),
+        }));
+      })()
     : nodes;
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
