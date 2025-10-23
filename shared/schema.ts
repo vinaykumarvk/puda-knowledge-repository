@@ -92,3 +92,63 @@ export const insertUserSchema = createInsertSchema(users).pick({
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+
+// Quiz Attempts - tracks each quiz completion
+export const quizAttempts = pgTable("quiz_attempts", {
+  id: serial("id").primaryKey(),
+  threadId: integer("thread_id").notNull().references(() => threads.id, { onDelete: "cascade" }),
+  totalQuestions: integer("total_questions").notNull(),
+  correctAnswers: integer("correct_answers").notNull(),
+  scorePercentage: integer("score_percentage").notNull(), // 0-100
+  timeSpent: integer("time_spent"), // seconds to complete (optional for now)
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertQuizAttemptSchema = createInsertSchema(quizAttempts).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertQuizAttempt = z.infer<typeof insertQuizAttemptSchema>;
+export type QuizAttempt = typeof quizAttempts.$inferSelect;
+
+// Quiz Responses - individual question answers
+export const quizResponses = pgTable("quiz_responses", {
+  id: serial("id").primaryKey(),
+  attemptId: integer("attempt_id").notNull().references(() => quizAttempts.id, { onDelete: "cascade" }),
+  questionText: text("question_text").notNull(),
+  userAnswer: text("user_answer").notNull(), // A, B, C, or D
+  correctAnswer: text("correct_answer").notNull(),
+  isCorrect: boolean("is_correct").notNull(),
+  topic: text("topic"), // Extracted topic (optional for now)
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertQuizResponseSchema = createInsertSchema(quizResponses).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertQuizResponse = z.infer<typeof insertQuizResponseSchema>;
+export type QuizResponse = typeof quizResponses.$inferSelect;
+
+// User Mastery - calculated mastery scores
+export const userMastery = pgTable("user_mastery", {
+  id: serial("id").primaryKey(),
+  overallScore: integer("overall_score").notNull().default(0), // 0-100
+  currentLevel: text("current_level").notNull().default("Novice"), // Novice, Learning, Intermediate, Advanced, Expert
+  quizPerformanceScore: integer("quiz_performance_score").notNull().default(0), // 0-50
+  topicCoverageScore: integer("topic_coverage_score").notNull().default(0), // 0-30
+  retentionScore: integer("retention_score").notNull().default(0), // 0-20
+  topicsMastered: integer("topics_mastered").notNull().default(0),
+  totalQuizzesTaken: integer("total_quizzes_taken").notNull().default(0),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertUserMasterySchema = createInsertSchema(userMastery).omit({
+  id: true,
+  updatedAt: true,
+});
+
+export type InsertUserMastery = z.infer<typeof insertUserMasterySchema>;
+export type UserMastery = typeof userMastery.$inferSelect;
