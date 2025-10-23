@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import { MainNavSidebar } from "@/components/main-nav-sidebar";
 import { TopHeader } from "@/components/top-header";
+import { MasteryBar } from "@/components/mastery-bar";
 import ChatbotPage from "@/pages/chatbot";
 import WorkshopPage from "@/pages/workshop";
 import QuizPage from "@/pages/quiz";
@@ -29,6 +30,7 @@ function Router() {
         quizzesCompleted={quizzesCompleted}
         onSearch={handleSearch}
       />
+      <MasteryBar />
       <div className="flex flex-1 overflow-hidden">
         <MainNavSidebar />
         <Switch>
