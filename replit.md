@@ -49,8 +49,9 @@ The UI features a comprehensive layout comprising a **Global Top Header**, a **M
     -   **Level 1 (Categories)**: 7 semantic categories (Order Journey, Customer Management, Products & Securities, Transactions, Systems, Compliance, Reports)
     -   **Level 2 (Items)**: Top 5 most relevant items per category (34 total nodes when fully expanded)
     -   **Progressive Reveal**: Nodes are hidden by default and only appear when their parent is clicked; clicking again collapses the node and all its descendants
+    -   **Automatic Tree Layout**: Uses dagre algorithm for proper hierarchical positioning with top-down direction, ensuring nodes expand in an organized tree structure
     -   **Smart Search**: Search automatically expands ancestor nodes to reveal matches while hiding unrelated branches for focused exploration
-    -   Features: Semi-circular tree layout, click-to-expand interaction, intelligent search filtering, zoom/pan controls, color-coded levels (blue root, blue categories, green items), expansion indicators (chevron icons), statistics panel, and minimap navigation using React Flow visualization.
+    -   Features: Automatic tree layout, click-to-expand interaction, intelligent search filtering, zoom/pan controls, color-coded levels (blue root, blue categories, green items), expansion indicators (chevron icons), statistics panel, and minimap navigation using React Flow visualization.
 
 ### System Design Choices
 -   **Schema-first development**: Uses TypeScript and Zod for strict schema validation.
