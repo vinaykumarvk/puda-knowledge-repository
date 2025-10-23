@@ -44,6 +44,7 @@ The UI features a comprehensive layout comprising a **Global Top Header**, a **M
 -   **Download & Export**: Individual answers can be exported as Markdown (.md) or PDF (.pdf).
 -   **Regenerate Functionality**: A "Regenerate" button for assistant messages to resubmit questions while maintaining context.
 -   **Wealth Mastery Tracking System**: Tracks user proficiency across five levels (Novice to Expert) based on quiz performance, topic coverage, and retention, with a compact, color-coded progress indicator in the global header.
+-   **Interactive Knowledge Mindmap**: Visual knowledge graph in Atlas section displaying 938 interconnected wealth management concepts with search, zoom/pan controls, and color-coded node types (Reports, Data Entities, Systems, Processes) using React Flow visualization.
 
 ### System Design Choices
 -   **Schema-first development**: Uses TypeScript and Zod for strict schema validation.
