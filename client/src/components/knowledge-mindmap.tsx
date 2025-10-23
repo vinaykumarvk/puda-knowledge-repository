@@ -9,6 +9,8 @@ import ReactFlow, {
   MiniMap,
   Panel,
   NodeProps,
+  Handle,
+  Position,
 } from "reactflow";
 import "reactflow/dist/style.css";
 import { Card } from "@/components/ui/card";
@@ -35,24 +37,44 @@ function KnowledgeNode({ data }: NodeProps) {
   };
 
   return (
-    <Card
-      className={`p-3 ${getNodeSize(data.level)} ${getNodeColor(data.level)} cursor-pointer hover:shadow-lg transition-all`}
-      data-testid={`mindmap-node-${data.id}`}
-    >
-      <div className="space-y-1">
-        {data.level === 0 && (
-          <Database className="w-5 h-5 text-primary mx-auto mb-2" />
-        )}
-        <div className={`${data.level === 0 ? 'text-sm' : 'text-xs'} font-semibold text-foreground text-center`} title={data.label}>
-          {data.label}
-        </div>
-        {data.level > 0 && data.count && (
-          <div className="text-[10px] text-muted-foreground text-center">
-            {data.count} items
+    <>
+      {/* Input handle (target) - receives connections from parent */}
+      {data.level > 0 && (
+        <Handle
+          type="target"
+          position={Position.Top}
+          style={{ background: '#555' }}
+        />
+      )}
+      
+      <Card
+        className={`p-3 ${getNodeSize(data.level)} ${getNodeColor(data.level)} cursor-pointer hover:shadow-lg transition-all`}
+        data-testid={`mindmap-node-${data.id}`}
+      >
+        <div className="space-y-1">
+          {data.level === 0 && (
+            <Database className="w-5 h-5 text-primary mx-auto mb-2" />
+          )}
+          <div className={`${data.level === 0 ? 'text-sm' : 'text-xs'} font-semibold text-foreground text-center`} title={data.label}>
+            {data.label}
           </div>
-        )}
-      </div>
-    </Card>
+          {data.level > 0 && data.count && (
+            <div className="text-[10px] text-muted-foreground text-center">
+              {data.count} items
+            </div>
+          )}
+        </div>
+      </Card>
+      
+      {/* Output handle (source) - sends connections to children */}
+      {data.level < 2 && (
+        <Handle
+          type="source"
+          position={Position.Bottom}
+          style={{ background: '#555' }}
+        />
+      )}
+    </>
   );
 }
 
