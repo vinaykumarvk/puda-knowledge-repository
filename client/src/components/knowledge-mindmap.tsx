@@ -12,6 +12,7 @@ import ReactFlow, {
   Handle,
   Position,
 } from "reactflow";
+import dagre from "dagre";
 import "reactflow/dist/style.css";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -95,6 +96,46 @@ interface KnowledgeMindmapProps {
   knowledgeGraphData?: any;
 }
 
+// Tree layout using dagre
+const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'TB') => {
+  const dagreGraph = new dagre.graphlib.Graph();
+  dagreGraph.setDefaultEdgeLabel(() => ({}));
+  
+  const nodeWidth = 200;
+  const nodeHeight = 100;
+  
+  dagreGraph.setGraph({ 
+    rankdir: direction,
+    nodesep: 80,
+    ranksep: 150,
+    marginx: 50,
+    marginy: 50,
+  });
+
+  nodes.forEach((node) => {
+    dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
+  });
+
+  edges.forEach((edge) => {
+    dagreGraph.setEdge(edge.source, edge.target);
+  });
+
+  dagre.layout(dagreGraph);
+
+  const layoutedNodes = nodes.map((node) => {
+    const nodeWithPosition = dagreGraph.node(node.id);
+    return {
+      ...node,
+      position: {
+        x: nodeWithPosition.x - nodeWidth / 2,
+        y: nodeWithPosition.y - nodeHeight / 2,
+      },
+    };
+  });
+
+  return { nodes: layoutedNodes, edges };
+};
+
 export function KnowledgeMindmap({ knowledgeGraphData }: KnowledgeMindmapProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -153,20 +194,18 @@ export function KnowledgeMindmap({ knowledgeGraphData }: KnowledgeMindmapProps) 
       delete categories["Other"];
     }
 
-    // Create hierarchical layout
+    // Create hierarchical structure (no positions yet - dagre will handle that)
     const graphNodes: Node[] = [];
     const graphEdges: Edge[] = [];
     const childrenMap: Record<string, string[]> = {};
 
-    // Root node (Level 0)
-    const rootX = 800;
-    const rootY = 100;
     const rootId = "root";
     
+    // Root node (Level 0)
     graphNodes.push({
       id: rootId,
       type: "knowledge",
-      position: { x: rootX, y: rootY },
+      position: { x: 0, y: 0 }, // Temporary position
       data: {
         id: rootId,
         label: "Order Management & Wealth Operations",
@@ -182,20 +221,13 @@ export function KnowledgeMindmap({ knowledgeGraphData }: KnowledgeMindmapProps) 
 
     // Level 1: Main categories
     const categoryNames = Object.keys(categories).filter(cat => cat !== "Other");
-    const level1Radius = 400;
-    const level1StartAngle = -Math.PI / 2;
-    const level1AngleStep = Math.PI / (categoryNames.length - 1 || 1);
 
     categoryNames.forEach((category, catIndex) => {
-      const angle = level1StartAngle + (catIndex * level1AngleStep);
-      const x = rootX + level1Radius * Math.cos(angle);
-      const y = rootY + 300 + level1Radius * Math.sin(angle);
-
       const categoryId = `cat-${catIndex}`;
       graphNodes.push({
         id: categoryId,
         type: "knowledge",
-        position: { x, y },
+        position: { x: 0, y: 0 }, // Temporary position
         data: {
           id: categoryId,
           label: category,
@@ -224,20 +256,12 @@ export function KnowledgeMindmap({ knowledgeGraphData }: KnowledgeMindmapProps) 
         .sort((a, b) => (b.evidence_count || 0) - (a.evidence_count || 0))
         .slice(0, 5);
 
-      const level2Radius = 200;
-      const level2AngleStep = (Math.PI / 3) / (subcategories.length - 1 || 1);
-      const level2StartAngle = angle - Math.PI / 6;
-
       subcategories.forEach((node: any, nodeIndex) => {
-        const subAngle = level2StartAngle + (nodeIndex * level2AngleStep);
-        const subX = x + level2Radius * Math.cos(subAngle);
-        const subY = y + level2Radius * Math.sin(subAngle);
-
         const nodeId = `node-${catIndex}-${nodeIndex}`;
         graphNodes.push({
           id: nodeId,
           type: "knowledge",
-          position: { x: subX, y: subY },
+          position: { x: 0, y: 0 }, // Temporary position
           data: {
             id: nodeId,
             label: node.name,
@@ -263,8 +287,11 @@ export function KnowledgeMindmap({ knowledgeGraphData }: KnowledgeMindmapProps) 
       });
     });
 
-    setAllNodes(graphNodes);
-    setAllEdges(graphEdges);
+    // Apply tree layout to all nodes
+    const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(graphNodes, graphEdges, 'TB');
+
+    setAllNodes(layoutedNodes);
+    setAllEdges(layoutedEdges);
     childrenMapRef.current = childrenMap;
   }, [knowledgeGraphData]);
 
@@ -315,21 +342,29 @@ export function KnowledgeMindmap({ knowledgeGraphData }: KnowledgeMindmapProps) 
       }
     });
 
-    // Update nodes with visibility and expansion state
-    const updatedNodes = allNodes.map(node => ({
-      ...node,
-      hidden: !visibleNodeIds.has(node.id),
-      data: {
-        ...node.data,
-        isExpanded: expandedNodes.has(node.id),
-        onClick: () => handleNodeClick(node.id),
-      },
-    }));
-
-    // Filter edges to only show connections between visible nodes
+    // Get only visible nodes for layout
+    const visibleNodes = allNodes.filter(node => visibleNodeIds.has(node.id));
     const visibleEdges = allEdges.filter(edge => 
       visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target)
     );
+
+    // Re-layout only visible nodes for proper tree structure
+    const { nodes: layoutedNodes } = getLayoutedElements(visibleNodes, visibleEdges, 'TB');
+
+    // Update nodes with visibility and expansion state
+    const updatedNodes = allNodes.map(node => {
+      const layoutedNode = layoutedNodes.find(n => n.id === node.id);
+      return {
+        ...node,
+        position: layoutedNode ? layoutedNode.position : node.position,
+        hidden: !visibleNodeIds.has(node.id),
+        data: {
+          ...node.data,
+          isExpanded: expandedNodes.has(node.id),
+          onClick: () => handleNodeClick(node.id),
+        },
+      };
+    });
 
     setNodes(updatedNodes);
     setEdges(visibleEdges);
