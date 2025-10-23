@@ -3,14 +3,26 @@ import { Map, Globe, BookMarked, Database, Network } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { KnowledgeMindmap } from "@/components/knowledge-mindmap";
-import knowledgeGraphJson from "@assets/master_knowledge_graph (7)_1761244211425.json";
 
 export default function AtlasPage() {
   const [knowledgeGraph, setKnowledgeGraph] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     // Load the knowledge graph data
-    setKnowledgeGraph(knowledgeGraphJson);
+    const loadKnowledgeGraph = async () => {
+      try {
+        const response = await fetch("/attached_assets/master_knowledge_graph (7)_1761244211425.json");
+        const data = await response.json();
+        setKnowledgeGraph(data);
+      } catch (error) {
+        console.error("Failed to load knowledge graph:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadKnowledgeGraph();
   }, []);
 
   const resources = [
@@ -76,13 +88,20 @@ export default function AtlasPage() {
                 </CardHeader>
                 <CardContent className="p-0">
                   <div className="h-[calc(100vh-280px)] min-h-[600px]" data-testid="mindmap-container">
-                    {knowledgeGraph ? (
-                      <KnowledgeMindmap knowledgeGraphData={knowledgeGraph} />
-                    ) : (
+                    {isLoading ? (
                       <div className="h-full flex items-center justify-center bg-muted">
                         <div className="text-center space-y-3">
                           <Network className="w-16 h-16 text-muted-foreground mx-auto animate-pulse" />
                           <p className="text-muted-foreground">Loading knowledge graph...</p>
+                        </div>
+                      </div>
+                    ) : knowledgeGraph ? (
+                      <KnowledgeMindmap knowledgeGraphData={knowledgeGraph} />
+                    ) : (
+                      <div className="h-full flex items-center justify-center bg-muted">
+                        <div className="text-center space-y-3">
+                          <Network className="w-16 h-16 text-destructive mx-auto" />
+                          <p className="text-destructive">Failed to load knowledge graph</p>
                         </div>
                       </div>
                     )}
