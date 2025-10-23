@@ -13,39 +13,42 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Search, ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
+import { Search, ZoomIn, ZoomOut, Maximize2, Database } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
 // Custom node component for knowledge graph nodes
 function KnowledgeNode({ data }: NodeProps) {
-  const getNodeColor = (type: string) => {
-    const colors: Record<string, string> = {
-      Report: "bg-blue-500/20 border-blue-500",
-      DataEntity: "bg-green-500/20 border-green-500",
-      System: "bg-purple-500/20 border-purple-500",
-      Process: "bg-orange-500/20 border-orange-500",
-      Person: "bg-pink-500/20 border-pink-500",
-      default: "bg-gray-500/20 border-gray-500",
+  const getNodeColor = (level: number) => {
+    const colors: Record<number, string> = {
+      0: "bg-primary/30 border-primary border-2", // Root
+      1: "bg-blue-500/20 border-blue-500", // Level 1
+      2: "bg-green-500/20 border-green-500", // Level 2
     };
-    return colors[type] || colors.default;
+    return colors[level] || "bg-gray-500/20 border-gray-500";
+  };
+
+  const getNodeSize = (level: number) => {
+    if (level === 0) return "min-w-[200px] max-w-[250px]"; // Root - largest
+    if (level === 1) return "min-w-[160px] max-w-[200px]"; // Level 1 - medium
+    return "min-w-[140px] max-w-[180px]"; // Level 2 - smallest
   };
 
   return (
     <Card
-      className={`p-3 min-w-[150px] max-w-[200px] ${getNodeColor(data.type)} cursor-pointer hover:shadow-lg transition-all`}
+      className={`p-3 ${getNodeSize(data.level)} ${getNodeColor(data.level)} cursor-pointer hover:shadow-lg transition-all`}
       data-testid={`mindmap-node-${data.id}`}
     >
       <div className="space-y-1">
-        <div className="text-xs font-semibold text-foreground truncate" title={data.label}>
+        {data.level === 0 && (
+          <Database className="w-5 h-5 text-primary mx-auto mb-2" />
+        )}
+        <div className={`${data.level === 0 ? 'text-sm' : 'text-xs'} font-semibold text-foreground text-center`} title={data.label}>
           {data.label}
         </div>
-        <Badge variant="outline" className="text-[10px]">
-          {data.type}
-        </Badge>
-        {data.evidenceCount && (
-          <div className="text-[10px] text-muted-foreground">
-            {data.evidenceCount} references
+        {data.level > 0 && data.count && (
+          <div className="text-[10px] text-muted-foreground text-center">
+            {data.count} items
           </div>
         )}
       </div>
@@ -67,60 +70,154 @@ export function KnowledgeMindmap({ knowledgeGraphData }: KnowledgeMindmapProps) 
   const [searchTerm, setSearchTerm] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Process knowledge graph data into React Flow format
+  // Build hierarchical tree structure from knowledge graph
   useEffect(() => {
-    if (!knowledgeGraphData) return;
+    if (!knowledgeGraphData?.nodes) return;
 
+    // Categorize nodes into meaningful groups
+    const categorizeNode = (node: any): string => {
+      const name = node.name.toLowerCase();
+      const type = node.type?.toLowerCase() || "";
+      
+      // Order Journey & Processes
+      if (name.includes("order") || name.includes("placement") || name.includes("settlement")) {
+        return "Order Journey & Processes";
+      }
+      // Customer & Account Management
+      if (name.includes("customer") || name.includes("account") || name.includes("investor") || name.includes("kyc")) {
+        return "Customer & Account Management";
+      }
+      // Products & Securities
+      if (name.includes("product") || name.includes("fund") || name.includes("security") || name.includes("portfolio")) {
+        return "Products & Securities";
+      }
+      // Transactions & Operations
+      if (name.includes("transaction") || name.includes("redemption") || name.includes("sip") || name.includes("swp") || name.includes("stp")) {
+        return "Transactions & Operations";
+      }
+      // Systems & Integration
+      if (type.includes("system") || name.includes("api") || name.includes("integration")) {
+        return "Systems & Integration";
+      }
+      // Compliance & Regulations
+      if (name.includes("compliance") || name.includes("regulation") || name.includes("sebi") || name.includes("kyc")) {
+        return "Compliance & Regulations";
+      }
+      // Reports & Documents
+      if (type.includes("report") || name.includes("report") || name.includes("document")) {
+        return "Reports & Documents";
+      }
+      
+      return "Other";
+    };
+
+    // Group nodes by category
+    const categories: Record<string, any[]> = {};
+    knowledgeGraphData.nodes.forEach((node: any) => {
+      const category = categorizeNode(node);
+      if (!categories[category]) {
+        categories[category] = [];
+      }
+      categories[category].push(node);
+    });
+
+    // Remove "Other" category if it has too few items
+    if (categories["Other"] && categories["Other"].length < 5) {
+      delete categories["Other"];
+    }
+
+    // Create hierarchical layout
     const graphNodes: Node[] = [];
     const graphEdges: Edge[] = [];
 
-    // Convert nodes - use a circular layout
-    if (knowledgeGraphData.nodes) {
-      const nodeCount = Math.min(knowledgeGraphData.nodes.length, 100); // Limit to first 100 for performance
-      const radius = 400;
-      const centerX = 500;
-      const centerY = 400;
+    // Root node (Level 0)
+    const rootX = 800;
+    const rootY = 100;
+    graphNodes.push({
+      id: "root",
+      type: "knowledge",
+      position: { x: rootX, y: rootY },
+      data: {
+        id: "root",
+        label: "Order Management & Wealth Operations",
+        level: 0,
+        count: knowledgeGraphData.nodes.length,
+      },
+    });
 
-      knowledgeGraphData.nodes.slice(0, nodeCount).forEach((node: any, index: number) => {
-        const angle = (index / nodeCount) * 2 * Math.PI;
-        const x = centerX + radius * Math.cos(angle);
-        const y = centerY + radius * Math.sin(angle);
+    // Level 1: Main categories arranged in a semi-circle around root
+    const categoryNames = Object.keys(categories).filter(cat => cat !== "Other");
+    const level1Radius = 400;
+    const level1StartAngle = -Math.PI / 2; // Start from top
+    const level1AngleStep = Math.PI / (categoryNames.length - 1 || 1);
 
+    categoryNames.forEach((category, catIndex) => {
+      const angle = level1StartAngle + (catIndex * level1AngleStep);
+      const x = rootX + level1Radius * Math.cos(angle);
+      const y = rootY + 300 + level1Radius * Math.sin(angle);
+
+      const categoryId = `cat-${catIndex}`;
+      graphNodes.push({
+        id: categoryId,
+        type: "knowledge",
+        position: { x, y },
+        data: {
+          id: categoryId,
+          label: category,
+          level: 1,
+          count: categories[category].length,
+        },
+      });
+
+      // Edge from root to category
+      graphEdges.push({
+        id: `edge-root-${categoryId}`,
+        source: "root",
+        target: categoryId,
+        type: "smoothstep",
+        animated: false,
+        style: { stroke: "#3b82f6", strokeWidth: 2 },
+      });
+
+      // Level 2: Subcategories/items - show top 5 most relevant per category
+      const subcategories = categories[category]
+        .sort((a, b) => (b.evidence_count || 0) - (a.evidence_count || 0))
+        .slice(0, 5);
+
+      const level2Radius = 200;
+      const level2AngleStep = (Math.PI / 3) / (subcategories.length - 1 || 1);
+      const level2StartAngle = angle - Math.PI / 6;
+
+      subcategories.forEach((node: any, nodeIndex) => {
+        const subAngle = level2StartAngle + (nodeIndex * level2AngleStep);
+        const subX = x + level2Radius * Math.cos(subAngle);
+        const subY = y + level2Radius * Math.sin(subAngle);
+
+        const nodeId = `node-${catIndex}-${nodeIndex}`;
         graphNodes.push({
-          id: node.id,
+          id: nodeId,
           type: "knowledge",
-          position: { x, y },
+          position: { x: subX, y: subY },
           data: {
-            id: node.id,
-            label: node.name || node.id,
-            type: node.type || "Unknown",
+            id: nodeId,
+            label: node.name,
+            level: 2,
+            type: node.type,
             evidenceCount: node.evidence_count,
-            properties: node.properties,
           },
         });
-      });
-    }
 
-    // Convert edges
-    if (knowledgeGraphData.edges) {
-      const nodeIds = new Set(graphNodes.map(n => n.id));
-      
-      knowledgeGraphData.edges.forEach((edge: any, index: number) => {
-        // Only add edges where both source and target exist in our node set
-        if (nodeIds.has(edge.source_id) && nodeIds.has(edge.target_id)) {
-          graphEdges.push({
-            id: `edge-${index}`,
-            source: edge.source_id,
-            target: edge.target_id,
-            type: "smoothstep",
-            animated: true,
-            label: edge.type || "",
-            style: { stroke: "#94a3b8", strokeWidth: 1 },
-            labelStyle: { fontSize: 10, fill: "#64748b" },
-          });
-        }
+        // Edge from category to subcategory
+        graphEdges.push({
+          id: `edge-${categoryId}-${nodeId}`,
+          source: categoryId,
+          target: nodeId,
+          type: "smoothstep",
+          animated: false,
+          style: { stroke: "#10b981", strokeWidth: 1 },
+        });
       });
-    }
+    });
 
     setNodes(graphNodes);
     setEdges(graphEdges);
@@ -136,6 +233,9 @@ export function KnowledgeMindmap({ knowledgeGraphData }: KnowledgeMindmapProps) 
     setSearchTerm(e.target.value);
   };
 
+  const categoryCount = nodes.filter(n => n.data.level === 1).length;
+  const itemCount = nodes.filter(n => n.data.level === 2).length;
+
   return (
     <div className={`relative ${isFullscreen ? 'fixed inset-0 z-50 bg-background' : 'h-full w-full'}`}>
       <ReactFlow
@@ -147,17 +247,17 @@ export function KnowledgeMindmap({ knowledgeGraphData }: KnowledgeMindmapProps) 
         fitView
         attributionPosition="bottom-left"
         className="bg-background"
+        minZoom={0.1}
+        maxZoom={1.5}
       >
         <Background color="#94a3b8" gap={16} />
         <Controls />
         <MiniMap
           nodeColor={(node) => {
-            const type = node.data.type;
-            if (type === "Report") return "#3b82f6";
-            if (type === "DataEntity") return "#10b981";
-            if (type === "System") return "#a855f7";
-            if (type === "Process") return "#f97316";
-            return "#6b7280";
+            const level = node.data.level;
+            if (level === 0) return "#3b82f6";
+            if (level === 1) return "#3b82f6";
+            return "#10b981";
           }}
           maskColor="rgba(0, 0, 0, 0.2)"
         />
@@ -176,35 +276,30 @@ export function KnowledgeMindmap({ knowledgeGraphData }: KnowledgeMindmapProps) 
                 data-testid="input-mindmap-search"
               />
             </div>
-            {knowledgeGraphData?.metadata && (
-              <div className="text-xs text-muted-foreground space-y-0.5">
-                <div>{knowledgeGraphData.metadata.consolidation_stats?.consolidated_nodes || 0} nodes</div>
-                <div>{knowledgeGraphData.metadata.consolidation_stats?.consolidated_edges || 0} edges</div>
-                <div>{knowledgeGraphData.metadata.total_source_documents || 0} documents</div>
-              </div>
-            )}
+            <div className="text-xs text-muted-foreground space-y-0.5">
+              <div className="font-semibold">Hierarchical Structure:</div>
+              <div>• 1 Root (Order Management)</div>
+              <div>• {categoryCount} Categories (Level 1)</div>
+              <div>• {itemCount} Items (Level 2)</div>
+            </div>
           </div>
         </Panel>
 
         {/* Legend Panel */}
         <Panel position="top-right" className="bg-card/95 backdrop-blur border border-border rounded-lg p-3 shadow-lg">
-          <div className="text-xs font-semibold mb-2">Node Types</div>
+          <div className="text-xs font-semibold mb-2">Hierarchy Levels</div>
           <div className="space-y-1 text-xs">
             <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded bg-primary/30 border-2 border-primary" />
+              <span>Root (Level 0)</span>
+            </div>
+            <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded bg-blue-500/20 border border-blue-500" />
-              <span>Report</span>
+              <span>Categories (Level 1)</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded bg-green-500/20 border border-green-500" />
-              <span>Data Entity</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded bg-purple-500/20 border border-purple-500" />
-              <span>System</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded bg-orange-500/20 border border-orange-500" />
-              <span>Process</span>
+              <span>Items (Level 2)</span>
             </div>
           </div>
         </Panel>
