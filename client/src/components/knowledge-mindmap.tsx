@@ -45,7 +45,7 @@ function KnowledgeNode({ data }: NodeProps) {
       {data.level > 0 && (
         <Handle
           type="target"
-          position={Position.Top}
+          position={Position.Left}
           style={{ background: '#555' }}
         />
       )}
@@ -80,7 +80,7 @@ function KnowledgeNode({ data }: NodeProps) {
       {data.level < 2 && (
         <Handle
           type="source"
-          position={Position.Bottom}
+          position={Position.Right}
           style={{ background: '#555' }}
         />
       )}
@@ -97,7 +97,7 @@ interface KnowledgeMindmapProps {
 }
 
 // Tree layout using dagre
-const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'TB') => {
+const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'LR') => {
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
   
@@ -107,7 +107,7 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'TB') => 
   dagreGraph.setGraph({ 
     rankdir: direction,
     nodesep: 80,
-    ranksep: 150,
+    ranksep: 200,
     marginx: 50,
     marginy: 50,
   });
@@ -288,7 +288,7 @@ export function KnowledgeMindmap({ knowledgeGraphData }: KnowledgeMindmapProps) 
     });
 
     // Apply tree layout to all nodes
-    const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(graphNodes, graphEdges, 'TB');
+    const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(graphNodes, graphEdges, 'LR');
 
     setAllNodes(layoutedNodes);
     setAllEdges(layoutedEdges);
@@ -349,7 +349,7 @@ export function KnowledgeMindmap({ knowledgeGraphData }: KnowledgeMindmapProps) 
     );
 
     // Re-layout only visible nodes for proper tree structure
-    const { nodes: layoutedNodes } = getLayoutedElements(visibleNodes, visibleEdges, 'TB');
+    const { nodes: layoutedNodes } = getLayoutedElements(visibleNodes, visibleEdges, 'LR');
 
     // Update nodes with visibility and expansion state
     const updatedNodes = allNodes.map(node => {
