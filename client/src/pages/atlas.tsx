@@ -3,7 +3,7 @@ import { Map, Globe, BookMarked, Database, Network, GitBranch } from "lucide-rea
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { KnowledgeMindmap } from "@/components/knowledge-mindmap";
-import { RelationshipNetworkGraph } from "@/components/relationship-network-graph";
+import { SimplifiedTopicNetwork } from "@/components/simplified-topic-network";
 
 export default function AtlasPage() {
   const [knowledgeGraph, setKnowledgeGraph] = useState<any>(null);
@@ -129,7 +129,7 @@ export default function AtlasPage() {
                       </div>
                     ) : knowledgeGraph ? (
                       viewMode === "network" ? (
-                        <RelationshipNetworkGraph knowledgeGraphData={knowledgeGraph} />
+                        <SimplifiedTopicNetwork knowledgeGraphData={knowledgeGraph} />
                       ) : (
                         <KnowledgeMindmap knowledgeGraphData={knowledgeGraph} />
                       )
