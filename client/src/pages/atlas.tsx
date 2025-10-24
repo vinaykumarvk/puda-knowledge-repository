@@ -1,12 +1,14 @@
 import { useState, useEffect } from "react";
-import { Map, Globe, BookMarked, Database, Network } from "lucide-react";
+import { Map, Globe, BookMarked, Database, Network, GitBranch } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { KnowledgeMindmap } from "@/components/knowledge-mindmap";
+import { RelationshipNetworkGraph } from "@/components/relationship-network-graph";
 
 export default function AtlasPage() {
   const [knowledgeGraph, setKnowledgeGraph] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<"hierarchy" | "network">("network");
 
   useEffect(() => {
     // Load the knowledge graph data
@@ -81,10 +83,40 @@ export default function AtlasPage() {
             <TabsContent value="mindmap" className="space-y-6">
               <Card className="border-border">
                 <CardHeader className="pb-3">
-                  <CardTitle>Interactive Knowledge Graph</CardTitle>
-                  <CardDescription>
-                    Explore the wealth management knowledge base with {knowledgeGraph?.metadata?.consolidation_stats?.consolidated_nodes || 0} interconnected concepts
-                  </CardDescription>
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <CardTitle>Interactive Knowledge Graph</CardTitle>
+                      <CardDescription>
+                        Explore the wealth management knowledge base with {knowledgeGraph?.metadata?.consolidation_stats?.consolidated_nodes || 0} interconnected concepts
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2 bg-muted rounded-lg p-1">
+                      <button
+                        onClick={() => setViewMode("network")}
+                        className={`flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors ${
+                          viewMode === "network"
+                            ? "bg-background text-foreground shadow"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                        data-testid="button-network-view"
+                      >
+                        <GitBranch className="w-4 h-4" />
+                        Network
+                      </button>
+                      <button
+                        onClick={() => setViewMode("hierarchy")}
+                        className={`flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors ${
+                          viewMode === "hierarchy"
+                            ? "bg-background text-foreground shadow"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                        data-testid="button-hierarchy-view"
+                      >
+                        <Network className="w-4 h-4" />
+                        Hierarchy
+                      </button>
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent className="p-0">
                   <div className="h-[calc(100vh-280px)] min-h-[600px]" data-testid="mindmap-container">
@@ -96,7 +128,11 @@ export default function AtlasPage() {
                         </div>
                       </div>
                     ) : knowledgeGraph ? (
-                      <KnowledgeMindmap knowledgeGraphData={knowledgeGraph} />
+                      viewMode === "network" ? (
+                        <RelationshipNetworkGraph knowledgeGraphData={knowledgeGraph} />
+                      ) : (
+                        <KnowledgeMindmap knowledgeGraphData={knowledgeGraph} />
+                      )
                     ) : (
                       <div className="h-full flex items-center justify-center bg-muted">
                         <div className="text-center space-y-3">
