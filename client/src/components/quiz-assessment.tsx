@@ -59,6 +59,39 @@ export default function QuizAssessment({ topic, onBack }: QuizAssessmentProps) {
     },
   });
 
+  // Submit quiz results when showing results for the first time
+  useEffect(() => {
+    if (showResults && !submitted && questions && questions.length > 0) {
+      const score = calculateScore();
+      const category = questions[0].category; // All questions have the same category
+      
+      submitQuizMutation.mutate({
+        topic,
+        category,
+        score: Math.round(score.percentage),
+        totalQuestions: questions.length,
+        correctAnswers: score.correct,
+      });
+      
+      setSubmitted(true);
+    }
+  }, [showResults, submitted, questions, topic]);
+
+  const calculateScore = () => {
+    if (!questions || questions.length === 0) {
+      return { correct: 0, total: 0, percentage: 0 };
+    }
+    let correct = 0;
+    questions.forEach((q, index) => {
+      const userAnswer = selectedAnswers[index];
+      const correctAnswer = q.correctAnswer.toLowerCase();
+      if (userAnswer && userAnswer.toLowerCase() === correctAnswer) {
+        correct++;
+      }
+    });
+    return { correct, total: questions.length, percentage: (correct / questions.length) * 100 };
+  };
+
   if (isLoading) {
     return (
       <div className="max-w-4xl mx-auto p-6">
@@ -115,36 +148,6 @@ export default function QuizAssessment({ topic, onBack }: QuizAssessmentProps) {
       setCurrentQuestionIndex((prev) => prev - 1);
     }
   };
-
-  const calculateScore = () => {
-    let correct = 0;
-    questions.forEach((q, index) => {
-      const userAnswer = selectedAnswers[index];
-      const correctAnswer = q.correctAnswer.toLowerCase();
-      if (userAnswer && userAnswer.toLowerCase() === correctAnswer) {
-        correct++;
-      }
-    });
-    return { correct, total: questions.length, percentage: (correct / questions.length) * 100 };
-  };
-
-  // Submit quiz results when showing results for the first time
-  useEffect(() => {
-    if (showResults && !submitted && questions && questions.length > 0) {
-      const score = calculateScore();
-      const category = questions[0].category; // All questions have the same category
-      
-      submitQuizMutation.mutate({
-        topic,
-        category,
-        score: Math.round(score.percentage),
-        totalQuestions: questions.length,
-        correctAnswers: score.correct,
-      });
-      
-      setSubmitted(true);
-    }
-  }, [showResults, submitted, questions, topic]);
 
   if (showResults) {
     const score = calculateScore();
