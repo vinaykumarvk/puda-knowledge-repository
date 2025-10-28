@@ -578,15 +578,29 @@ Generate quiz questions that:
     }
   });
 
+  // Get quiz stats for all topics
+  app.get("/api/quiz/stats", async (req, res) => {
+    try {
+      const stats = await storage.getAllQuizStats();
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching quiz stats:", error);
+      res.status(500).json({ error: "Failed to fetch quiz stats" });
+    }
+  });
+
   // Submit quiz results and update mastery score
   app.post("/api/quiz/submit", async (req, res) => {
     try {
+      console.log("📝 QUIZ SUBMIT received:", req.body);
       const { topic, category, score, totalQuestions, correctAnswers } = req.body;
       
       if (!topic || !category || typeof score !== 'number' || !totalQuestions || typeof correctAnswers !== 'number') {
+        console.log("❌ Missing required fields:", { topic, category, score, totalQuestions, correctAnswers });
         return res.status(400).json({ error: "Missing required fields" });
       }
 
+      console.log("✅ Saving quiz attempt...");
       const result = await storage.saveQuizAttemptAndUpdateMastery(
         topic,
         category,
@@ -595,9 +609,10 @@ Generate quiz questions that:
         correctAnswers
       );
 
+      console.log("✅ Quiz saved successfully:", result);
       res.json(result);
     } catch (error) {
-      console.error("Error submitting quiz:", error);
+      console.error("❌ Error submitting quiz:", error);
       res.status(500).json({ error: "Failed to submit quiz" });
     }
   });

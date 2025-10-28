@@ -235,6 +235,48 @@ export class DatabaseStorage implements IStorage {
       .limit(count);
   }
 
+  async getQuizStatsByTopic(topic: string): Promise<{ bestScore: number; attempts: number }> {
+    const attempts = await db
+      .select()
+      .from(quizAttempts)
+      .where(eq(quizAttempts.topic, topic))
+      .orderBy(desc(quizAttempts.scorePercentage));
+    
+    if (attempts.length === 0) {
+      return { bestScore: 0, attempts: 0 };
+    }
+    
+    return {
+      bestScore: attempts[0].scorePercentage,
+      attempts: attempts.length,
+    };
+  }
+
+  async getAllQuizStats(): Promise<Record<string, { bestScore: number; attempts: number }>> {
+    const allAttempts = await db
+      .select()
+      .from(quizAttempts)
+      .orderBy(desc(quizAttempts.scorePercentage));
+    
+    const stats: Record<string, { bestScore: number; attempts: number }> = {};
+    
+    for (const attempt of allAttempts) {
+      if (!stats[attempt.topic]) {
+        stats[attempt.topic] = {
+          bestScore: attempt.scorePercentage,
+          attempts: 0,
+        };
+      }
+      stats[attempt.topic].attempts += 1;
+      // Update best score if this one is higher
+      if (attempt.scorePercentage > stats[attempt.topic].bestScore) {
+        stats[attempt.topic].bestScore = attempt.scorePercentage;
+      }
+    }
+    
+    return stats;
+  }
+
   // User mastery methods
   async getUserMastery(): Promise<UserMastery | undefined> {
     // For single-user system, get the first (and only) mastery record

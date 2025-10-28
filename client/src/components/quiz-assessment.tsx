@@ -61,9 +61,18 @@ export default function QuizAssessment({ topic, onBack }: QuizAssessmentProps) {
 
   // Submit quiz results when showing results for the first time
   useEffect(() => {
+    console.log("🔍 useEffect triggered:", { showResults, submitted, questionsLength: questions?.length });
     if (showResults && !submitted && questions && questions.length > 0) {
       const score = calculateScore();
       const category = questions[0].category; // All questions have the same category
+      
+      console.log("📤 Submitting quiz:", {
+        topic,
+        category,
+        score: Math.round(score.percentage),
+        totalQuestions: questions.length,
+        correctAnswers: score.correct,
+      });
       
       submitQuizMutation.mutate({
         topic,
@@ -74,6 +83,7 @@ export default function QuizAssessment({ topic, onBack }: QuizAssessmentProps) {
       });
       
       setSubmitted(true);
+      console.log("✅ Marked as submitted");
     }
   }, [showResults, submitted, questions, topic, selectedAnswers]);
 

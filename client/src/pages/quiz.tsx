@@ -43,6 +43,10 @@ export default function QuizPage() {
     queryKey: ["/api/quiz/categories"],
   });
 
+  const { data: quizStats } = useQuery<Record<string, { bestScore: number; attempts: number }>>({
+    queryKey: ["/api/quiz/stats"],
+  });
+
   const flashcardDecks = [
     {
       name: "Quick Concepts Review",
@@ -211,6 +215,8 @@ export default function QuizPage() {
                                   const difficulty = getDifficultyLevel(topic.easyCount, topic.mediumCount, topic.hardCount);
                                   const estimatedTime = getEstimatedTime(topic.questionCount);
 
+                                  const stats = quizStats?.[topic.topic];
+                                  
                                   return (
                                     <div
                                       key={topic.topic}
@@ -218,7 +224,19 @@ export default function QuizPage() {
                                       data-testid={`card-quiz-${topic.topic.toLowerCase().replace(/\s+/g, '-')}`}
                                     >
                                       <div className="flex-1 min-w-0">
-                                        <h4 className="font-medium text-sm mb-1">{topic.topic}</h4>
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <h4 className="font-medium text-sm">{topic.topic}</h4>
+                                          {stats && stats.attempts > 0 && (
+                                            <div className="flex items-center gap-2">
+                                              <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
+                                                Best: {stats.bestScore}%
+                                              </span>
+                                              <span className="text-xs text-muted-foreground">
+                                                {stats.attempts} {stats.attempts === 1 ? 'attempt' : 'attempts'}
+                                              </span>
+                                            </div>
+                                          )}
+                                        </div>
                                         <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                                           <span>{topic.questionCount} Questions</span>
                                           <span>•</span>
