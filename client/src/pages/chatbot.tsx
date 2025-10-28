@@ -18,6 +18,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { 
   Loader2, 
   Send, 
@@ -205,8 +212,8 @@ function downloadMessagePDF(userMessage: string, assistantMessage: string, times
   pdf.save(`answer-${new Date(timestamp).toISOString().slice(0, 10)}.pdf`);
 }
 
-// Helper function to download entire thread conversation
-function downloadThread(messages: Message[], threadTitle: string) {
+// Helper function to download entire thread conversation as text
+function downloadThreadAsText(messages: Message[], threadTitle: string) {
   let content = `WealthForce Knowledge Agent - Full Conversation Export
 Thread: ${threadTitle}
 Generated: ${new Date().toLocaleString()}
@@ -236,12 +243,111 @@ Generated: ${new Date().toLocaleString()}
   URL.revokeObjectURL(url);
 }
 
+// Helper function to download entire thread conversation as PDF
+function downloadThreadAsPDF(messages: Message[], threadTitle: string) {
+  const pdf = new jsPDF();
+  const margin = 15;
+  const maxWidth = pdf.internal.pageSize.getWidth() - 2 * margin;
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  let yPosition = margin;
+
+  // Title
+  pdf.setFontSize(16);
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('WealthForce Knowledge Agent', margin, yPosition);
+  yPosition += 10;
+
+  pdf.setFontSize(12);
+  pdf.setFont('helvetica', 'normal');
+  pdf.text(`Thread: ${threadTitle}`, margin, yPosition);
+  yPosition += 6;
+  pdf.text(`Generated: ${new Date().toLocaleString()}`, margin, yPosition);
+  yPosition += 12;
+
+  // Process each Q&A pair
+  for (let i = 0; i < messages.length; i += 2) {
+    const userMsg = messages[i];
+    const assistantMsg = messages[i + 1];
+    
+    if (userMsg && assistantMsg) {
+      // Check if we need a new page for this Q&A
+      if (yPosition + 40 > pageHeight - margin) {
+        pdf.addPage();
+        yPosition = margin;
+      }
+
+      // Timestamp
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'italic');
+      pdf.text(`[${new Date(userMsg.createdAt).toLocaleString()}]`, margin, yPosition);
+      yPosition += 8;
+
+      // Question
+      pdf.setFontSize(12);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Question:', margin, yPosition);
+      yPosition += 7;
+
+      pdf.setFontSize(10);
+      pdf.setFont('helvetica', 'normal');
+      const questionLines = pdf.splitTextToSize(userMsg.content, maxWidth);
+      for (let j = 0; j < questionLines.length; j++) {
+        if (yPosition + 5 > pageHeight - margin) {
+          pdf.addPage();
+          yPosition = margin;
+        }
+        pdf.text(questionLines[j], margin, yPosition);
+        yPosition += 5;
+      }
+      yPosition += 5;
+
+      // Answer
+      pdf.setFontSize(12);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Answer:', margin, yPosition);
+      yPosition += 7;
+
+      pdf.setFontSize(10);
+      pdf.setFont('helvetica', 'normal');
+      
+      // Clean the assistant message for PDF
+      const cleanAnswer = assistantMsg.content
+        .replace(/[#*_`]/g, '')
+        .replace(/\[(\d+)\]/g, '[$1]')
+        .replace(/<[^>]*>/g, '');
+      
+      const answerLines = pdf.splitTextToSize(cleanAnswer, maxWidth);
+      for (let j = 0; j < answerLines.length; j++) {
+        if (yPosition + 5 > pageHeight - margin) {
+          pdf.addPage();
+          yPosition = margin;
+        }
+        pdf.text(answerLines[j], margin, yPosition);
+        yPosition += 5;
+      }
+      
+      // Separator
+      yPosition += 8;
+      if (yPosition + 5 > pageHeight - margin) {
+        pdf.addPage();
+        yPosition = margin;
+      }
+      pdf.setLineWidth(0.5);
+      pdf.line(margin, yPosition, pdf.internal.pageSize.getWidth() - margin, yPosition);
+      yPosition += 10;
+    }
+  }
+
+  pdf.save(`conversation-${threadTitle.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.pdf`);
+}
+
 export default function ChatbotPage() {
   const [question, setQuestion] = useState("");
   const [currentThreadId, setCurrentThreadId] = useState<number | undefined>();
   const [messages, setMessages] = useState<Message[]>([]);
   const [quizzes, setQuizzes] = useState<QuizData[]>([]);
   const [mode, setMode] = useState<"concise" | "balanced" | "deep">("concise"); // Short is default
+  const [showDownloadDialog, setShowDownloadDialog] = useState(false);
   const [aiConfig, setAIConfig] = useState<AIConfig>({
     model: "GPT-4o",
     temperature: 0.7,
@@ -511,7 +617,7 @@ export default function ChatbotPage() {
                   variant="outline"
                   size="sm"
                   data-testid="button-download-thread"
-                  onClick={() => downloadThread(messages, currentThread?.title || "Conversation")}
+                  onClick={() => setShowDownloadDialog(true)}
                 >
                   <Download className="w-4 h-4 mr-2" />
                   Download Thread
@@ -749,6 +855,61 @@ export default function ChatbotPage() {
       </div>
 
       <AIConfigSidebar onConfigChange={handleConfigChange} />
+      
+      {/* Download Format Selection Dialog */}
+      <Dialog open={showDownloadDialog} onOpenChange={setShowDownloadDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Download Conversation</DialogTitle>
+            <DialogDescription>
+              Choose your preferred format to download this conversation thread.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 py-4">
+            <Button
+              variant="outline"
+              size="lg"
+              className="w-full justify-start gap-3"
+              data-testid="button-download-text"
+              onClick={() => {
+                downloadThreadAsText(messages, currentThread?.title || "Conversation");
+                setShowDownloadDialog(false);
+                toast({
+                  title: "Download Started",
+                  description: "Your conversation is being downloaded as a text file.",
+                });
+              }}
+            >
+              <FileText className="w-5 h-5" />
+              <div className="text-left">
+                <div className="font-semibold">Text File (.txt)</div>
+                <div className="text-xs text-muted-foreground">Plain text format, easy to edit</div>
+              </div>
+            </Button>
+            
+            <Button
+              variant="outline"
+              size="lg"
+              className="w-full justify-start gap-3"
+              data-testid="button-download-pdf"
+              onClick={() => {
+                downloadThreadAsPDF(messages, currentThread?.title || "Conversation");
+                setShowDownloadDialog(false);
+                toast({
+                  title: "Download Started",
+                  description: "Your conversation is being downloaded as a PDF file.",
+                });
+              }}
+            >
+              <FileType className="w-5 h-5" />
+              <div className="text-left">
+                <div className="font-semibold">PDF Document (.pdf)</div>
+                <div className="text-xs text-muted-foreground">Professional format, ready to share</div>
+              </div>
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
