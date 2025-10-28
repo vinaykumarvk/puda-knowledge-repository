@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   {
-    name: "Explore",
+    name: "Conversation",
     path: "/",
     icon: Compass,
     description: "Chat with the knowledge agent"
