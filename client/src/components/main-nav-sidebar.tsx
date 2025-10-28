@@ -10,7 +10,7 @@ const navItems = [
     description: "Chat with the knowledge agent"
   },
   {
-    name: "Workshop",
+    name: "Launchpad",
     path: "/workshop",
     icon: Wrench,
     description: "Interactive tools and utilities"

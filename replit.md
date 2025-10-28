@@ -10,7 +10,7 @@ I prefer simple language and detailed explanations. I want iterative development
 The application employs a professional, enterprise-grade architecture focused on conversational AI, inspired by ChatGPT's UI/UX, prioritizing a clean, functional design and robust technical implementation.
 
 ### UI/UX Decisions
-The UI features a comprehensive layout comprising a **Global Top Header**, a **Main Navigation Sidebar** (80px) for section switching (Conversation, Workshop, Quiz, Atlas), a **Thread Sidebar** (256px) for conversation history, a flexible **Main Content Area**, and a collapsible **AI Configuration Sidebar** (320px) for model settings. The layout ensures consistent navigation and input with fixed headers and footers.
+The UI features a comprehensive layout comprising a **Global Top Header**, a **Main Navigation Sidebar** (80px) for section switching (Conversation, Launchpad, Quiz, Atlas), a **Thread Sidebar** (256px) for conversation history, a flexible **Main Content Area**, and a collapsible **AI Configuration Sidebar** (320px) for model settings. The layout ensures consistent navigation and input with fixed headers and footers.
 
 -   **Color Palette**: Utilizes a vibrant blue for primary actions, gray tones for assistant messages, and a deep charcoal background with elevated surfaces for dark mode.
 -   **Typography**: Inter for UI text, system fonts for messages, and a monospace font for code blocks.
@@ -30,8 +30,8 @@ The UI features a comprehensive layout comprising a **Global Top Header**, a **M
 
 ### Feature Specifications
 -   **Global Header**: Displays "Questions Asked" and "Quizzes Completed" counters, global search, and user menu.
--   **Multi-Section Navigation**: Includes "Conversation" (conversational AI), "Workshop" (pre-developed templates), "Quiz" (knowledge testing), and "Atlas" (knowledge map) sections.
--   **Workshop Templates**: 6 pre-developed templates: New Report, Client Proposal, Strategic Memo, Presentation Deck, RFP Response, and Case Study, presented in a responsive grid.
+-   **Multi-Section Navigation**: Includes "Conversation" (conversational AI), "Launchpad" (pre-developed templates), "Quiz" (knowledge testing), and "Atlas" (knowledge map) sections.
+-   **Launchpad Templates**: 6 pre-developed templates: New Report, Client Proposal, Strategic Memo, Presentation Deck, RFP Response, and Case Study, presented in a responsive grid.
 -   **Quiz & Assessment Dual-Mode System**: Tab-based interface offering:
     -   **Structured Quiz**: 500+ questions across 5 categories (e.g., Wealth Management Fundamentals, Investment Products), with difficulty, topics, and estimated times.
     -   **Flashcards**: 4 self-paced study decks (e.g., Quick Concepts Review, Investment Terminology) for active recall.

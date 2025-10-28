@@ -41,8 +41,8 @@ export default function WorkshopPage() {
         <div className="flex items-center gap-2.5">
           <Wrench className="w-5 h-5 text-primary" />
           <div>
-            <h1 className="text-xl font-bold text-foreground" data-testid="text-workshop-title">
-              Workshop
+            <h1 className="text-xl font-bold text-foreground" data-testid="text-launchpad-title">
+              Launchpad
             </h1>
             <p className="text-xs text-muted-foreground">
               Pre-developed templates for wealth management professionals
