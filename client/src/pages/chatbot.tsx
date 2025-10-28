@@ -672,7 +672,7 @@ export default function ChatbotPage() {
             {/* Render quizzes inline */}
             {quizzes.map((quiz) => (
               <div key={quiz.id} className="mb-6" data-testid={`quiz-${quiz.id}`}>
-                <QuizMessage questions={quiz.questions} threadId={currentThreadId!} />
+                <QuizMessage questions={quiz.questions} threadId={currentThreadId!} shouldSaveResults={false} />
               </div>
             ))}
 

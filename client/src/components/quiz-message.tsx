@@ -10,9 +10,10 @@ import type { QuizQuestion } from "@/types/quiz";
 interface QuizMessageProps {
   questions: QuizQuestion[];
   threadId: number;
+  shouldSaveResults?: boolean; // If false, skip saving to database
 }
 
-export function QuizMessage({ questions, threadId }: QuizMessageProps) {
+export function QuizMessage({ questions, threadId, shouldSaveResults = true }: QuizMessageProps) {
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, string>>({});
   const [revealedAnswers, setRevealedAnswers] = useState<Record<number, boolean>>({});
   const [submitted, setSubmitted] = useState(false);
@@ -73,9 +74,9 @@ export function QuizMessage({ questions, threadId }: QuizMessageProps) {
   const totalAnswered = Object.keys(revealedAnswers).length;
   const allAnswered = totalAnswered === questions.length;
 
-  // Submit quiz results when all questions are answered
+  // Submit quiz results when all questions are answered (only if shouldSaveResults is true)
   useEffect(() => {
-    if (allAnswered && !submitted && !submitQuizMutation.isPending) {
+    if (allAnswered && !submitted && !submitQuizMutation.isPending && shouldSaveResults) {
       const results = questions.map((question, index) => ({
         questionText: question.question,
         userAnswer: selectedAnswers[index],
@@ -84,8 +85,11 @@ export function QuizMessage({ questions, threadId }: QuizMessageProps) {
       }));
 
       submitQuizMutation.mutate(results);
+    } else if (allAnswered && !submitted && !shouldSaveResults) {
+      // Mark as submitted without saving to database
+      setSubmitted(true);
     }
-  }, [allAnswered, submitted, questions, selectedAnswers, submitQuizMutation]);
+  }, [allAnswered, submitted, questions, selectedAnswers, submitQuizMutation, shouldSaveResults]);
 
   return (
     <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
