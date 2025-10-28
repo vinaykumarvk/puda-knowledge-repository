@@ -170,6 +170,10 @@ function formatProfessionally(text: string): string {
   formatted = formatted.replace(/^##?\s*\*?\*?Direct Answer:?\*?\*?\s*/im, '');
   formatted = formatted.replace(/\n##?\s*\*?\*?Direct Answer:?\*?\*?\s*/im, '\n');
   
+  // Remove "Answer:" or "Answer" heading (user already knows it's an answer)
+  formatted = formatted.replace(/^##?\s*\*?\*?Answer:?\*?\*?\s*\n*/im, '');
+  formatted = formatted.replace(/\n##?\s*\*?\*?Answer:?\*?\*?\s*/im, '\n');
+  
   // Convert "Point 1:", "Point 2:" etc. to bullet points
   formatted = formatted.replace(/^Point\s+(\d+):\s*/gim, '- ');
   formatted = formatted.replace(/\n\s*Point\s+(\d+):\s*/gim, '\n- ');
