@@ -549,8 +549,10 @@ export default function ChatbotPage() {
     },
   });
 
-  const handleSubmit = () => {
-    if (!question.trim()) {
+  const handleSubmit = (promptText?: string) => {
+    const questionToSubmit = promptText || question;
+    
+    if (!questionToSubmit.trim()) {
       toast({
         title: "Validation Error",
         description: "Please enter a question",
@@ -560,9 +562,14 @@ export default function ChatbotPage() {
     }
 
     queryMutation.mutate({
-      question,
+      question: questionToSubmit,
       threadId: currentThreadId,
     });
+    
+    // Clear the input if submitting from the textarea
+    if (!promptText) {
+      setQuestion("");
+    }
   };
 
   const quizMutation = useMutation({
@@ -759,11 +766,7 @@ export default function ChatbotPage() {
                       <button
                         key={categoryIndex}
                         onClick={() => {
-                          setQuestion(randomPrompt);
-                          // Auto-submit the question
-                          setTimeout(() => {
-                            handleSubmit();
-                          }, 100);
+                          handleSubmit(randomPrompt);
                         }}
                         className={`group relative p-5 rounded-xl border bg-gradient-to-br transition-all hover:shadow-lg hover:scale-[1.02] text-left ${starter.color}`}
                         data-testid={`starter-card-${categoryIndex}`}
@@ -975,7 +978,7 @@ export default function ChatbotPage() {
               
               <Button
                 data-testid="button-submit"
-                onClick={handleSubmit}
+                onClick={() => handleSubmit()}
                 disabled={!question.trim() || isLoading}
                 size="lg"
                 className="h-[60px] w-[60px] p-0"
