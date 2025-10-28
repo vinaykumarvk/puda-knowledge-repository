@@ -34,7 +34,14 @@ import {
   RefreshCw,
   FileText,
   FileType,
-  Zap
+  Zap,
+  ShoppingCart,
+  Users,
+  Package,
+  ArrowRightLeft,
+  Network,
+  Shield,
+  FileBarChart
 } from "lucide-react";
 import jsPDF from "jspdf";
 import ReactMarkdown from "react-markdown";
@@ -71,6 +78,87 @@ function cleanupCitations(text: string): string {
   
   return cleaned;
 }
+
+// Conversation starter prompts organized by category
+const conversationStarters = [
+  {
+    category: "Order Journey & Processes",
+    icon: ShoppingCart,
+    color: "from-blue-500/10 to-blue-500/5 border-blue-500/20 hover:border-blue-500/40",
+    iconColor: "text-blue-500",
+    prompts: [
+      "How does the order placement workflow work?",
+      "What's the difference between buy and sell orders?",
+      "Explain the order settlement process"
+    ]
+  },
+  {
+    category: "Customer & Account Management",
+    icon: Users,
+    color: "from-purple-500/10 to-purple-500/5 border-purple-500/20 hover:border-purple-500/40",
+    iconColor: "text-purple-500",
+    prompts: [
+      "Explain the KYC verification process",
+      "How are customer accounts categorized?",
+      "What is customer onboarding workflow?"
+    ]
+  },
+  {
+    category: "Products & Securities",
+    icon: Package,
+    color: "from-green-500/10 to-green-500/5 border-green-500/20 hover:border-green-500/40",
+    iconColor: "text-green-500",
+    prompts: [
+      "What types of mutual funds are available?",
+      "How does portfolio rebalancing work?",
+      "Explain different security types"
+    ]
+  },
+  {
+    category: "Transactions & Operations",
+    icon: ArrowRightLeft,
+    color: "from-amber-500/10 to-amber-500/5 border-amber-500/20 hover:border-amber-500/40",
+    iconColor: "text-amber-500",
+    prompts: [
+      "What's the difference between SIP and SWP?",
+      "How do redemption transactions work?",
+      "Explain systematic transfer plans"
+    ]
+  },
+  {
+    category: "Systems & Integration",
+    icon: Network,
+    color: "from-cyan-500/10 to-cyan-500/5 border-cyan-500/20 hover:border-cyan-500/40",
+    iconColor: "text-cyan-500",
+    prompts: [
+      "How do APIs integrate with the platform?",
+      "What systems are used for data management?",
+      "Explain the integration architecture"
+    ]
+  },
+  {
+    category: "Compliance & Regulations",
+    icon: Shield,
+    color: "from-red-500/10 to-red-500/5 border-red-500/20 hover:border-red-500/40",
+    iconColor: "text-red-500",
+    prompts: [
+      "What are SEBI regulations for wealth management?",
+      "Explain AML compliance requirements",
+      "What are KYC documentation standards?"
+    ]
+  },
+  {
+    category: "Reports & Documents",
+    icon: FileBarChart,
+    color: "from-indigo-500/10 to-indigo-500/5 border-indigo-500/20 hover:border-indigo-500/40",
+    iconColor: "text-indigo-500",
+    prompts: [
+      "What reports are generated for clients?",
+      "How to interpret portfolio statements?",
+      "Explain transaction confirmation documents"
+    ]
+  }
+];
 
 // Helper function to format API responses professionally
 function formatProfessionally(text: string): string {
@@ -649,14 +737,63 @@ export default function ChatbotPage() {
         <ScrollArea ref={scrollAreaRef} className="flex-1">
           <div className="max-w-4xl mx-auto px-6 py-8">
             {!hasMessages && !isLoading && (
-              <div className="flex flex-col items-center justify-center h-full text-center space-y-4">
-                <Sparkles className="w-16 h-16 text-primary/50" />
-                <h2 className="text-2xl font-semibold text-foreground">
-                  Start a New Conversation
-                </h2>
-                <p className="text-muted-foreground max-w-md">
-                  Ask me anything about wealth management, financial products, or processes.
-                  I'll remember our conversation and build context as we chat.
+              <div className="flex flex-col items-center justify-center space-y-8 py-12">
+                <div className="text-center space-y-3">
+                  <Sparkles className="w-16 h-16 text-primary/50 mx-auto" />
+                  <h2 className="text-2xl font-semibold text-foreground">
+                    Start a New Conversation
+                  </h2>
+                  <p className="text-muted-foreground max-w-md">
+                    Choose a topic below or ask your own question about wealth management
+                  </p>
+                </div>
+
+                {/* Conversation Starter Cards */}
+                <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {conversationStarters.map((starter, categoryIndex) => {
+                    const Icon = starter.icon;
+                    // Randomly pick one prompt from each category to display
+                    const randomPrompt = starter.prompts[Math.floor(Math.random() * starter.prompts.length)];
+                    
+                    return (
+                      <button
+                        key={categoryIndex}
+                        onClick={() => {
+                          setQuestion(randomPrompt);
+                          // Auto-submit the question
+                          setTimeout(() => {
+                            handleSubmit();
+                          }, 100);
+                        }}
+                        className={`group relative p-5 rounded-xl border bg-gradient-to-br transition-all hover:shadow-lg hover:scale-[1.02] text-left ${starter.color}`}
+                        data-testid={`starter-card-${categoryIndex}`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className={`flex-shrink-0 w-10 h-10 rounded-lg bg-background/50 flex items-center justify-center ${starter.iconColor}`}>
+                            <Icon className="w-5 h-5" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="text-sm font-semibold text-foreground mb-2 line-clamp-1">
+                              {starter.category}
+                            </h3>
+                            <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                              {randomPrompt}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        {/* Hover indicator */}
+                        <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Send className="w-4 h-4 text-muted-foreground" />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Additional help text */}
+                <p className="text-xs text-muted-foreground/70 max-w-md text-center">
+                  💡 Click any card to start a conversation, or type your own question below
                 </p>
               </div>
             )}
