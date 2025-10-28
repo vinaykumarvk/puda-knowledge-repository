@@ -6,6 +6,7 @@ import {
   quizAttempts,
   quizResponses,
   userMastery,
+  quizQuestions,
   type User, 
   type InsertUser, 
   type Conversation, 
@@ -19,7 +20,8 @@ import {
   type QuizResponse,
   type InsertQuizResponse,
   type UserMastery,
-  type InsertUserMastery
+  type InsertUserMastery,
+  type QuizQuestion
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, sql } from "drizzle-orm";
@@ -52,6 +54,9 @@ export interface IStorage {
   // User mastery methods
   getUserMastery(): Promise<UserMastery | undefined>;
   updateUserMastery(mastery: InsertUserMastery): Promise<UserMastery>;
+  
+  // Quiz question bank methods
+  getQuizCategories(): Promise<any[]>;
   
   // Old conversation methods (kept for backward compatibility)
   getConversations(): Promise<Conversation[]>;
@@ -249,6 +254,24 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return created;
     }
+  }
+
+  // Quiz question bank methods
+  async getQuizCategories(): Promise<any[]> {
+    // Group questions by category and get statistics
+    const result = await db
+      .select({
+        category: quizQuestions.category,
+        questionCount: sql<number>`count(*)::int`,
+        topics: sql<string>`string_agg(DISTINCT ${quizQuestions.topic}, '||')`,
+        easyCount: sql<number>`count(*) FILTER (WHERE ${quizQuestions.difficulty} = 'Easy')::int`,
+        mediumCount: sql<number>`count(*) FILTER (WHERE ${quizQuestions.difficulty} = 'Medium')::int`,
+        hardCount: sql<number>`count(*) FILTER (WHERE ${quizQuestions.difficulty} = 'Hard')::int`,
+      })
+      .from(quizQuestions)
+      .groupBy(quizQuestions.category);
+    
+    return result;
   }
 }
 

@@ -555,6 +555,17 @@ Generate quiz questions that:
     }
   });
 
+  // Get quiz question bank summary - grouped by category
+  app.get("/api/quiz/categories", async (req, res) => {
+    try {
+      const categories = await storage.getQuizCategories();
+      res.json(categories);
+    } catch (error) {
+      console.error("Error fetching quiz categories:", error);
+      res.status(500).json({ error: "Failed to fetch quiz categories" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
