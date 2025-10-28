@@ -152,3 +152,28 @@ export const insertUserMasterySchema = createInsertSchema(userMastery).omit({
 
 export type InsertUserMastery = z.infer<typeof insertUserMasterySchema>;
 export type UserMastery = typeof userMastery.$inferSelect;
+
+// Quiz Questions - master quiz question bank
+export const quizQuestions = pgTable("quiz_questions", {
+  id: serial("id").primaryKey(),
+  category: text("category").notNull(), // "Order Management", etc.
+  topic: text("topic").notNull(), // "Introduction to Order Management", "SEBI Regulatory Changes", etc.
+  difficulty: text("difficulty").notNull(), // "Easy", "Medium", "Hard"
+  questionText: text("question_text").notNull(),
+  optionA: text("option_a"),
+  optionB: text("option_b"),
+  optionC: text("option_c"),
+  optionD: text("option_d"),
+  correctAnswer: text("correct_answer").notNull(), // "a", "b", "c", "d", or "true", "false"
+  questionType: text("question_type").notNull(), // "multiple_choice" or "true_false"
+  explanation: text("explanation"), // Optional explanation for the answer
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertQuizQuestionSchema = createInsertSchema(quizQuestions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertQuizQuestion = z.infer<typeof insertQuizQuestionSchema>;
+export type QuizQuestion = typeof quizQuestions.$inferSelect;

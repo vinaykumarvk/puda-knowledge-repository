@@ -32,6 +32,7 @@ The UI features a comprehensive layout comprising a **Global Top Header**, a **M
 -   **Global Header**: Displays "Questions Asked" and "Quizzes Completed" counters, global search, and user menu.
 -   **Multi-Section Navigation**: Includes "Conversation" (conversational AI), "Launchpad" (pre-developed templates), "Quiz" (knowledge testing), and "Atlas" (knowledge map) sections.
 -   **Launchpad Templates**: 6 pre-developed templates: New Report, Client Proposal, Strategic Memo, Presentation Deck, RFP Response, and Case Study, presented in a responsive grid.
+-   **Quiz Question Bank**: 70+ Order Management questions stored in PostgreSQL across 6 topics (Introduction, SEBI Compliance, Order Journey, SIP/SWP/STP, API Integration, Exception Handling) with 3 difficulty levels (Easy: 25, Medium: 25, Hard: 20).
 -   **Quiz & Assessment Dual-Mode System**: Tab-based interface offering:
     -   **Structured Quiz**: 500+ questions across 5 categories (e.g., Wealth Management Fundamentals, Investment Products), with difficulty, topics, and estimated times.
     -   **Flashcards**: 4 self-paced study decks (e.g., Quick Concepts Review, Investment Terminology) for active recall.
