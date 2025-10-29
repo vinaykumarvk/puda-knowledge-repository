@@ -37,9 +37,15 @@ The UI features a comprehensive layout comprising a **Global Top Header**, a **M
     -   **View Responses**: Tab-based interface to browse all RFP responses with status indicators
     -   **Reference Panel**: Displays supporting evidence and source documents with relevance scores
     -   **Export Functionality**: Multiple export formats (Markdown, Excel, PDF, Email) via utility functions
-    -   **Database Tables**: Three PostgreSQL tables (rfpResponses, excelRequirementResponses, referenceResponses) with proper foreign key relations
+    -   **Database Tables**: Four PostgreSQL tables (rfpResponses, excelRequirementResponses, referenceResponses, historicalRfps) with proper foreign key relations
     -   **RESTful API**: Complete CRUD endpoints at `/api/rfp/responses` and `/api/excel-requirements/:id/references`
-    -   **Future AI Integration**: Architecture supports Python backend with Anthropic Claude, OpenAI, and Deepseek LLM integration for automated response generation
+    -   **AI Response Generation**: OpenAI GPT-5 integration via Replit AI Integrations for automated response generation
+    -   **Two-Tier RAG Architecture (Database Ready)**: Infrastructure for retrieval-augmented generation:
+        - **historicalRfps Table**: PostgreSQL table with pgvector extension for storing 10-50 past RFP responses with 1536-dimensional embeddings (OpenAI text-embedding-3-small)
+        - **Tier 1 (Historical RFPs)**: Vector similarity search using pgvector cosine distance (threshold: 0.75) to find similar past responses
+        - **Tier 2 (EKG Fallback)**: When no historical match found, query existing EKG service for knowledge-grounded responses
+        - **Storage Interface**: Complete CRUD methods including `searchHistoricalRfpsBySimilarity()` for vector search
+        - **Next Steps**: Populate historical RFPs, implement embedding service, integrate two-tier retrieval into response generation (see RFP_RAG_IMPLEMENTATION_ROADMAP.md)
 -   **Quiz Question Bank**: 70 Order Management questions stored in PostgreSQL across 6 topics (Introduction, SEBI Compliance, Order Journey, SIP/SWP/STP, API Integration, Exception Handling) with 3 difficulty levels (Easy: 25, Medium: 25, Hard: 20).
 -   **Quiz & Assessment Dual-Mode System**: Tab-based interface offering:
     -   **Structured Quiz**: Individual topic-based quizzes with real-time question fetching from PostgreSQL. Each quiz displays:

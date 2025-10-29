@@ -9,6 +9,7 @@ import {
   quizQuestions,
   excelRequirementResponses,
   referenceResponses,
+  historicalRfps,
   type User, 
   type InsertUser, 
   type Conversation, 
@@ -25,7 +26,9 @@ import {
   type InsertUserMastery,
   type QuizQuestion,
   type ExcelRequirementResponse,
-  type InsertExcelRequirementResponse
+  type InsertExcelRequirementResponse,
+  type HistoricalRfp,
+  type InsertHistoricalRfp
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, sql } from "drizzle-orm";
@@ -84,6 +87,14 @@ export interface IStorage {
   deleteRfpResponse(id: number): Promise<void>;
   getReferencesForResponse(responseId: number): Promise<any[]>;
   getAllQuizStats(): Promise<Record<string, { bestScore: number; attempts: number }>>;
+  
+  // Historical RFP methods (for RAG-based retrieval)
+  getAllHistoricalRfps(): Promise<HistoricalRfp[]>;
+  getHistoricalRfpById(id: number): Promise<HistoricalRfp | undefined>;
+  createHistoricalRfp(rfp: InsertHistoricalRfp): Promise<HistoricalRfp>;
+  updateHistoricalRfp(id: number, updates: Partial<InsertHistoricalRfp>): Promise<HistoricalRfp>;
+  deleteHistoricalRfp(id: number): Promise<void>;
+  searchHistoricalRfpsBySimilarity(embedding: number[], topK: number): Promise<Array<HistoricalRfp & { similarity: number }>>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -460,6 +471,79 @@ export class DatabaseStorage implements IStorage {
       .from(referenceResponses)
       .where(eq(referenceResponses.responseId, responseId))
       .orderBy(desc(referenceResponses.score));
+  }
+
+  // Historical RFP methods (for RAG-based retrieval)
+  async getAllHistoricalRfps(): Promise<HistoricalRfp[]> {
+    return await db
+      .select()
+      .from(historicalRfps)
+      .orderBy(desc(historicalRfps.createdAt));
+  }
+
+  async getHistoricalRfpById(id: number): Promise<HistoricalRfp | undefined> {
+    const [rfp] = await db
+      .select()
+      .from(historicalRfps)
+      .where(eq(historicalRfps.id, id));
+    return rfp || undefined;
+  }
+
+  async createHistoricalRfp(insertRfp: InsertHistoricalRfp): Promise<HistoricalRfp> {
+    const [rfp] = await db
+      .insert(historicalRfps)
+      .values(insertRfp)
+      .returning();
+    return rfp;
+  }
+
+  async updateHistoricalRfp(id: number, updates: Partial<InsertHistoricalRfp>): Promise<HistoricalRfp> {
+    const [rfp] = await db
+      .update(historicalRfps)
+      .set(updates)
+      .where(eq(historicalRfps.id, id))
+      .returning();
+    return rfp;
+  }
+
+  async deleteHistoricalRfp(id: number): Promise<void> {
+    await db
+      .delete(historicalRfps)
+      .where(eq(historicalRfps.id, id));
+  }
+
+  async searchHistoricalRfpsBySimilarity(
+    embedding: number[], 
+    topK: number = 5
+  ): Promise<Array<HistoricalRfp & { similarity: number }>> {
+    // Use pgvector's cosine distance operator (<=>)
+    // Similarity = 1 - distance (convert distance to similarity score)
+    const results = await db
+      .select({
+        id: historicalRfps.id,
+        rfpName: historicalRfps.rfpName,
+        clientName: historicalRfps.clientName,
+        clientIndustry: historicalRfps.clientIndustry,
+        submissionDate: historicalRfps.submissionDate,
+        category: historicalRfps.category,
+        requirement: historicalRfps.requirement,
+        response: historicalRfps.response,
+        successScore: historicalRfps.successScore,
+        responseQuality: historicalRfps.responseQuality,
+        embedding: historicalRfps.embedding,
+        uploadedBy: historicalRfps.uploadedBy,
+        createdAt: historicalRfps.createdAt,
+        distance: sql<number>`${historicalRfps.embedding} <=> ${JSON.stringify(embedding)}::vector`
+      })
+      .from(historicalRfps)
+      .orderBy(sql`${historicalRfps.embedding} <=> ${JSON.stringify(embedding)}::vector`)
+      .limit(topK);
+
+    // Convert distance to similarity score (1 - distance)
+    return results.map(r => ({
+      ...r,
+      similarity: 1 - r.distance
+    }));
   }
 
   private calculateLevel(points: number): string{

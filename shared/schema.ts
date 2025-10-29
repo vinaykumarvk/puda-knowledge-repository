@@ -1,4 +1,5 @@
 import { pgTable, text, varchar, timestamp, boolean, serial, integer, date, real } from "drizzle-orm/pg-core";
+import { vector } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
@@ -272,6 +273,41 @@ export const insertReferenceResponseSchema = createInsertSchema(referenceRespons
 
 export type InsertReferenceResponse = z.infer<typeof insertReferenceResponseSchema>;
 export type ReferenceResponse = typeof referenceResponses.$inferSelect;
+
+// Historical RFPs - stores past RFP responses for RAG-based retrieval
+export const historicalRfps = pgTable("historical_rfps", {
+  id: serial("id").primaryKey(),
+  
+  // RFP Metadata
+  rfpName: text("rfp_name").notNull(),
+  clientName: text("client_name"),
+  clientIndustry: text("client_industry"),
+  submissionDate: date("submission_date"),
+  
+  // Requirement Details
+  category: text("category").notNull(),
+  requirement: text("requirement").notNull(),
+  response: text("response").notNull(), // The actual approved response used
+  
+  // Quality Metrics
+  successScore: integer("success_score"), // 1-5 rating (did we win the RFP?)
+  responseQuality: text("response_quality"), // "excellent", "good", "average"
+  
+  // Vector Embedding for similarity search (OpenAI text-embedding-3-small: 1536 dimensions)
+  embedding: vector("embedding", { dimensions: 1536 }),
+  
+  // Metadata
+  uploadedBy: text("uploaded_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertHistoricalRfpSchema = createInsertSchema(historicalRfps).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertHistoricalRfp = z.infer<typeof insertHistoricalRfpSchema>;
+export type HistoricalRfp = typeof historicalRfps.$inferSelect;
 
 // Relations for RFP tables
 export const excelRequirementResponsesRelations = relations(excelRequirementResponses, ({ many }) => ({
