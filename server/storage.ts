@@ -7,6 +7,8 @@ import {
   quizResponses,
   userMastery,
   quizQuestions,
+  excelRequirementResponses,
+  referenceResponses,
   type User, 
   type InsertUser, 
   type Conversation, 
@@ -21,7 +23,9 @@ import {
   type InsertQuizResponse,
   type UserMastery,
   type InsertUserMastery,
-  type QuizQuestion
+  type QuizQuestion,
+  type ExcelRequirementResponse,
+  type InsertExcelRequirementResponse
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, sql } from "drizzle-orm";
@@ -71,6 +75,15 @@ export interface IStorage {
   getConversation(id: number): Promise<Conversation | undefined>;
   createConversation(conversation: InsertConversation): Promise<Conversation>;
   deleteConversation(id: number): Promise<void>;
+  
+  // RFP Response methods
+  getAllRfpResponses(): Promise<ExcelRequirementResponse[]>;
+  getRfpResponseById(id: number): Promise<ExcelRequirementResponse | undefined>;
+  createRfpResponse(response: InsertExcelRequirementResponse): Promise<ExcelRequirementResponse>;
+  updateRfpResponse(id: number, updates: Partial<InsertExcelRequirementResponse>): Promise<ExcelRequirementResponse>;
+  deleteRfpResponse(id: number): Promise<void>;
+  getReferencesForResponse(responseId: number): Promise<any[]>;
+  getAllQuizStats(): Promise<Record<string, { bestScore: number; attempts: number }>>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -402,7 +415,54 @@ export class DatabaseStorage implements IStorage {
     return { mastery, attempt };
   }
 
-  private calculateLevel(points: number): string {
+  // RFP Response methods
+  async getAllRfpResponses(): Promise<ExcelRequirementResponse[]> {
+    return await db
+      .select()
+      .from(excelRequirementResponses)
+      .orderBy(desc(excelRequirementResponses.timestamp));
+  }
+
+  async getRfpResponseById(id: number): Promise<ExcelRequirementResponse | undefined> {
+    const [response] = await db
+      .select()
+      .from(excelRequirementResponses)
+      .where(eq(excelRequirementResponses.id, id));
+    return response || undefined;
+  }
+
+  async createRfpResponse(insertResponse: InsertExcelRequirementResponse): Promise<ExcelRequirementResponse> {
+    const [response] = await db
+      .insert(excelRequirementResponses)
+      .values(insertResponse)
+      .returning();
+    return response;
+  }
+
+  async updateRfpResponse(id: number, updates: Partial<InsertExcelRequirementResponse>): Promise<ExcelRequirementResponse> {
+    const [response] = await db
+      .update(excelRequirementResponses)
+      .set(updates)
+      .where(eq(excelRequirementResponses.id, id))
+      .returning();
+    return response;
+  }
+
+  async deleteRfpResponse(id: number): Promise<void> {
+    await db
+      .delete(excelRequirementResponses)
+      .where(eq(excelRequirementResponses.id, id));
+  }
+
+  async getReferencesForResponse(responseId: number): Promise<any[]> {
+    return await db
+      .select()
+      .from(referenceResponses)
+      .where(eq(referenceResponses.responseId, responseId))
+      .orderBy(desc(referenceResponses.score));
+  }
+
+  private calculateLevel(points: number): string{
     if (points >= 481) return "Expert";
     if (points >= 361) return "Advanced";
     if (points >= 241) return "Intermediate";

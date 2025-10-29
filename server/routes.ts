@@ -617,6 +617,81 @@ Generate quiz questions that:
     }
   });
 
+  // ===== RFP Response Generator Routes =====
+
+  // Get all RFP requirement responses
+  app.get("/api/rfp/responses", async (req, res) => {
+    try {
+      const responses = await storage.getAllRfpResponses();
+      res.json(responses);
+    } catch (error) {
+      console.error("Error fetching RFP responses:", error);
+      res.status(500).json({ error: "Failed to fetch RFP responses" });
+    }
+  });
+
+  // Get a single RFP requirement response by ID
+  app.get("/api/rfp/responses/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const response = await storage.getRfpResponseById(id);
+      if (!response) {
+        return res.status(404).json({ error: "Response not found" });
+      }
+      res.json(response);
+    } catch (error) {
+      console.error("Error fetching RFP response:", error);
+      res.status(500).json({ error: "Failed to fetch RFP response" });
+    }
+  });
+
+  // Store a new RFP requirement response
+  app.post("/api/rfp/responses", async (req, res) => {
+    try {
+      const response = await storage.createRfpResponse(req.body);
+      res.status(201).json(response);
+    } catch (error) {
+      console.error("Error creating RFP response:", error);
+      res.status(500).json({ error: "Failed to create RFP response" });
+    }
+  });
+
+  // Update an existing RFP response
+  app.patch("/api/rfp/responses/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const response = await storage.updateRfpResponse(id, req.body);
+      res.json(response);
+    } catch (error) {
+      console.error("Error updating RFP response:", error);
+      res.status(500).json({ error: "Failed to update RFP response" });
+    }
+  });
+
+  // Delete an RFP response
+  app.delete("/api/rfp/responses/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteRfpResponse(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting RFP response:", error);
+      res.status(500).json({ error: "Failed to delete RFP response" });
+    }
+  });
+
+  // Get references for a specific RFP response (for ReferencePanel component)
+  app.get("/api/excel-requirements/:id/references", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const references = await storage.getReferencesForResponse(id);
+      res.json(references);
+    } catch (error) {
+      console.error("Error fetching references:", error);
+      res.status(500).json({ error: "Failed to fetch references" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

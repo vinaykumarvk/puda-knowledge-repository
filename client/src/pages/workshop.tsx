@@ -1,7 +1,9 @@
 import { Wrench, FileText, Upload, Network, Presentation, Clipboard, BookOpen } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useLocation } from "wouter";
 
 export default function WorkshopPage() {
+  const [, setLocation] = useLocation();
   const templates = [
     {
       name: "New Report",
@@ -56,10 +58,16 @@ export default function WorkshopPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {templates.map((template) => {
               const Icon = template.icon;
+              const isRfpResponse = template.name === "RFP Response";
               return (
                 <Card
                   key={template.name}
                   className="hover:shadow-lg hover:border-primary/50 transition-all cursor-pointer bg-card"
+                  onClick={() => {
+                    if (isRfpResponse) {
+                      setLocation("/rfp");
+                    }
+                  }}
                   data-testid={`card-template-${template.name.toLowerCase().replace(/\s+/g, '-')}`}
                 >
                   <CardHeader className="space-y-2.5 p-4">

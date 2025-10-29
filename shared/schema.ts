@@ -1,6 +1,7 @@
-import { pgTable, text, varchar, timestamp, boolean, serial, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, boolean, serial, integer, date, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { relations } from "drizzle-orm";
 
 // Threads table - represents conversation threads (like chat sessions)
 export const threads = pgTable("threads", {
@@ -181,3 +182,105 @@ export const insertQuizQuestionSchema = createInsertSchema(quizQuestions).omit({
 
 export type InsertQuizQuestion = z.infer<typeof insertQuizQuestionSchema>;
 export type QuizQuestion = typeof quizQuestions.$inferSelect;
+
+// ===== RFP Response Generator Tables =====
+
+// RFP Responses - tracks template-based RFP responses
+export const rfpResponses = pgTable("rfp_responses", {
+  id: serial("id").primaryKey(),
+  clientName: text("client_name").notNull(),
+  clientIndustry: text("client_industry").notNull(),
+  rfpTitle: text("rfp_title").notNull(),
+  rfpId: text("rfp_id"),
+  submissionDate: date("submission_date").notNull(),
+  budgetRange: text("budget_range"),
+  projectSummary: text("project_summary").notNull(),
+  companyName: text("company_name").notNull(),
+  pointOfContact: text("point_of_contact").notNull(),
+  companyStrengths: text("company_strengths"),
+  selectedTemplate: text("selected_template").notNull(),
+  customizations: text("customizations"),
+  generatedContent: text("generated_content"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastUpdated: timestamp("last_updated").defaultNow().notNull(),
+});
+
+export const insertRfpResponseSchema = createInsertSchema(rfpResponses).omit({
+  id: true,
+  createdAt: true,
+  lastUpdated: true,
+});
+
+export type InsertRfpResponse = z.infer<typeof insertRfpResponseSchema>;
+export type RfpResponse = typeof rfpResponses.$inferSelect;
+
+// Excel Requirement Responses - stores individual requirement answers with AI responses
+export const excelRequirementResponses = pgTable("excel_requirement_responses", {
+  id: serial("id").primaryKey(),
+  // RFP identification
+  rfpName: text("rfp_name"),
+  requirementId: text("requirement_id"),
+  uploadedBy: text("uploaded_by"),
+  
+  // Requirement details
+  category: text("category").notNull(),
+  requirement: text("requirement").notNull(),
+  
+  // AI-generated responses from different models
+  finalResponse: text("final_response"),
+  openaiResponse: text("openai_response"),
+  anthropicResponse: text("anthropic_response"),
+  deepseekResponse: text("deepseek_response"),
+  moaResponse: text("moa_response"), // Mixture of Agents synthesized response
+  
+  // Similar questions (stored as JSON string)
+  similarQuestions: text("similar_questions"),
+  
+  // Metadata
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+  rating: integer("rating"),
+  feedback: text("feedback"), // 'positive', 'negative', or null
+  modelProvider: text("model_provider"),
+});
+
+export const insertExcelRequirementResponseSchema = createInsertSchema(excelRequirementResponses).omit({
+  id: true,
+  timestamp: true,
+});
+
+export type InsertExcelRequirementResponse = z.infer<typeof insertExcelRequirementResponseSchema>;
+export type ExcelRequirementResponse = typeof excelRequirementResponses.$inferSelect;
+
+// Reference Responses - stores similar past responses for each requirement
+export const referenceResponses = pgTable("reference_responses", {
+  id: serial("id").primaryKey(),
+  // Link to the parent response
+  responseId: integer("response_id").notNull().references(() => excelRequirementResponses.id, { onDelete: 'cascade' }),
+  // Reference information from vector similarity search
+  category: text("category").notNull(),
+  requirement: text("requirement").notNull(),
+  response: text("response").notNull(),
+  reference: text("reference"),
+  score: real("score").notNull(), // Similarity score from vector search
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+});
+
+export const insertReferenceResponseSchema = createInsertSchema(referenceResponses).omit({
+  id: true,
+  timestamp: true,
+});
+
+export type InsertReferenceResponse = z.infer<typeof insertReferenceResponseSchema>;
+export type ReferenceResponse = typeof referenceResponses.$inferSelect;
+
+// Relations for RFP tables
+export const excelRequirementResponsesRelations = relations(excelRequirementResponses, ({ many }) => ({
+  references: many(referenceResponses),
+}));
+
+export const referenceResponsesRelations = relations(referenceResponses, ({ one }) => ({
+  parentResponse: one(excelRequirementResponses, {
+    fields: [referenceResponses.responseId],
+    references: [excelRequirementResponses.id],
+  }),
+}));

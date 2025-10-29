@@ -10,6 +10,7 @@ import ChatbotPage from "@/pages/chatbot";
 import WorkshopPage from "@/pages/workshop";
 import QuizPage from "@/pages/quiz";
 import AtlasPage from "@/pages/atlas";
+import RfpPage from "@/pages/rfp";
 import NotFound from "@/pages/not-found";
 import type { UserMastery } from "@shared/schema";
 
@@ -38,6 +39,7 @@ function Router() {
           <Route path="/workshop" component={WorkshopPage} />
           <Route path="/quiz" component={QuizPage} />
           <Route path="/atlas" component={AtlasPage} />
+          <Route path="/rfp" component={RfpPage} />
           <Route component={NotFound} />
         </Switch>
       </div>
