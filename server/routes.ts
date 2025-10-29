@@ -747,29 +747,73 @@ Generate quiz questions that:
     }
   });
 
-  // Generate AI response for a requirement (stub - Python backend not yet implemented)
+  // Generate AI response for a requirement using OpenAI
   app.post("/api/generate-response", async (req, res) => {
     try {
       const { requirement_id, model } = req.body;
       
       console.log(`Generate response request for requirement ${requirement_id} with model ${model}`);
       
-      // Note: This is a stub endpoint. The actual AI generation requires:
-      // 1. Python backend setup (tasks 7-9 from integration plan)
-      // 2. API keys configured (ANTHROPIC_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY)
-      // 3. LLM integration code (call_llms.py)
+      // Get the requirement from the database
+      const requirement = await storage.getRfpResponseById(parseInt(requirement_id));
       
-      // For now, return a response indicating the AI backend needs to be set up
+      if (!requirement) {
+        return res.status(404).json({ error: "Requirement not found" });
+      }
+      
+      // Import OpenAI SDK dynamically
+      const { default: OpenAI } = await import("openai");
+      
+      // Initialize OpenAI client using Replit AI Integrations
+      const openai = new OpenAI({
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY
+      });
+      
+      // Create prompt for RFP response generation
+      const prompt = `You are an expert RFP (Request for Proposal) response writer for a wealth management and financial services company.
+
+Category: ${requirement.category}
+Requirement: ${requirement.requirement}
+
+Please write a comprehensive, professional RFP response that:
+1. Directly addresses the requirement
+2. Demonstrates expertise and capability
+3. Uses specific examples where appropriate
+4. Maintains a professional, confident tone
+5. Is concise but thorough (200-400 words)
+
+Write the response now:`;
+      
+      // Call OpenAI API
+      const response = await openai.chat.completions.create({
+        model: "gpt-5", // the newest OpenAI model is "gpt-5" which was released August 7, 2025
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 8192,
+        temperature: 1,
+      });
+      
+      const generatedResponse = response.choices[0]?.message?.content || "";
+      
+      // Update the requirement with the generated response
+      await storage.updateRfpResponse(parseInt(requirement_id), {
+        finalResponse: generatedResponse,
+        modelProvider: "openai"
+      });
+      
       res.json({ 
-        success: false,
-        error: "AI backend not configured. Python LLM integration (tasks 7-9) needs to be implemented.",
+        success: true,
         requirement_id,
         model,
-        message: "To enable AI-powered response generation, the Python backend with LLM integration must be set up."
+        response: generatedResponse,
+        message: "Response generated successfully"
       });
     } catch (error) {
       console.error("Error in generate-response:", error);
-      res.status(500).json({ error: "Failed to process generation request" });
+      res.status(500).json({ 
+        error: "Failed to generate response", 
+        details: error instanceof Error ? error.message : String(error)
+      });
     }
   });
 
