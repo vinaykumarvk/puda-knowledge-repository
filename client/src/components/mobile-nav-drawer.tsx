@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { Compass, Wrench, Brain, Map, X, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -69,6 +69,12 @@ export function MobileNavDrawer({ isOpen, onClose, aiConfig, onAIConfigChange }:
       systemPrompt: "You are a helpful wealth management AI assistant.",
     }
   );
+
+  useEffect(() => {
+    if (aiConfig) {
+      setLocalConfig(aiConfig);
+    }
+  }, [aiConfig]);
 
   const updateConfig = (updates: Partial<AIConfig>) => {
     const newConfig = { ...localConfig, ...updates };
@@ -244,7 +250,19 @@ export function MobileNavDrawer({ isOpen, onClose, aiConfig, onAIConfigChange }:
                 type="number"
                 data-testid="mobile-input-token-limit"
                 value={localConfig.tokenLimit}
-                onChange={(e) => updateConfig({ tokenLimit: parseInt(e.target.value) || 0 })}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value);
+                  if (!isNaN(value)) {
+                    setLocalConfig({ ...localConfig, tokenLimit: value });
+                  }
+                }}
+                onBlur={(e) => {
+                  const value = parseInt(e.target.value);
+                  if (!isNaN(value)) {
+                    const clampedValue = Math.max(128, Math.min(32000, value));
+                    updateConfig({ tokenLimit: clampedValue });
+                  }
+                }}
                 min={128}
                 max={32000}
                 step={128}
