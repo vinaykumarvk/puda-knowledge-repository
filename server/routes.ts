@@ -338,56 +338,6 @@ Generate quiz questions that:
     }
   });
 
-  // Submit quiz results and update mastery
-  app.post("/api/quiz/submit", async (req, res) => {
-    try {
-      const { threadId, results } = req.body;
-      
-      if (!threadId || !results || !Array.isArray(results)) {
-        return res.status(400).json({ error: "threadId and results array required" });
-      }
-
-      const totalQuestions = results.length;
-      const correctAnswers = results.filter((r: any) => r.isCorrect).length;
-      const scorePercentage = Math.round((correctAnswers / totalQuestions) * 100);
-
-      // Save quiz attempt
-      const attempt = await storage.createQuizAttempt({
-        threadId,
-        totalQuestions,
-        correctAnswers,
-        scorePercentage,
-        timeSpent: null,
-      });
-
-      // Save individual responses
-      for (const result of results) {
-        await storage.createQuizResponse({
-          attemptId: attempt.id,
-          questionText: result.questionText,
-          userAnswer: result.userAnswer,
-          correctAnswer: result.correctAnswer,
-          isCorrect: result.isCorrect,
-          topic: null,
-        });
-      }
-
-      // Calculate and update mastery score
-      const mastery = await calculateMasteryScore();
-      
-      res.json({
-        attemptId: attempt.id,
-        score: scorePercentage,
-        mastery,
-      });
-    } catch (error) {
-      console.error("Quiz submission error:", error);
-      res.status(500).json({
-        error: error instanceof Error ? error.message : "Failed to submit quiz",
-      });
-    }
-  });
-
   // Get current mastery score
   app.get("/api/mastery", async (req, res) => {
     try {
