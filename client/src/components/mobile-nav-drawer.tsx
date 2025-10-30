@@ -1,7 +1,27 @@
+import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Compass, Wrench, Brain, Map, X } from "lucide-react";
+import { Compass, Wrench, Brain, Map, X, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import type { AIConfig } from "@/components/ai-config-sidebar";
 
 const navItems = [
   {
@@ -33,10 +53,28 @@ const navItems = [
 interface MobileNavDrawerProps {
   isOpen: boolean;
   onClose: () => void;
+  aiConfig?: AIConfig;
+  onAIConfigChange?: (config: AIConfig) => void;
 }
 
-export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
+export function MobileNavDrawer({ isOpen, onClose, aiConfig, onAIConfigChange }: MobileNavDrawerProps) {
   const [location] = useLocation();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [localConfig, setLocalConfig] = useState<AIConfig>(
+    aiConfig || {
+      model: "GPT-4o",
+      temperature: 0.7,
+      hops: 3,
+      tokenLimit: 2048,
+      systemPrompt: "You are a helpful wealth management AI assistant.",
+    }
+  );
+
+  const updateConfig = (updates: Partial<AIConfig>) => {
+    const newConfig = { ...localConfig, ...updates };
+    setLocalConfig(newConfig);
+    onAIConfigChange?.(newConfig);
+  };
 
   return (
     <>
@@ -104,8 +142,131 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
               </Link>
             );
           })}
+
+          {/* Settings Button */}
+          <div
+            onClick={() => setSettingsOpen(true)}
+            className="flex items-center gap-3 p-3 rounded-lg transition-all cursor-pointer text-foreground hover:bg-muted border-t border-border mt-2 pt-4"
+            data-testid="mobile-nav-settings"
+          >
+            <Settings className="w-5 h-5" />
+            <div className="flex flex-col">
+              <span className="font-medium">Settings</span>
+              <span className="text-xs opacity-70">AI configuration</span>
+            </div>
+          </div>
         </nav>
       </div>
+
+      {/* Settings Sheet */}
+      <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <SheetContent side="bottom" className="h-[85vh] md:hidden">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              <Settings className="w-5 h-5 text-primary" />
+              AI Configuration
+            </SheetTitle>
+            <SheetDescription>
+              Customize AI model settings and behavior
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="mt-6 space-y-6 overflow-y-auto h-[calc(100%-80px)]">
+            {/* Model Selection */}
+            <div className="space-y-2">
+              <Label htmlFor="mobile-model-select">LLM Model</Label>
+              <Select
+                value={localConfig.model}
+                onValueChange={(value) => updateConfig({ model: value })}
+              >
+                <SelectTrigger id="mobile-model-select" data-testid="mobile-select-model">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="GraphRAG">GraphRAG</SelectItem>
+                  <SelectItem value="OpenAI">OpenAI</SelectItem>
+                  <SelectItem value="GPT-4o">GPT-4o</SelectItem>
+                  <SelectItem value="GPT-5">GPT-5</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Temperature Slider */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="mobile-temperature-slider">Temperature</Label>
+                <span className="text-sm font-mono text-muted-foreground" data-testid="mobile-text-temperature-value">
+                  {localConfig.temperature.toFixed(2)}
+                </span>
+              </div>
+              <Slider
+                id="mobile-temperature-slider"
+                data-testid="mobile-slider-temperature"
+                value={[localConfig.temperature]}
+                onValueChange={([value]) => updateConfig({ temperature: value })}
+                min={0}
+                max={2}
+                step={0.01}
+                className="w-full"
+              />
+            </div>
+
+            {/* Hops Slider */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="mobile-hops-slider">Hops</Label>
+                <span className="text-sm font-mono text-muted-foreground" data-testid="mobile-text-hops-value">
+                  {localConfig.hops}
+                </span>
+              </div>
+              <Slider
+                id="mobile-hops-slider"
+                data-testid="mobile-slider-hops"
+                value={[localConfig.hops]}
+                onValueChange={([value]) => updateConfig({ hops: value })}
+                min={1}
+                max={10}
+                step={1}
+                className="w-full"
+              />
+            </div>
+
+            {/* Token Limit */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="mobile-token-limit">Token Limit</Label>
+                <span className="text-sm font-mono text-muted-foreground" data-testid="mobile-text-token-limit-value">
+                  {localConfig.tokenLimit.toLocaleString()}
+                </span>
+              </div>
+              <Input
+                id="mobile-token-limit"
+                type="number"
+                data-testid="mobile-input-token-limit"
+                value={localConfig.tokenLimit}
+                onChange={(e) => updateConfig({ tokenLimit: parseInt(e.target.value) || 0 })}
+                min={128}
+                max={32000}
+                step={128}
+                className="w-full"
+              />
+            </div>
+
+            {/* System Prompt */}
+            <div className="space-y-2">
+              <Label htmlFor="mobile-system-prompt">System Prompt</Label>
+              <Textarea
+                id="mobile-system-prompt"
+                data-testid="mobile-textarea-system-prompt"
+                value={localConfig.systemPrompt}
+                onChange={(e) => updateConfig({ systemPrompt: e.target.value })}
+                className="min-h-[100px] resize-none font-mono text-sm"
+                placeholder="Enter custom system prompt..."
+              />
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
     </>
   );
 }
