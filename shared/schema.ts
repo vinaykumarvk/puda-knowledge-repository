@@ -80,20 +80,42 @@ export const responseSchema = z.object({
 
 export type QueryResponse = z.infer<typeof responseSchema>;
 
-// User schema (keeping existing for compatibility)
+// User schema - for authentication and authorization
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+  password: text("password").notNull(), // bcrypt hashed
+  fullName: text("full_name").notNull(),
+  team: text("team").notNull(), // 'admin' | 'presales' | 'ba' | 'management'
+  email: text("email"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  lastLogin: timestamp("last_login"),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+  lastLogin: true,
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+
+// Sessions table - for managing user login sessions
+export const sessions = pgTable("sessions", {
+  id: text("id").primaryKey(), // UUID session token
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertSessionSchema = createInsertSchema(sessions).omit({
+  createdAt: true,
+});
+
+export type InsertSession = z.infer<typeof insertSessionSchema>;
+export type Session = typeof sessions.$inferSelect;
 
 // Quiz Attempts - tracks each quiz completion
 export const quizAttempts = pgTable("quiz_attempts", {
