@@ -39,8 +39,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       if (response.ok) {
-        const data = await response.json();
-        setUser(data.user);
+        try {
+          const data = await response.json();
+          setUser(data.user);
+        } catch (jsonError) {
+          console.error("Failed to parse user data:", jsonError);
+          setUser(null);
+        }
       } else {
         setUser(null);
       }
