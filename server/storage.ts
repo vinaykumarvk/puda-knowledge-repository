@@ -333,6 +333,7 @@ export class DatabaseStorage implements IStorage {
   // Quiz question bank methods
   async getQuizCategories(): Promise<any[]> {
     // Group questions by topic (not category) to show individual sub-topic quizzes
+    // Order topics in a logical learning progression
     const result = await db
       .select({
         category: quizQuestions.category,
@@ -343,7 +344,22 @@ export class DatabaseStorage implements IStorage {
         hardCount: sql<number>`count(*) FILTER (WHERE ${quizQuestions.difficulty} = 'Hard')::int`,
       })
       .from(quizQuestions)
-      .groupBy(quizQuestions.category, quizQuestions.topic);
+      .groupBy(quizQuestions.category, quizQuestions.topic)
+      .orderBy(sql`
+        CASE ${quizQuestions.topic}
+          WHEN 'Order Flow Fundamentals' THEN 1
+          WHEN 'Order Capture & Document Validation' THEN 2
+          WHEN 'Order Modification & Cancellation' THEN 3
+          WHEN 'Partial Confirmations & Status' THEN 4
+          WHEN 'Account Management & FIFO' THEN 5
+          WHEN 'Reconciliation Process' THEN 6
+          WHEN 'Pre-Trade Validations' THEN 7
+          WHEN 'Order Execution & Settlement' THEN 8
+          WHEN 'Transaction Management & Alerts' THEN 9
+          WHEN 'Advanced Validations & Partial Confirmations' THEN 10
+          ELSE 99
+        END ASC
+      `);
     
     return result;
   }
