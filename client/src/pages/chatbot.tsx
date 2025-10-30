@@ -987,7 +987,9 @@ export default function ChatbotPage() {
         </div>
       </div>
 
-      <AIConfigSidebar onConfigChange={handleConfigChange} />
+      <div className="hidden md:block">
+        <AIConfigSidebar onConfigChange={handleConfigChange} />
+      </div>
       
       {/* Download Format Selection Dialog */}
       <Dialog open={showDownloadDialog} onOpenChange={setShowDownloadDialog}>
