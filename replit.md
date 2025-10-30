@@ -46,16 +46,28 @@ The UI features a comprehensive layout comprising a **Global Top Header**, a **M
         - **Tier 2 (EKG Fallback)**: When no historical match found, query existing EKG service for knowledge-grounded responses
         - **Storage Interface**: Complete CRUD methods including `searchHistoricalRfpsBySimilarity()` for vector search
         - **Next Steps**: Populate historical RFPs, implement embedding service, integrate two-tier retrieval into response generation (see RFP_RAG_IMPLEMENTATION_ROADMAP.md)
--   **Quiz Question Bank**: 100 Order Management questions stored in PostgreSQL across 10 topics with 10 questions each. Topics include: Order Flow Fundamentals, Order Capture & Document Validation, Order Modification & Cancellation, Partial Confirmations & Status, Account Management & FIFO, Reconciliation Process, Pre-Trade Validations, Order Execution & Settlement, Transaction Management & Alerts, and Advanced Validations & Partial Confirmations. Questions feature 4 difficulty levels (1-4) and are randomized on each quiz attempt using ORDER BY RANDOM().
+-   **Quiz Question Bank**: 100 Order Management questions stored in PostgreSQL across 10 topics with 10 questions each. Topics include: Order Flow Fundamentals, Order Capture & Document Validation, Order Modification & Cancellation, Partial Confirmations & Status, Account Management & FIFO, Reconciliation Process, Pre-Trade Validations, Order Execution & Settlement, Transaction Management & Alerts, and Advanced Validations & Partial Confirmations. Questions feature 4 difficulty levels (1-4) and are randomized on each quiz attempt using ORDER BY RANDOM(). Topics display in logical learning progression order.
 -   **Quiz & Assessment Dual-Mode System**: Tab-based interface offering:
     -   **Structured Quiz**: Individual topic-based quizzes with real-time question fetching from PostgreSQL. Each quiz displays:
         - Question-by-question navigation with progress tracking
         - Multiple choice answer selection (A/B/C/D)
+        - **Clear Difficulty Indicators**: Color-coded difficulty circle (1-4 scale) with text label "Difficulty: [text] (Level [number]/4)" - green (Easy/1), yellow (Medium/2), orange (Hard/3), red (Very Hard/4)
         - Score calculation and results summary
         - Detailed review showing correct/incorrect answers with explanations
         - Retake functionality
     -   **Flashcards**: 4 self-paced study decks (e.g., Quick Concepts Review, Investment Terminology) for active recall.
--   **Quiz Flow**: Users select a topic → answer questions one-by-one → receive immediate scoring and detailed feedback → option to retake or return to quiz list.
+-   **Quiz Progress Tracking System**: Comprehensive progress persistence and visualization:
+    -   **Backend API**: `/api/quiz/history` endpoint aggregates quiz attempts by topic with best score, average score, total attempts, and last attempt date
+    -   **Quiz Card Progress Display**: Each quiz card shows:
+        - **Performance Badges**: Color-coded badges indicating mastery level - 🏆 Excellent (≥80%), ✓ Passed (≥70%), ⚠️ Review (≥50%), 📚 Practice (<50%)
+        - **Best Score**: Highest percentage achieved on that topic
+        - **Average Score**: Mean performance across all attempts
+        - **Attempt Count**: Total number of quiz attempts for that topic
+        - **Last Attempt Date**: When the quiz was last taken
+        - **Button Text**: Changes from "Start" (never attempted) to "Retake" (previously attempted)
+    -   **Persistent Storage**: Quiz scores save to PostgreSQL `quiz_attempts` table and persist after navigation
+    -   **Real-time Updates**: TanStack Query cache invalidation ensures UI updates immediately after quiz completion
+-   **Quiz Flow**: Users select a topic → answer questions one-by-one with clear difficulty indicators → receive immediate scoring and detailed feedback → scores persist on quiz selection page → option to retake or return to quiz list with visible progress history.
 -   **AI Model Configuration**: Collapsible sidebar with controls for LLM model, temperature, knowledge graph hops, token limits, and custom system prompts.
 -   **Core Conversational Interface**: ChatGPT-style scrolling message view with fixed input, auto-scroll, and keyboard shortcuts.
 -   **Markdown Rendering**: Robust rendering for assistant messages, supporting GitHub-flavored markdown, HTML, and HTML entity decoding.
