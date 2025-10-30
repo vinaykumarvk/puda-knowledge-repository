@@ -352,7 +352,8 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select()
       .from(quizQuestions)
-      .where(eq(quizQuestions.topic, topic));
+      .where(eq(quizQuestions.topic, topic))
+      .orderBy(sql`RANDOM()`);
   }
 
   async saveQuizAttemptAndUpdateMastery(
