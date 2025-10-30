@@ -372,6 +372,36 @@ export class DatabaseStorage implements IStorage {
       .orderBy(sql`RANDOM()`);
   }
 
+  async getQuizHistory(): Promise<any[]> {
+    // Get quiz history grouped by topic with best scores and attempt counts
+    const result = await db
+      .select({
+        topic: quizAttempts.topic,
+        category: quizAttempts.category,
+        bestScore: sql<number>`MAX(${quizAttempts.scorePercentage})`,
+        totalAttempts: sql<number>`COUNT(*)`,
+        lastAttemptDate: sql<string>`MAX(${quizAttempts.createdAt})`,
+        averageScore: sql<number>`ROUND(AVG(${quizAttempts.scorePercentage}))`,
+        totalCorrect: sql<number>`SUM(${quizAttempts.correctAnswers})`,
+        totalQuestions: sql<number>`SUM(${quizAttempts.totalQuestions})`,
+      })
+      .from(quizAttempts)
+      .groupBy(quizAttempts.topic, quizAttempts.category)
+      .execute();
+    
+    // Convert aggregated values to proper types
+    return result.map(row => ({
+      topic: row.topic,
+      category: row.category,
+      bestScore: Number(row.bestScore) || 0,
+      totalAttempts: Number(row.totalAttempts) || 0,
+      lastAttemptDate: row.lastAttemptDate,
+      averageScore: Number(row.averageScore) || 0,
+      totalCorrect: Number(row.totalCorrect) || 0,
+      totalQuestions: Number(row.totalQuestions) || 0,
+    }));
+  }
+
   async saveQuizAttemptAndUpdateMastery(
     topic: string,
     category: string,

@@ -539,6 +539,17 @@ Generate quiz questions that:
     }
   });
 
+  // Get quiz history with best scores and attempts per topic
+  app.get("/api/quiz/history", async (req, res) => {
+    try {
+      const history = await storage.getQuizHistory();
+      res.json(history);
+    } catch (error) {
+      console.error("Error fetching quiz history:", error);
+      res.status(500).json({ error: "Failed to fetch quiz history" });
+    }
+  });
+
   // Submit quiz results and update mastery score
   app.post("/api/quiz/submit", async (req, res) => {
     try {

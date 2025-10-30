@@ -54,8 +54,9 @@ export default function QuizAssessment({ topic, onBack }: QuizAssessmentProps) {
       return apiRequest("/api/quiz/submit", "POST", data);
     },
     onSuccess: () => {
-      // Invalidate mastery query to update the status bar
+      // Invalidate mastery and quiz history queries to update the status bar and quiz cards
       queryClient.invalidateQueries({ queryKey: ["/api/mastery"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/quiz/history"] });
     },
   });
 
@@ -255,6 +256,27 @@ export default function QuizAssessment({ topic, onBack }: QuizAssessmentProps) {
     { label: "D", value: currentQuestion.optionD },
   ];
 
+  // Map difficulty to numeric level (1-4 scale)
+  const getDifficultyLevel = (difficulty: string): number => {
+    const difficultyMap: Record<string, number> = {
+      'Easy': 1,
+      'Medium': 2,
+      'Hard': 3,
+      'Very Hard': 4,
+      '1': 1,
+      '2': 2,
+      '3': 3,
+      '4': 4,
+    };
+    return difficultyMap[difficulty] || parseInt(difficulty) || 2;
+  };
+
+  const difficultyLevel = getDifficultyLevel(currentQuestion.difficulty);
+  const difficultyColor = difficultyLevel === 1 ? 'text-green-600 bg-green-100 dark:bg-green-900/30' :
+                           difficultyLevel === 2 ? 'text-yellow-600 bg-yellow-100 dark:bg-yellow-900/30' :
+                           difficultyLevel === 3 ? 'text-orange-600 bg-orange-100 dark:bg-orange-900/30' :
+                           'text-red-600 bg-red-100 dark:bg-red-900/30';
+
   return (
     <div className="max-w-4xl mx-auto p-6">
       <div className="mb-6">
@@ -272,10 +294,15 @@ export default function QuizAssessment({ topic, onBack }: QuizAssessmentProps) {
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary font-medium">
-              {currentQuestion.difficulty}
-            </span>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${difficultyColor}`} data-testid="difficulty-indicator">
+                {difficultyLevel}
+              </div>
+              <span className="text-xs text-muted-foreground">
+                Difficulty: {currentQuestion.difficulty} (Level {difficultyLevel}/4)
+              </span>
+            </div>
             <span className="text-xs text-muted-foreground">{topic}</span>
           </div>
           <CardTitle className="text-lg leading-relaxed">{currentQuestion.questionText}</CardTitle>

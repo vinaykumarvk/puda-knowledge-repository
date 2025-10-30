@@ -43,8 +43,15 @@ export default function QuizPage() {
     queryKey: ["/api/quiz/categories"],
   });
 
-  const { data: quizStats } = useQuery<Record<string, { bestScore: number; attempts: number }>>({
-    queryKey: ["/api/quiz/stats"],
+  const { data: quizHistory } = useQuery<Array<{
+    topic: string;
+    category: string;
+    bestScore: number;
+    totalAttempts: number;
+    lastAttemptDate: Date;
+    averageScore: number;
+  }>>({
+    queryKey: ["/api/quiz/history"],
   });
 
   const flashcardDecks = [
@@ -90,6 +97,12 @@ export default function QuizPage() {
     acc[topic.category].push(topic);
     return acc;
   }, {} as Record<string, QuizTopic[]>) || {};
+
+  // Create a lookup map for quiz history by topic
+  const historyByTopic = quizHistory?.reduce((acc, history) => {
+    acc[history.topic] = history;
+    return acc;
+  }, {} as Record<string, typeof quizHistory[0]>) || {};
 
   if (activeQuizTopic) {
     return (
@@ -215,7 +228,18 @@ export default function QuizPage() {
                                   const difficulty = getDifficultyLevel(topic.easyCount, topic.mediumCount, topic.hardCount);
                                   const estimatedTime = getEstimatedTime(topic.questionCount);
 
-                                  const stats = quizStats?.[topic.topic];
+                                  const history = historyByTopic[topic.topic];
+                                  
+                                  // Determine performance badge color
+                                  const getPerformanceBadge = (score: number | undefined) => {
+                                    if (!score) return null;
+                                    if (score >= 80) return { color: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-300 dark:border-green-700', label: '🏆 Excellent' };
+                                    if (score >= 70) return { color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border-blue-300 dark:border-blue-700', label: '✓ Passed' };
+                                    if (score >= 50) return { color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border-yellow-300 dark:border-yellow-700', label: '⚠️ Review' };
+                                    return { color: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border-red-300 dark:border-red-700', label: '📚 Practice' };
+                                  };
+
+                                  const badge = getPerformanceBadge(history?.bestScore);
                                   
                                   return (
                                     <div
@@ -224,29 +248,36 @@ export default function QuizPage() {
                                       data-testid={`card-quiz-${topic.topic.toLowerCase().replace(/\s+/g, '-')}`}
                                     >
                                       <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 mb-1">
+                                        <div className="flex items-center gap-2 mb-1 flex-wrap">
                                           <h4 className="font-medium text-sm">{topic.topic}</h4>
-                                          {stats && stats.attempts > 0 && (
-                                            <div className="flex items-center gap-2">
-                                              <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
-                                                Best: {stats.bestScore}%
-                                              </span>
-                                              <span className="text-xs text-muted-foreground">
-                                                {stats.attempts} {stats.attempts === 1 ? 'attempt' : 'attempts'}
-                                              </span>
-                                            </div>
+                                          {badge && (
+                                            <span className={`text-xs px-2 py-0.5 rounded-full border ${badge.color} font-medium`} data-testid={`badge-performance-${topic.topic.toLowerCase().replace(/\s+/g, '-')}`}>
+                                              {badge.label}
+                                            </span>
                                           )}
                                         </div>
+                                        {history && (
+                                          <div className="flex items-center gap-3 mb-1.5 flex-wrap" data-testid={`stats-${topic.topic.toLowerCase().replace(/\s+/g, '-')}`}>
+                                            <span className="text-xs font-semibold text-primary">
+                                              Best: {history.bestScore}%
+                                            </span>
+                                            <span className="text-xs text-muted-foreground">
+                                              Avg: {history.averageScore}%
+                                            </span>
+                                            <span className="text-xs text-muted-foreground">
+                                              {history.totalAttempts} {history.totalAttempts === 1 ? 'attempt' : 'attempts'}
+                                            </span>
+                                            <span className="text-xs text-muted-foreground">
+                                              Last: {new Date(history.lastAttemptDate).toLocaleDateString()}
+                                            </span>
+                                          </div>
+                                        )}
                                         <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                                           <span>{topic.questionCount} Questions</span>
                                           <span>•</span>
                                           <span>{difficulty}</span>
                                           <span>•</span>
                                           <span>{estimatedTime}</span>
-                                          <span>•</span>
-                                          <span className="text-green-600">Easy: {topic.easyCount}</span>
-                                          <span className="text-yellow-600">Medium: {topic.mediumCount}</span>
-                                          <span className="text-red-600">Hard: {topic.hardCount}</span>
                                         </div>
                                       </div>
                                       <Button
@@ -254,7 +285,7 @@ export default function QuizPage() {
                                         onClick={() => setActiveQuizTopic(topic.topic)}
                                         data-testid={`button-start-${topic.topic.toLowerCase().replace(/\s+/g, '-')}`}
                                       >
-                                        Start
+                                        {history ? 'Retake' : 'Start'}
                                       </Button>
                                     </div>
                                   );
