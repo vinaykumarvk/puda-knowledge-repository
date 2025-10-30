@@ -44,10 +44,10 @@ export default function LoginPage() {
     console.log("✅ Bypass user created:", bypassUser);
     localStorage.setItem("bypass_user", JSON.stringify(bypassUser));
     
-    // Small delay to show the loading state
+    // Small delay to show the loading state, then navigate to home
     setTimeout(() => {
-      console.log("🔄 Reloading page to activate bypass session...");
-      window.location.reload();
+      console.log("🔄 Navigating to home page...");
+      window.location.href = "/";
     }, 500);
   };
 
