@@ -674,12 +674,14 @@ export default function ChatbotPage() {
 
   return (
     <div className="flex flex-1 bg-background">
-      <ThreadSidebar
-        onSelectThread={handleSelectThread}
-        onNewChat={handleNewChat}
-        onDeleteThread={handleDeleteThread}
-        selectedThreadId={currentThreadId}
-      />
+      <div className="hidden md:block">
+        <ThreadSidebar
+          onSelectThread={handleSelectThread}
+          onNewChat={handleNewChat}
+          onDeleteThread={handleDeleteThread}
+          selectedThreadId={currentThreadId}
+        />
+      </div>
       
       <div className="flex-1 flex flex-col">
         {/* Header */}
