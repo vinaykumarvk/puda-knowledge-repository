@@ -17,6 +17,11 @@ import AtlasPage from "@/pages/atlas";
 import RfpPage from "@/pages/rfp";
 import LoginPage from "@/pages/login";
 import NotFound from "@/pages/not-found";
+import DashboardPage from "@/pages/Dashboard";
+import NewInvestmentPage from "@/pages/NewInvestment";
+import MyInvestmentsPage from "@/pages/MyInvestments";
+import MyTasksPage from "@/pages/MyTasks";
+import TemplatesPage from "@/pages/Templates";
 import type { UserMastery } from "@shared/schema";
 
 function ProtectedLayout() {
@@ -57,6 +62,11 @@ function ProtectedLayout() {
           <Route path="/quiz" component={QuizPage} />
           <Route path="/atlas" component={AtlasPage} />
           <Route path="/rfp" component={RfpPage} />
+          <Route path="/dashboard" component={DashboardPage} />
+          <Route path="/new-investment" component={NewInvestmentPage} />
+          <Route path="/my-investments" component={MyInvestmentsPage} />
+          <Route path="/my-tasks" component={MyTasksPage} />
+          <Route path="/templates" component={TemplatesPage} />
           <Route component={NotFound} />
         </Switch>
       </div>

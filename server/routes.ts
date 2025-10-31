@@ -1013,6 +1013,285 @@ Write the response now:`;
     }
   });
 
+  // ===== Investment Portal API Routes =====
+  
+  // Investment routes
+  app.get("/api/investments", async (req, res) => {
+    try {
+      const userId = req.query.userId as string;
+      const status = req.query.status as string;
+      const investments = await storage.getInvestmentRequests({ userId, status });
+      res.json(investments);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch investments" });
+    }
+  });
+
+  app.get("/api/investments/:id", async (req, res) => {
+    try {
+      const investment = await storage.getInvestmentRequest(parseInt(req.params.id));
+      if (!investment) return res.status(404).json({ error: "Investment not found" });
+      res.json(investment);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch investment" });
+    }
+  });
+
+  app.post("/api/investments", async (req, res) => {
+    try {
+      const investment = await storage.createInvestmentRequest(req.body);
+      res.json(investment);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create investment" });
+    }
+  });
+
+  app.put("/api/investments/:id", async (req, res) => {
+    try {
+      const investment = await storage.updateInvestmentRequest(parseInt(req.params.id), req.body);
+      res.json(investment);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update investment" });
+    }
+  });
+
+  app.delete("/api/investments/:id", async (req, res) => {
+    try {
+      await storage.softDeleteInvestmentRequest(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete investment" });
+    }
+  });
+
+  // Task routes
+  app.get("/api/tasks", async (req, res) => {
+    try {
+      const userId = req.query.userId as string;
+      const tasks = await storage.getTasksByUser(userId);
+      res.json(tasks);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch tasks" });
+    }
+  });
+
+  app.get("/api/tasks/:id", async (req, res) => {
+    try {
+      const task = await storage.getTaskById(parseInt(req.params.id));
+      if (!task) return res.status(404).json({ error: "Task not found" });
+      res.json(task);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch task" });
+    }
+  });
+
+  app.post("/api/tasks", async (req, res) => {
+    try {
+      const task = await storage.createTask(req.body);
+      res.json(task);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create task" });
+    }
+  });
+
+  app.put("/api/tasks/:id", async (req, res) => {
+    try {
+      const task = await storage.updateTask(parseInt(req.params.id), req.body);
+      res.json(task);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update task" });
+    }
+  });
+
+  // Approval routes
+  app.get("/api/approvals/:requestType/:requestId", async (req, res) => {
+    try {
+      const approvals = await storage.getApprovalsByRequest(req.params.requestType, parseInt(req.params.requestId));
+      res.json(approvals);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch approvals" });
+    }
+  });
+
+  app.post("/api/approvals", async (req, res) => {
+    try {
+      const approval = await storage.createApproval(req.body);
+      res.json(approval);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create approval" });
+    }
+  });
+
+  // Document routes
+  app.get("/api/documents/:requestType/:requestId", async (req, res) => {
+    try {
+      const documents = await storage.getDocumentsByRequest(req.params.requestType, parseInt(req.params.requestId));
+      res.json(documents);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch documents" });
+    }
+  });
+
+  app.get("/api/documents/download/:id", async (req, res) => {
+    try {
+      const doc = await storage.getDocument(parseInt(req.params.id));
+      if (!doc) return res.status(404).json({ error: "Document not found" });
+      res.json(doc);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch document" });
+    }
+  });
+
+  app.post("/api/documents", async (req, res) => {
+    try {
+      const document = await storage.createDocument(req.body);
+      res.json(document);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create document" });
+    }
+  });
+
+  app.delete("/api/documents/:id", async (req, res) => {
+    try {
+      await storage.deleteDocument(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete document" });
+    }
+  });
+
+  // Document category routes
+  app.get("/api/document-categories", async (req, res) => {
+    try {
+      const categories = await storage.getDocumentCategories();
+      res.json(categories);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch categories" });
+    }
+  });
+
+  app.post("/api/document-categories", async (req, res) => {
+    try {
+      const category = await storage.createDocumentCategory(req.body);
+      res.json(category);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create category" });
+    }
+  });
+
+  // Template routes
+  app.get("/api/templates/investment", async (req, res) => {
+    try {
+      const templates = await storage.getTemplatesByType("investment");
+      res.json(templates);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch templates" });
+    }
+  });
+
+  app.get("/api/templates/:id", async (req, res) => {
+    try {
+      const template = await storage.getTemplate(parseInt(req.params.id));
+      if (!template) return res.status(404).json({ error: "Template not found" });
+      res.json(template);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch template" });
+    }
+  });
+
+  app.post("/api/templates", async (req, res) => {
+    try {
+      const template = await storage.createTemplate(req.body);
+      res.json(template);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create template" });
+    }
+  });
+
+  app.put("/api/templates/:id", async (req, res) => {
+    try {
+      const template = await storage.updateTemplate(parseInt(req.params.id), req.body);
+      res.json(template);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update template" });
+    }
+  });
+
+  app.delete("/api/templates/:id", async (req, res) => {
+    try {
+      await storage.deleteTemplate(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete template" });
+    }
+  });
+
+  // Investment rationale routes
+  app.get("/api/investments/:id/rationales", async (req, res) => {
+    try {
+      const rationales = await storage.getInvestmentRationales(parseInt(req.params.id));
+      res.json(rationales);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch rationales" });
+    }
+  });
+
+  app.post("/api/investments/:id/rationales", async (req, res) => {
+    try {
+      const rationale = await storage.createInvestmentRationale(req.body);
+      res.json(rationale);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create rationale" });
+    }
+  });
+
+  app.put("/api/investments/:investmentId/rationales/:id", async (req, res) => {
+    try {
+      const rationale = await storage.updateInvestmentRationale(parseInt(req.params.id), req.body);
+      res.json(rationale);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update rationale" });
+    }
+  });
+
+  app.delete("/api/investments/:investmentId/rationales/:id", async (req, res) => {
+    try {
+      await storage.deleteInvestmentRationale(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete rationale" });
+    }
+  });
+
+  // Notification routes
+  app.get("/api/notifications", async (req, res) => {
+    try {
+      const userId = req.query.userId as string;
+      const notifications = await storage.getUserNotifications(userId);
+      res.json(notifications);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch notifications" });
+    }
+  });
+
+  app.patch("/api/notifications/:id/read", async (req, res) => {
+    try {
+      await storage.markNotificationAsRead(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to mark notification as read" });
+    }
+  });
+
+  app.delete("/api/notifications/:id", async (req, res) => {
+    try {
+      await storage.deleteNotification(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete notification" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

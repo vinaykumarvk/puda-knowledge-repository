@@ -126,6 +126,57 @@ export interface IStorage {
   getReferencesForResponse(responseId: number): Promise<any[]>;
   getAllQuizStats(): Promise<Record<string, { bestScore: number; attempts: number }>>;
   
+  // Investment Portal methods
+  // Investment operations
+  getInvestmentRequest(id: number): Promise<InvestmentRequest | undefined>;
+  getInvestmentRequests(filters?: { userId?: string; status?: string }): Promise<InvestmentRequest[]>;
+  createInvestmentRequest(request: InsertInvestmentRequest): Promise<InvestmentRequest>;
+  updateInvestmentRequest(id: number, request: Partial<InsertInvestmentRequest>): Promise<InvestmentRequest>;
+  softDeleteInvestmentRequest(id: number): Promise<boolean>;
+  
+  // Approval operations
+  createApproval(approval: InsertApproval): Promise<Approval>;
+  getApprovalsByRequest(requestType: string, requestId: number): Promise<Approval[]>;
+  
+  // Task operations
+  createTask(task: InsertTask): Promise<Task>;
+  updateTask(id: number, task: Partial<InsertTask>): Promise<Task>;
+  getTasksByUser(userId: string): Promise<Task[]>;
+  getTaskById(id: number): Promise<Task | undefined>;
+  
+  // Document operations
+  createDocument(document: InsertDocument): Promise<Document>;
+  updateDocument(id: number, document: Partial<InsertDocument>): Promise<Document>;
+  deleteDocument(id: number): Promise<void>;
+  getDocumentsByRequest(requestType: string, requestId: number): Promise<Document[]>;
+  getDocument(id: number): Promise<Document | undefined>;
+  
+  // Document category operations
+  getDocumentCategories(): Promise<DocumentCategory[]>;
+  createDocumentCategory(category: InsertDocumentCategory): Promise<DocumentCategory>;
+  
+  // Notification operations
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  getUserNotifications(userId: string): Promise<Notification[]>;
+  markNotificationAsRead(id: number): Promise<void>;
+  deleteNotification(id: number): Promise<void>;
+  
+  // Template operations
+  createTemplate(template: InsertTemplate): Promise<Template>;
+  getTemplatesByType(type: string): Promise<Template[]>;
+  getTemplate(id: number): Promise<Template | undefined>;
+  updateTemplate(id: number, template: Partial<InsertTemplate>): Promise<Template>;
+  deleteTemplate(id: number): Promise<void>;
+  
+  // Investment rationale operations
+  createInvestmentRationale(rationale: InsertInvestmentRationale): Promise<InvestmentRationale>;
+  getInvestmentRationales(investmentId: number): Promise<InvestmentRationale[]>;
+  updateInvestmentRationale(id: number, rationale: Partial<InsertInvestmentRationale>): Promise<InvestmentRationale>;
+  deleteInvestmentRationale(id: number): Promise<void>;
+  
+  // Sequence operations
+  getNextSequenceValue(sequenceName: string, year: number): Promise<number>;
+  
   // Historical RFP methods (for RAG-based retrieval)
   getAllHistoricalRfps(): Promise<HistoricalRfp[]>;
   getHistoricalRfpById(id: number): Promise<HistoricalRfp | undefined>;
@@ -684,6 +735,187 @@ export class DatabaseStorage implements IStorage {
     if (points >= 241) return "Intermediate";
     if (points >= 121) return "Learning";
     return "Novice";
+  }
+
+  // ===== Investment Portal Methods =====
+  
+  async getInvestmentRequest(id: number): Promise<InvestmentRequest | undefined> {
+    const [request] = await db.select().from(investmentRequests).where(eq(investmentRequests.id, id));
+    return request;
+  }
+
+  async getInvestmentRequests(filters?: { userId?: string; status?: string }): Promise<InvestmentRequest[]> {
+    let query = db.select().from(investmentRequests).where(isNull(investmentRequests.deletedAt));
+    
+    const conditions = [isNull(investmentRequests.deletedAt)];
+    if (filters?.userId) conditions.push(eq(investmentRequests.requesterId, filters.userId));
+    if (filters?.status) conditions.push(eq(investmentRequests.status, filters.status));
+    
+    const requests = await db.select().from(investmentRequests).where(and(...conditions)).orderBy(desc(investmentRequests.createdAt));
+    return requests;
+  }
+
+  async createInvestmentRequest(request: InsertInvestmentRequest): Promise<InvestmentRequest> {
+    const [newRequest] = await db.insert(investmentRequests).values(request).returning();
+    return newRequest;
+  }
+
+  async updateInvestmentRequest(id: number, request: Partial<InsertInvestmentRequest>): Promise<InvestmentRequest> {
+    const [updated] = await db.update(investmentRequests).set(request).where(eq(investmentRequests.id, id)).returning();
+    return updated;
+  }
+
+  async softDeleteInvestmentRequest(id: number): Promise<boolean> {
+    await db.update(investmentRequests).set({ deletedAt: new Date() }).where(eq(investmentRequests.id, id));
+    return true;
+  }
+
+  async createApproval(approval: InsertApproval): Promise<Approval> {
+    const [newApproval] = await db.insert(approvals).values(approval).returning();
+    return newApproval;
+  }
+
+  async getApprovalsByRequest(requestType: string, requestId: number): Promise<Approval[]> {
+    return await db.select().from(approvals)
+      .where(and(eq(approvals.requestType, requestType), eq(approvals.requestId, requestId)))
+      .orderBy(desc(approvals.createdAt));
+  }
+
+  async createTask(task: InsertTask): Promise<Task> {
+    const [newTask] = await db.insert(tasks).values(task).returning();
+    return newTask;
+  }
+
+  async updateTask(id: number, task: Partial<InsertTask>): Promise<Task> {
+    const [updated] = await db.update(tasks).set(task).where(eq(tasks.id, id)).returning();
+    return updated;
+  }
+
+  async getTasksByUser(userId: string): Promise<Task[]> {
+    return await db.select().from(tasks)
+      .where(eq(tasks.assigneeId, userId))
+      .orderBy(desc(tasks.createdAt));
+  }
+
+  async getTaskById(id: number): Promise<Task | undefined> {
+    const [task] = await db.select().from(tasks).where(eq(tasks.id, id));
+    return task;
+  }
+
+  async createDocument(document: InsertDocument): Promise<Document> {
+    const [newDoc] = await db.insert(documents).values(document).returning();
+    return newDoc;
+  }
+
+  async updateDocument(id: number, document: Partial<InsertDocument>): Promise<Document> {
+    const [updated] = await db.update(documents).set(document).where(eq(documents.id, id)).returning();
+    return updated;
+  }
+
+  async deleteDocument(id: number): Promise<void> {
+    await db.delete(documents).where(eq(documents.id, id));
+  }
+
+  async getDocumentsByRequest(requestType: string, requestId: number): Promise<Document[]> {
+    return await db.select().from(documents)
+      .where(and(eq(documents.requestType, requestType), eq(documents.requestId, requestId)))
+      .orderBy(desc(documents.createdAt));
+  }
+
+  async getDocument(id: number): Promise<Document | undefined> {
+    const [doc] = await db.select().from(documents).where(eq(documents.id, id));
+    return doc;
+  }
+
+  async getDocumentCategories(): Promise<DocumentCategory[]> {
+    return await db.select().from(documentCategories).where(eq(documentCategories.isActive, true));
+  }
+
+  async createDocumentCategory(category: InsertDocumentCategory): Promise<DocumentCategory> {
+    const [newCategory] = await db.insert(documentCategories).values(category).returning();
+    return newCategory;
+  }
+
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    const [newNotification] = await db.insert(notifications).values(notification).returning();
+    return newNotification;
+  }
+
+  async getUserNotifications(userId: string): Promise<Notification[]> {
+    return await db.select().from(notifications)
+      .where(eq(notifications.userId, userId))
+      .orderBy(desc(notifications.createdAt));
+  }
+
+  async markNotificationAsRead(id: number): Promise<void> {
+    await db.update(notifications).set({ isRead: true }).where(eq(notifications.id, id));
+  }
+
+  async deleteNotification(id: number): Promise<void> {
+    await db.delete(notifications).where(eq(notifications.id, id));
+  }
+
+  async createTemplate(template: InsertTemplate): Promise<Template> {
+    const [newTemplate] = await db.insert(templates).values(template).returning();
+    return newTemplate;
+  }
+
+  async getTemplatesByType(type: string): Promise<Template[]> {
+    return await db.select().from(templates)
+      .where(and(eq(templates.type, type), eq(templates.isActive, true)))
+      .orderBy(desc(templates.createdAt));
+  }
+
+  async getTemplate(id: number): Promise<Template | undefined> {
+    const [template] = await db.select().from(templates).where(eq(templates.id, id));
+    return template;
+  }
+
+  async updateTemplate(id: number, template: Partial<InsertTemplate>): Promise<Template> {
+    const [updated] = await db.update(templates).set(template).where(eq(templates.id, id)).returning();
+    return updated;
+  }
+
+  async deleteTemplate(id: number): Promise<void> {
+    await db.delete(templates).where(eq(templates.id, id));
+  }
+
+  async createInvestmentRationale(rationale: InsertInvestmentRationale): Promise<InvestmentRationale> {
+    const [newRationale] = await db.insert(investmentRationales).values(rationale).returning();
+    return newRationale;
+  }
+
+  async getInvestmentRationales(investmentId: number): Promise<InvestmentRationale[]> {
+    return await db.select().from(investmentRationales)
+      .where(eq(investmentRationales.investmentId, investmentId))
+      .orderBy(desc(investmentRationales.createdAt));
+  }
+
+  async updateInvestmentRationale(id: number, rationale: Partial<InsertInvestmentRationale>): Promise<InvestmentRationale> {
+    const [updated] = await db.update(investmentRationales).set(rationale).where(eq(investmentRationales.id, id)).returning();
+    return updated;
+  }
+
+  async deleteInvestmentRationale(id: number): Promise<void> {
+    await db.delete(investmentRationales).where(eq(investmentRationales.id, id));
+  }
+
+  async getNextSequenceValue(sequenceName: string, year: number): Promise<number> {
+    const [existing] = await db.select().from(sequences)
+      .where(and(eq(sequences.sequenceName, sequenceName), eq(sequences.year, year)));
+    
+    if (existing) {
+      const nextValue = existing.currentValue + 1;
+      await db.update(sequences)
+        .set({ currentValue: nextValue, updatedAt: new Date() })
+        .where(eq(sequences.id, existing.id));
+      return nextValue;
+    } else {
+      const [newSeq] = await db.insert(sequences)
+        .values({ sequenceName, year, currentValue: 1 })
+        .returning();
+      return 1;
+    }
   }
 }
 
