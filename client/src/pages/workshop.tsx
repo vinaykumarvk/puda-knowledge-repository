@@ -6,9 +6,16 @@ export default function WorkshopPage() {
   const [, setLocation] = useLocation();
   const templates = [
     {
-      name: "Base Document Draft Creator",
-      description: "Create foundational documents for wealth management projects",
-      icon: FileEdit,
+      name: "Investment Portal",
+      description: "Complete investment management system with proposals, approvals, and tracking",
+      icon: Briefcase,
+      route: "/investment-portal",
+    },
+    {
+      name: "RFP Generator",
+      description: "Develop detailed responses to Request for Proposals efficiently",
+      icon: Clipboard,
+      route: "/rfp",
     },
     {
       name: "Solution Document Workplace",
@@ -19,42 +26,6 @@ export default function WorkshopPage() {
       name: "Test Case Scenarios Creator",
       description: "Generate test cases using previously created documents",
       icon: ListChecks,
-    },
-    {
-      name: "RFP Generator",
-      description: "Develop detailed responses to Request for Proposals efficiently",
-      icon: Clipboard,
-      route: "/rfp",
-    },
-    {
-      name: "Investment Dashboard",
-      description: "Overview of all investments, approvals, and key metrics",
-      icon: LayoutDashboard,
-      route: "/dashboard",
-    },
-    {
-      name: "New Investment Request",
-      description: "Create and submit new investment proposals with AI assistance",
-      icon: TrendingUp,
-      route: "/new-investment",
-    },
-    {
-      name: "My Investments",
-      description: "Track and manage your investment requests and approvals",
-      icon: Briefcase,
-      route: "/my-investments",
-    },
-    {
-      name: "My Tasks",
-      description: "Review pending approvals and action items assigned to you",
-      icon: CheckSquare,
-      route: "/my-tasks",
-    },
-    {
-      name: "Investment Templates",
-      description: "Browse and use pre-built investment proposal templates",
-      icon: FileText,
-      route: "/templates",
     },
     {
       name: "Market Regulation Checker",
