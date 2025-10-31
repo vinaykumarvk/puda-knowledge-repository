@@ -233,12 +233,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       try {
         // Use OpenAI Whisper API for transcription
+        // OpenAI SDK accepts ReadStream for file parameter in Node.js
+        const fileStream = await import('fs').then(fs => fs.createReadStream(tempFilePath));
+        
         const transcription = await openai.audio.transcriptions.create({
-          file: await fs.readFile(tempFilePath).then(buffer => {
-            return new File([buffer], req.file!.originalname, { 
-              type: req.file!.mimetype 
-            });
-          }),
+          file: fileStream,
           model: "whisper-1",
           language: "en",
           response_format: "json",
