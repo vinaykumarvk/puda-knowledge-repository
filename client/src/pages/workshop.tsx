@@ -1,4 +1,4 @@
-import { Wrench, FileEdit, FolderOpen, ListChecks, Clipboard, Shield, ScanSearch } from "lucide-react";
+import { Wrench, FileEdit, FolderOpen, ListChecks, Clipboard, Shield, ScanSearch, LayoutDashboard, TrendingUp, Briefcase, CheckSquare, FileText } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLocation } from "wouter";
 
@@ -24,6 +24,37 @@ export default function WorkshopPage() {
       name: "RFP Generator",
       description: "Develop detailed responses to Request for Proposals efficiently",
       icon: Clipboard,
+      route: "/rfp",
+    },
+    {
+      name: "Investment Dashboard",
+      description: "Overview of all investments, approvals, and key metrics",
+      icon: LayoutDashboard,
+      route: "/dashboard",
+    },
+    {
+      name: "New Investment Request",
+      description: "Create and submit new investment proposals with AI assistance",
+      icon: TrendingUp,
+      route: "/new-investment",
+    },
+    {
+      name: "My Investments",
+      description: "Track and manage your investment requests and approvals",
+      icon: Briefcase,
+      route: "/my-investments",
+    },
+    {
+      name: "My Tasks",
+      description: "Review pending approvals and action items assigned to you",
+      icon: CheckSquare,
+      route: "/my-tasks",
+    },
+    {
+      name: "Investment Templates",
+      description: "Browse and use pre-built investment proposal templates",
+      icon: FileText,
+      route: "/templates",
     },
     {
       name: "Market Regulation Checker",
@@ -58,14 +89,14 @@ export default function WorkshopPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {templates.map((template) => {
               const Icon = template.icon;
-              const isRfpGenerator = template.name === "RFP Generator";
+              const hasRoute = 'route' in template;
               return (
                 <Card
                   key={template.name}
-                  className="hover:shadow-lg hover:border-primary/50 transition-all cursor-pointer bg-card"
+                  className={`hover:shadow-lg hover:border-primary/50 transition-all ${hasRoute ? 'cursor-pointer' : 'cursor-default opacity-60'} bg-card`}
                   onClick={() => {
-                    if (isRfpGenerator) {
-                      setLocation("/rfp");
+                    if (hasRoute && template.route) {
+                      setLocation(template.route);
                     }
                   }}
                   data-testid={`card-template-${template.name.toLowerCase().replace(/\s+/g, '-')}`}
