@@ -51,11 +51,10 @@ interface ProposalFilters {
 }
 
 export default function Dashboard() {
-  const userQuery = useUser();
-  const user = userQuery?.data;
+  const user = useUser();
   
   // Section visibility state
-  const [sectionsCollapsed, setSectionsCollapsed] = useState({
+  const [sectionsCollapsed, setSectionsCollapsed] = useState<Record<string, boolean>>({
     overview: false,
     proposalSummary: false,
     decisionSupport: false,
@@ -86,15 +85,15 @@ export default function Dashboard() {
   });
 
   // Enhanced stats for new dashboard
-  const { data: enhancedStats, isLoading: enhancedStatsLoading } = useQuery({
+  const { data: enhancedStats = {}, isLoading: enhancedStatsLoading } = useQuery<any>({
     queryKey: ["/api/dashboard/enhanced-stats"],
   });
 
-  const { data: recentRequests, isLoading: requestsLoading } = useQuery<RecentRequest[]>({
+  const { data: recentRequests = [], isLoading: requestsLoading } = useQuery<RecentRequest[]>({
     queryKey: ["/api/dashboard/recent-requests"],
   });
 
-  const { data: myTasks, isLoading: tasksLoading } = useQuery({
+  const { data: myTasks = [], isLoading: tasksLoading } = useQuery<any[]>({
     queryKey: ["/api/tasks"],
   });
 
@@ -174,7 +173,7 @@ export default function Dashboard() {
   const uniqueCompanies = useMemo(() => {
     if (!recentRequests) return [];
     const companies = recentRequests.map(r => r.targetCompany).filter(Boolean);
-    return [...new Set(companies)];
+    return Array.from(new Set(companies));
   }, [recentRequests]);
 
   // Clear all filters
@@ -284,84 +283,88 @@ export default function Dashboard() {
         {enhancedStats && (
           <div className="space-y-4">
             {/* Proposal Summary Section */}
-            <div id="proposal-summary" className="space-y-4">
-              <Collapsible 
-                open={!sectionsCollapsed.proposalSummary} 
-                onOpenChange={() => toggleSection('proposalSummary')}
-              >
-                <CollapsibleTrigger asChild>
-                  <Button variant="ghost" className="w-full justify-between p-4 h-auto">
-                    <div className="flex items-center gap-2">
-                      <Target className="h-5 w-5" />
-                      <h3 className="text-lg font-semibold">Proposal Summary</h3>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="hover:bg-accent rounded-sm p-1 cursor-pointer"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          scrollToTop();
-                        }}
-                      >
-                        <ArrowUp className="h-4 w-4" />
+            {enhancedStats?.proposalSummary && (
+              <div id="proposal-summary" className="space-y-4">
+                <Collapsible 
+                  open={!sectionsCollapsed.proposalSummary} 
+                  onOpenChange={() => toggleSection('proposalSummary')}
+                >
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" className="w-full justify-between p-4 h-auto">
+                      <div className="flex items-center gap-2">
+                        <Target className="h-5 w-5" />
+                        <h3 className="text-lg font-semibold">Proposal Summary</h3>
                       </div>
-                      {sectionsCollapsed.proposalSummary ? 
-                        <ChevronDown className="h-4 w-4" /> : 
-                        <ChevronUp className="h-4 w-4" />
-                      }
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="hover:bg-accent rounded-sm p-1 cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            scrollToTop();
+                          }}
+                        >
+                          <ArrowUp className="h-4 w-4" />
+                        </div>
+                        {sectionsCollapsed.proposalSummary ? 
+                          <ChevronDown className="h-4 w-4" /> : 
+                          <ChevronUp className="h-4 w-4" />
+                        }
+                      </div>
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="mt-4">
+                      <ProposalSummaryCard 
+                        data={enhancedStats.proposalSummary} 
+                        userRole={userRole}
+                      />
                     </div>
-                  </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <div className="mt-4">
-                    <ProposalSummaryCard 
-                      data={enhancedStats.proposalSummary} 
-                      userRole={userRole}
-                    />
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
-            </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              </div>
+            )}
 
             {/* Decision Support Section */}
-            <div id="decision-support" className="space-y-4">
-              <Collapsible 
-                open={!sectionsCollapsed.decisionSupport} 
-                onOpenChange={() => toggleSection('decisionSupport')}
-              >
-                <CollapsibleTrigger asChild>
-                  <Button variant="ghost" className="w-full justify-between p-4 h-auto">
-                    <div className="flex items-center gap-2">
-                      <Shield className="h-5 w-5" />
-                      <h3 className="text-lg font-semibold">Decision Support</h3>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="hover:bg-accent rounded-sm p-1 cursor-pointer"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          scrollToTop();
-                        }}
-                      >
-                        <ArrowUp className="h-4 w-4" />
+            {enhancedStats?.decisionSupport && (
+              <div id="decision-support" className="space-y-4">
+                <Collapsible 
+                  open={!sectionsCollapsed.decisionSupport} 
+                  onOpenChange={() => toggleSection('decisionSupport')}
+                >
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" className="w-full justify-between p-4 h-auto">
+                      <div className="flex items-center gap-2">
+                        <Shield className="h-5 w-5" />
+                        <h3 className="text-lg font-semibold">Decision Support</h3>
                       </div>
-                      {sectionsCollapsed.decisionSupport ? 
-                        <ChevronDown className="h-4 w-4" /> : 
-                        <ChevronUp className="h-4 w-4" />
-                      }
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="hover:bg-accent rounded-sm p-1 cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            scrollToTop();
+                          }}
+                        >
+                          <ArrowUp className="h-4 w-4" />
+                        </div>
+                        {sectionsCollapsed.decisionSupport ? 
+                          <ChevronDown className="h-4 w-4" /> : 
+                          <ChevronUp className="h-4 w-4" />
+                        }
+                      </div>
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="mt-4">
+                      <DecisionSupportWidget 
+                        data={enhancedStats.decisionSupport} 
+                        userRole={userRole}
+                      />
                     </div>
-                  </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <div className="mt-4">
-                    <DecisionSupportWidget 
-                      data={enhancedStats.decisionSupport} 
-                      userRole={userRole}
-                    />
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
-            </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              </div>
+            )}
 
             {/* Analytics Section */}
             <div id="analytics" className="space-y-4">
@@ -394,8 +397,8 @@ export default function Dashboard() {
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
-                    <RiskProfileChart data={enhancedStats.riskProfile} />
-                    <ValueDistributionChart data={enhancedStats.valueDistribution} />
+                    {enhancedStats?.riskProfile && <RiskProfileChart data={enhancedStats.riskProfile} />}
+                    {enhancedStats?.valueDistribution && <ValueDistributionChart data={enhancedStats.valueDistribution} />}
                   </div>
                 </CollapsibleContent>
               </Collapsible>
