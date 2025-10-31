@@ -83,7 +83,8 @@ export function VoiceInputButton({ onTranscriptionComplete, disabled }: VoiceInp
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       const recognition = new SpeechRecognition();
 
-      recognition.continuous = true;
+      // Set to false for automatic stop after silence
+      recognition.continuous = false;
       recognition.interimResults = true;
       recognition.lang = 'en-US';
 
@@ -126,39 +127,20 @@ export function VoiceInputButton({ onTranscriptionComplete, disabled }: VoiceInp
     }
   };
 
-  const stopRecording = () => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-      recognitionRef.current = null;
-    }
-  };
-
-  const handleToggle = () => {
-    if (isRecording) {
-      stopRecording();
-    } else {
-      startRecording();
-    }
-  };
-
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
           data-testid="button-voice-input"
-          onClick={handleToggle}
-          disabled={disabled}
+          onClick={startRecording}
+          disabled={disabled || isRecording}
           variant={isRecording ? "default" : "outline"}
           size="lg"
           className={`h-[60px] w-[60px] p-0 ${
             isRecording ? 'bg-red-500 hover:bg-red-600 animate-pulse' : ''
           }`}
         >
-          {isRecording ? (
-            <Square className="w-5 h-5" />
-          ) : (
-            <Mic className="w-5 h-5" />
-          )}
+          <Mic className="w-5 h-5" />
         </Button>
       </TooltipTrigger>
       <TooltipContent side="top" className="max-w-xs">
