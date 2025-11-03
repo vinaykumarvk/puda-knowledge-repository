@@ -604,6 +604,68 @@ export const insertInvestmentRationaleSchema = createInsertSchema(investmentRati
   updatedAt: true,
 });
 
+// Solution Templates - for Business Analyst solution documents
+export const solutionTemplates = pgTable("solution_templates", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description"),
+  createdBy: varchar("created_by").references(() => users.id),
+  isDefault: boolean("is_default").default(false), // Whether this is a default template
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Template Sections - individual sections within a template
+export const templateSections = pgTable("template_sections", {
+  id: serial("id").primaryKey(),
+  templateId: integer("template_id").references(() => solutionTemplates.id, { onDelete: "cascade" }),
+  sectionType: text("section_type").notNull(), // heading, revisionHistory, tableOfContents, changeRequirement, businessImpact, affectedSystems, solution, testScenarios
+  title: text("title").notNull(),
+  content: text("content"), // Editable content for the section
+  orderIndex: integer("order_index").notNull(), // For ordering sections
+  isEditable: boolean("is_editable").default(true),
+});
+
+// Template Work Items - specific work items within Solution section
+export const templateWorkItems = pgTable("template_work_items", {
+  id: serial("id").primaryKey(),
+  sectionId: integer("section_id").references(() => templateSections.id, { onDelete: "cascade" }),
+  title: text("title").notNull(), // e.g., "Description of Change", "Logic and Validations"
+  content: text("content"), // Editable content
+  orderIndex: integer("order_index").notNull(),
+  isIncluded: boolean("is_included").default(true), // Whether this work item is included in current template
+});
+
+// Template Revisions - track changes to templates
+export const templateRevisions = pgTable("template_revisions", {
+  id: serial("id").primaryKey(),
+  templateId: integer("template_id").references(() => solutionTemplates.id, { onDelete: "cascade" }),
+  version: text("version").notNull(), // e.g., "1.0", "1.1"
+  changedBy: varchar("changed_by").references(() => users.id),
+  changeDate: timestamp("change_date").defaultNow(),
+  changeDescription: text("change_description"),
+});
+
+// Insert schemas for solution templates
+export const insertSolutionTemplateSchema = createInsertSchema(solutionTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertTemplateSectionSchema = createInsertSchema(templateSections).omit({
+  id: true,
+});
+
+export const insertTemplateWorkItemSchema = createInsertSchema(templateWorkItems).omit({
+  id: true,
+});
+
+export const insertTemplateRevisionSchema = createInsertSchema(templateRevisions).omit({
+  id: true,
+  changeDate: true,
+});
+
 // Investment Portal Types
 export type InsertInvestmentRequest = z.infer<typeof insertInvestmentRequestSchema>;
 export type InvestmentRequest = typeof investmentRequests.$inferSelect;
@@ -628,3 +690,16 @@ export type Template = typeof templates.$inferSelect;
 
 export type InsertInvestmentRationale = z.infer<typeof insertInvestmentRationaleSchema>;
 export type InvestmentRationale = typeof investmentRationales.$inferSelect;
+
+// Solution Template Types
+export type InsertSolutionTemplate = z.infer<typeof insertSolutionTemplateSchema>;
+export type SolutionTemplate = typeof solutionTemplates.$inferSelect;
+
+export type InsertTemplateSection = z.infer<typeof insertTemplateSectionSchema>;
+export type TemplateSection = typeof templateSections.$inferSelect;
+
+export type InsertTemplateWorkItem = z.infer<typeof insertTemplateWorkItemSchema>;
+export type TemplateWorkItem = typeof templateWorkItems.$inferSelect;
+
+export type InsertTemplateRevision = z.infer<typeof insertTemplateRevisionSchema>;
+export type TemplateRevision = typeof templateRevisions.$inferSelect;

@@ -1292,6 +1292,249 @@ Write the response now:`;
     }
   });
 
+  // Solution Template routes
+  app.post("/api/solution-templates/init", async (req, res) => {
+    try {
+      // Create default template
+      const template = await storage.createSolutionTemplate({
+        title: "Standard Solution Document",
+        description: "Business Analyst standard format for system change documentation",
+        isDefault: true
+      });
+
+      // Create sections in order
+      const sectionsData = [
+        { type: "heading", title: "Document Header", orderIndex: 0 },
+        { type: "revisionHistory", title: "Revision History", orderIndex: 1 },
+        { type: "tableOfContents", title: "Table of Contents", orderIndex: 2 },
+        { type: "changeRequirement", title: "1. Change Requirement", orderIndex: 3 },
+        { type: "businessImpact", title: "2. Business Impact", orderIndex: 4 },
+        { type: "affectedSystems", title: "3. Affected Systems", orderIndex: 5 },
+        { type: "solution", title: "4. Solution", orderIndex: 6 },
+        { type: "testScenarios", title: "5. Test Scenarios", orderIndex: 7 }
+      ];
+
+      const sections = [];
+      for (const sectionData of sectionsData) {
+        const section = await storage.createTemplateSection({
+          templateId: template.id,
+          sectionType: sectionData.type,
+          title: sectionData.title,
+          content: null,
+          orderIndex: sectionData.orderIndex,
+          isEditable: true
+        });
+        sections.push(section);
+      }
+
+      // Add default work items to Solution section
+      const solutionSection = sections.find(s => s.sectionType === "solution");
+      if (solutionSection) {
+        const workItemsData = [
+          { title: "Description of Change", orderIndex: 0 },
+          { title: "Logic and Validations", orderIndex: 1 },
+          { title: "UI Changes", orderIndex: 2 },
+          { title: "Batch Processing", orderIndex: 3 },
+          { title: "API Changes", orderIndex: 4 },
+          { title: "Field-Level Changes", orderIndex: 5 }
+        ];
+
+        for (const workItemData of workItemsData) {
+          await storage.createTemplateWorkItem({
+            sectionId: solutionSection.id,
+            title: workItemData.title,
+            content: null,
+            orderIndex: workItemData.orderIndex,
+            isIncluded: true
+          });
+        }
+      }
+
+      // Add pre-populated content for Affected Systems
+      const affectedSystemsSection = sections.find(s => s.sectionType === "affectedSystems");
+      if (affectedSystemsSection) {
+        await storage.updateTemplateSection(affectedSystemsSection.id, {
+          content: `- RM Office
+- Operations Office
+- Client Portal
+- Revenue Desk
+- Sigma (Reports Module)
+- APIs`
+        });
+      }
+
+      res.json(template);
+    } catch (error) {
+      console.error("Failed to initialize template:", error);
+      res.status(500).json({ error: "Failed to initialize template" });
+    }
+  });
+
+  app.get("/api/solution-templates", async (req, res) => {
+    try {
+      const templates = await storage.getAllSolutionTemplates();
+      res.json(templates);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch solution templates" });
+    }
+  });
+
+  app.get("/api/solution-templates/default", async (req, res) => {
+    try {
+      const template = await storage.getDefaultSolutionTemplate();
+      if (!template) {
+        res.status(404).json({ error: "No default template found" });
+        return;
+      }
+      res.json(template);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch default template" });
+    }
+  });
+
+  app.get("/api/solution-templates/:id", async (req, res) => {
+    try {
+      const template = await storage.getSolutionTemplate(parseInt(req.params.id));
+      if (!template) {
+        res.status(404).json({ error: "Template not found" });
+        return;
+      }
+      res.json(template);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch solution template" });
+    }
+  });
+
+  app.get("/api/solution-templates/:id/complete", async (req, res) => {
+    try {
+      const completeTemplate = await storage.getCompleteTemplate(parseInt(req.params.id));
+      if (!completeTemplate) {
+        res.status(404).json({ error: "Template not found" });
+        return;
+      }
+      res.json(completeTemplate);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch complete template" });
+    }
+  });
+
+  app.post("/api/solution-templates", async (req, res) => {
+    try {
+      const template = await storage.createSolutionTemplate(req.body);
+      res.json(template);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create solution template" });
+    }
+  });
+
+  app.put("/api/solution-templates/:id", async (req, res) => {
+    try {
+      const template = await storage.updateSolutionTemplate(parseInt(req.params.id), req.body);
+      res.json(template);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update solution template" });
+    }
+  });
+
+  app.delete("/api/solution-templates/:id", async (req, res) => {
+    try {
+      await storage.deleteSolutionTemplate(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete solution template" });
+    }
+  });
+
+  app.get("/api/template-sections/:templateId", async (req, res) => {
+    try {
+      const sections = await storage.getTemplateSections(parseInt(req.params.templateId));
+      res.json(sections);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch template sections" });
+    }
+  });
+
+  app.post("/api/template-sections", async (req, res) => {
+    try {
+      const section = await storage.createTemplateSection(req.body);
+      res.json(section);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create template section" });
+    }
+  });
+
+  app.put("/api/template-sections/:id", async (req, res) => {
+    try {
+      const section = await storage.updateTemplateSection(parseInt(req.params.id), req.body);
+      res.json(section);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update template section" });
+    }
+  });
+
+  app.delete("/api/template-sections/:id", async (req, res) => {
+    try {
+      await storage.deleteTemplateSection(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete template section" });
+    }
+  });
+
+  app.get("/api/template-work-items/:sectionId", async (req, res) => {
+    try {
+      const workItems = await storage.getTemplateWorkItems(parseInt(req.params.sectionId));
+      res.json(workItems);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch template work items" });
+    }
+  });
+
+  app.post("/api/template-work-items", async (req, res) => {
+    try {
+      const workItem = await storage.createTemplateWorkItem(req.body);
+      res.json(workItem);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create template work item" });
+    }
+  });
+
+  app.put("/api/template-work-items/:id", async (req, res) => {
+    try {
+      const workItem = await storage.updateTemplateWorkItem(parseInt(req.params.id), req.body);
+      res.json(workItem);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update template work item" });
+    }
+  });
+
+  app.delete("/api/template-work-items/:id", async (req, res) => {
+    try {
+      await storage.deleteTemplateWorkItem(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete template work item" });
+    }
+  });
+
+  app.get("/api/template-revisions/:templateId", async (req, res) => {
+    try {
+      const revisions = await storage.getTemplateRevisions(parseInt(req.params.templateId));
+      res.json(revisions);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch template revisions" });
+    }
+  });
+
+  app.post("/api/template-revisions", async (req, res) => {
+    try {
+      const revision = await storage.createTemplateRevision(req.body);
+      res.json(revision);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create template revision" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

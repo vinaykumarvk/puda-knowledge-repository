@@ -57,7 +57,19 @@ import {
   type Template,
   type InsertTemplate,
   type InvestmentRationale,
-  type InsertInvestmentRationale
+  type InsertInvestmentRationale,
+  solutionTemplates,
+  templateSections,
+  templateWorkItems,
+  templateRevisions,
+  type SolutionTemplate,
+  type InsertSolutionTemplate,
+  type TemplateSection,
+  type InsertTemplateSection,
+  type TemplateWorkItem,
+  type InsertTemplateWorkItem,
+  type TemplateRevision,
+  type InsertTemplateRevision
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, sql, or, ne, isNull } from "drizzle-orm";
@@ -184,6 +196,37 @@ export interface IStorage {
   updateHistoricalRfp(id: number, updates: Partial<InsertHistoricalRfp>): Promise<HistoricalRfp>;
   deleteHistoricalRfp(id: number): Promise<void>;
   searchHistoricalRfpsBySimilarity(embedding: number[], topK: number): Promise<Array<HistoricalRfp & { similarity: number }>>;
+  
+  // Solution Template operations
+  createSolutionTemplate(template: InsertSolutionTemplate): Promise<SolutionTemplate>;
+  getSolutionTemplate(id: number): Promise<SolutionTemplate | undefined>;
+  getAllSolutionTemplates(): Promise<SolutionTemplate[]>;
+  updateSolutionTemplate(id: number, template: Partial<InsertSolutionTemplate>): Promise<SolutionTemplate>;
+  deleteSolutionTemplate(id: number): Promise<void>;
+  getDefaultSolutionTemplate(): Promise<SolutionTemplate | undefined>;
+  
+  // Template Section operations
+  createTemplateSection(section: InsertTemplateSection): Promise<TemplateSection>;
+  getTemplateSections(templateId: number): Promise<TemplateSection[]>;
+  updateTemplateSection(id: number, section: Partial<InsertTemplateSection>): Promise<TemplateSection>;
+  deleteTemplateSection(id: number): Promise<void>;
+  
+  // Template Work Item operations
+  createTemplateWorkItem(workItem: InsertTemplateWorkItem): Promise<TemplateWorkItem>;
+  getTemplateWorkItems(sectionId: number): Promise<TemplateWorkItem[]>;
+  updateTemplateWorkItem(id: number, workItem: Partial<InsertTemplateWorkItem>): Promise<TemplateWorkItem>;
+  deleteTemplateWorkItem(id: number): Promise<void>;
+  
+  // Template Revision operations
+  createTemplateRevision(revision: InsertTemplateRevision): Promise<TemplateRevision>;
+  getTemplateRevisions(templateId: number): Promise<TemplateRevision[]>;
+  
+  // Complete template with sections and work items
+  getCompleteTemplate(templateId: number): Promise<{
+    template: SolutionTemplate;
+    sections: Array<TemplateSection & { workItems: TemplateWorkItem[] }>;
+    revisions: TemplateRevision[];
+  } | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -924,6 +967,120 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return 1;
     }
+  }
+
+  async createSolutionTemplate(template: InsertSolutionTemplate): Promise<SolutionTemplate> {
+    const [newTemplate] = await db.insert(solutionTemplates).values(template).returning();
+    return newTemplate;
+  }
+
+  async getSolutionTemplate(id: number): Promise<SolutionTemplate | undefined> {
+    const [template] = await db.select().from(solutionTemplates).where(eq(solutionTemplates.id, id));
+    return template;
+  }
+
+  async getAllSolutionTemplates(): Promise<SolutionTemplate[]> {
+    return await db.select().from(solutionTemplates).orderBy(desc(solutionTemplates.createdAt));
+  }
+
+  async updateSolutionTemplate(id: number, template: Partial<InsertSolutionTemplate>): Promise<SolutionTemplate> {
+    const [updated] = await db.update(solutionTemplates)
+      .set({ ...template, updatedAt: new Date() })
+      .where(eq(solutionTemplates.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteSolutionTemplate(id: number): Promise<void> {
+    await db.delete(solutionTemplates).where(eq(solutionTemplates.id, id));
+  }
+
+  async getDefaultSolutionTemplate(): Promise<SolutionTemplate | undefined> {
+    const [template] = await db.select().from(solutionTemplates)
+      .where(eq(solutionTemplates.isDefault, true));
+    return template;
+  }
+
+  async createTemplateSection(section: InsertTemplateSection): Promise<TemplateSection> {
+    const [newSection] = await db.insert(templateSections).values(section).returning();
+    return newSection;
+  }
+
+  async getTemplateSections(templateId: number): Promise<TemplateSection[]> {
+    return await db.select().from(templateSections)
+      .where(eq(templateSections.templateId, templateId))
+      .orderBy(templateSections.orderIndex);
+  }
+
+  async updateTemplateSection(id: number, section: Partial<InsertTemplateSection>): Promise<TemplateSection> {
+    const [updated] = await db.update(templateSections)
+      .set(section)
+      .where(eq(templateSections.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTemplateSection(id: number): Promise<void> {
+    await db.delete(templateSections).where(eq(templateSections.id, id));
+  }
+
+  async createTemplateWorkItem(workItem: InsertTemplateWorkItem): Promise<TemplateWorkItem> {
+    const [newWorkItem] = await db.insert(templateWorkItems).values(workItem).returning();
+    return newWorkItem;
+  }
+
+  async getTemplateWorkItems(sectionId: number): Promise<TemplateWorkItem[]> {
+    return await db.select().from(templateWorkItems)
+      .where(eq(templateWorkItems.sectionId, sectionId))
+      .orderBy(templateWorkItems.orderIndex);
+  }
+
+  async updateTemplateWorkItem(id: number, workItem: Partial<InsertTemplateWorkItem>): Promise<TemplateWorkItem> {
+    const [updated] = await db.update(templateWorkItems)
+      .set(workItem)
+      .where(eq(templateWorkItems.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTemplateWorkItem(id: number): Promise<void> {
+    await db.delete(templateWorkItems).where(eq(templateWorkItems.id, id));
+  }
+
+  async createTemplateRevision(revision: InsertTemplateRevision): Promise<TemplateRevision> {
+    const [newRevision] = await db.insert(templateRevisions).values(revision).returning();
+    return newRevision;
+  }
+
+  async getTemplateRevisions(templateId: number): Promise<TemplateRevision[]> {
+    return await db.select().from(templateRevisions)
+      .where(eq(templateRevisions.templateId, templateId))
+      .orderBy(desc(templateRevisions.changeDate));
+  }
+
+  async getCompleteTemplate(templateId: number): Promise<{
+    template: SolutionTemplate;
+    sections: Array<TemplateSection & { workItems: TemplateWorkItem[] }>;
+    revisions: TemplateRevision[];
+  } | undefined> {
+    const template = await this.getSolutionTemplate(templateId);
+    if (!template) return undefined;
+
+    const sections = await this.getTemplateSections(templateId);
+    const sectionsWithWorkItems = await Promise.all(
+      sections.map(async (section) => {
+        const workItems = await this.getTemplateWorkItems(section.id);
+        return { ...section, workItems };
+      })
+    );
+
+    const revisions = await this.getTemplateRevisions(templateId);
+
+    return {
+      template,
+      sections: sectionsWithWorkItems,
+      revisions,
+    };
   }
 }
 
