@@ -349,6 +349,7 @@ export const referenceResponsesRelations = relations(referenceResponses, ({ one 
 export const investmentRequests = pgTable("investment_requests", {
   id: serial("id").primaryKey(),
   requestId: text("request_id").notNull().unique(), // INV-2025-001
+  reportCode: text("report_code").unique(), // Unique code like RPT-2025-001 for searching and filtering
   requesterId: varchar("requester_id").references(() => users.id), // Changed to varchar for UUID
   targetCompany: text("target_company").notNull(),
   investmentType: text("investment_type").notNull(), // equity, debt, real_estate, alternative

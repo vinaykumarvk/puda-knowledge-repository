@@ -756,6 +756,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createInvestmentRequest(request: InsertInvestmentRequest): Promise<InvestmentRequest> {
+    // Generate unique report code if not provided (RPT-YYYY-XXX format)
+    if (!request.reportCode) {
+      const year = new Date().getFullYear();
+      const count = await db.select().from(investmentRequests).where(sql`EXTRACT(YEAR FROM created_at) = ${year}`);
+      const nextNumber = count.length + 1;
+      request.reportCode = `RPT-${year}-${String(nextNumber).padStart(3, '0')}`;
+    }
+    
     const [newRequest] = await db.insert(investmentRequests).values(request).returning();
     return newRequest;
   }
