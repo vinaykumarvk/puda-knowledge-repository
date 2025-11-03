@@ -33,16 +33,9 @@ import { useToast } from "@/hooks/use-toast";
 
 // Filter interfaces
 interface InvestmentFilters {
-  searchRequestId: string;
+  searchReportCode: string;
   selectedCompanies: string[];
-  selectedRiskLevels: string[];
-  selectedInvestmentTypes: string[];
-  expectedReturnMode: 'range' | 'specific';
-  expectedReturnRange: [number, number];
-  expectedReturnSpecific: string;
-  amountRange: [number, number];
-  amountMin: string;
-  amountMax: string;
+  selectedReportTypes: string[];
 }
 
 export default function MyInvestments() {
@@ -52,16 +45,9 @@ export default function MyInvestments() {
   
   // Filter state
   const [filters, setFilters] = useState<InvestmentFilters>({
-    searchRequestId: '',
+    searchReportCode: '',
     selectedCompanies: [],
-    selectedRiskLevels: [],
-    selectedInvestmentTypes: [],
-    expectedReturnMode: 'range',
-    expectedReturnRange: [0, 50],
-    expectedReturnSpecific: '',
-    amountRange: [0, 10000000],
-    amountMin: '',
-    amountMax: ''
+    selectedReportTypes: [],
   });
 
   const { data: investments, isLoading } = useQuery({
@@ -77,7 +63,7 @@ export default function MyInvestments() {
     return [...new Set(investments?.map((inv: any) => inv.targetCompany) || [])].sort();
   }, [investments]);
 
-  const uniqueInvestmentTypes = useMemo(() => {
+  const uniqueReportTypes = useMemo(() => {
     return [...new Set(investments?.map((inv: any) => inv.investmentType) || [])].sort();
   }, [investments]);
 
@@ -86,50 +72,24 @@ export default function MyInvestments() {
     if (!investments) return [];
     
     return investments.filter((inv: any) => {
-      // Search by Request ID filter
-      if (filters.searchRequestId.trim() && !inv.requestId.toLowerCase().includes(filters.searchRequestId.toLowerCase())) {
-        return false;
+      // Search by Report Code filter
+      if (filters.searchReportCode.trim()) {
+        const searchTerm = filters.searchReportCode.toLowerCase();
+        const reportCodeMatch = inv.reportCode && inv.reportCode.toLowerCase().includes(searchTerm);
+        const requestIdMatch = inv.requestId && inv.requestId.toLowerCase().includes(searchTerm);
+        if (!reportCodeMatch && !requestIdMatch) {
+          return false;
+        }
       }
       
-      // Company filter
+      // Company/Subject filter
       if (filters.selectedCompanies.length > 0 && !filters.selectedCompanies.includes(inv.targetCompany)) {
         return false;
       }
       
-      // Risk level filter
-      if (filters.selectedRiskLevels.length > 0 && !filters.selectedRiskLevels.includes(inv.riskLevel)) {
+      // Report type filter
+      if (filters.selectedReportTypes.length > 0 && !filters.selectedReportTypes.includes(inv.investmentType)) {
         return false;
-      }
-      
-      // Investment type filter
-      if (filters.selectedInvestmentTypes.length > 0 && !filters.selectedInvestmentTypes.includes(inv.investmentType)) {
-        return false;
-      }
-      
-      // Expected return filter
-      if (inv.expectedReturn !== null && inv.expectedReturn !== undefined) {
-        const returnValue = parseFloat(inv.expectedReturn);
-        if (filters.expectedReturnMode === 'range') {
-          if (returnValue < filters.expectedReturnRange[0] || returnValue > filters.expectedReturnRange[1]) {
-            return false;
-          }
-        } else if (filters.expectedReturnSpecific) {
-          const specificValue = parseFloat(filters.expectedReturnSpecific);
-          if (Math.abs(returnValue - specificValue) > 0.1) {
-            return false;
-          }
-        }
-      }
-      
-      // Amount filter
-      if (inv.amount !== null && inv.amount !== undefined) {
-        const amountValue = parseFloat(inv.amount);
-        const minAmount = filters.amountMin ? parseFloat(filters.amountMin) : filters.amountRange[0];
-        const maxAmount = filters.amountMax ? parseFloat(filters.amountMax) : filters.amountRange[1];
-        
-        if (amountValue < minAmount || amountValue > maxAmount) {
-          return false;
-        }
       }
       
       return true;
@@ -139,28 +99,18 @@ export default function MyInvestments() {
   // Clear all filters
   const clearFilters = () => {
     setFilters({
-      searchRequestId: '',
+      searchReportCode: '',
       selectedCompanies: [],
-      selectedRiskLevels: [],
-      selectedInvestmentTypes: [],
-      expectedReturnMode: 'range',
-      expectedReturnRange: [0, 50],
-      expectedReturnSpecific: '',
-      amountRange: [0, 10000000],
-      amountMin: '',
-      amountMax: ''
+      selectedReportTypes: [],
     });
   };
 
   // Count active filters
   const activeFilterCount = useMemo(() => {
     let count = 0;
-    if (filters.searchRequestId.trim()) count++;
+    if (filters.searchReportCode.trim()) count++;
     if (filters.selectedCompanies.length > 0) count++;
-    if (filters.selectedRiskLevels.length > 0) count++;
-    if (filters.selectedInvestmentTypes.length > 0) count++;
-    if (filters.expectedReturnSpecific || (filters.expectedReturnRange[0] > 0 || filters.expectedReturnRange[1] < 50)) count++;
-    if (filters.amountMin || filters.amountMax || (filters.amountRange[0] > 0 || filters.amountRange[1] < 10000000)) count++;
+    if (filters.selectedReportTypes.length > 0) count++;
     return count;
   }, [filters]);
 
@@ -270,21 +220,21 @@ export default function MyInvestments() {
             <Card className="mb-4 p-4 border-2 border-dashed border-blue-200 dark:border-blue-800">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 
-                {/* Search by Request ID */}
+                {/* Search by Report Code */}
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium">Search by Request ID</Label>
+                  <Label className="text-sm font-medium">Search by Report Code</Label>
                   <Input
                     type="text"
-                    placeholder="Enter Request ID (e.g., INV-2025-0032)"
-                    value={filters.searchRequestId}
-                    onChange={(e) => setFilters(prev => ({ ...prev, searchRequestId: e.target.value }))}
+                    placeholder="Enter Report Code (e.g., RPT-2025-001)"
+                    value={filters.searchReportCode}
+                    onChange={(e) => setFilters(prev => ({ ...prev, searchReportCode: e.target.value }))}
                     className="w-full"
                   />
                 </div>
                 
-                {/* Company Filter */}
+                {/* Company/Subject Filter */}
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium">Client/Company</Label>
+                  <Label className="text-sm font-medium">Subject / Client Name</Label>
                   <Select 
                     value={filters.selectedCompanies.length > 0 ? filters.selectedCompanies[0] : "all"} 
                     onValueChange={(value) => 
@@ -295,10 +245,10 @@ export default function MyInvestments() {
                     }
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select company" />
+                      <SelectValue placeholder="Select subject/client" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Companies</SelectItem>
+                      <SelectItem value="all">All Subjects/Clients</SelectItem>
                       {uniqueCompanies.map(company => (
                         <SelectItem key={company} value={company}>{company}</SelectItem>
                       ))}
@@ -306,116 +256,28 @@ export default function MyInvestments() {
                   </Select>
                 </div>
 
-                {/* Risk Level Filter */}
+                {/* Report Type Filter */}
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium">Risk Level</Label>
-                  <div className="flex gap-2">
-                    {['low', 'medium', 'high'].map(risk => (
-                      <div key={risk} className="flex items-center space-x-2">
-                        <Checkbox 
-                          id={risk}
-                          checked={filters.selectedRiskLevels.includes(risk)}
-                          onCheckedChange={(checked) => 
-                            setFilters(prev => ({
-                              ...prev,
-                              selectedRiskLevels: checked 
-                                ? [...prev.selectedRiskLevels, risk]
-                                : prev.selectedRiskLevels.filter(r => r !== risk)
-                            }))
-                          }
-                        />
-                        <Label htmlFor={risk} className="text-sm capitalize">{risk}</Label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Investment Type Filter */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Investment Type</Label>
+                  <Label className="text-sm font-medium">Report Type</Label>
                   <Select 
-                    value={filters.selectedInvestmentTypes.length > 0 ? filters.selectedInvestmentTypes[0] : "all"} 
+                    value={filters.selectedReportTypes.length > 0 ? filters.selectedReportTypes[0] : "all"} 
                     onValueChange={(value) => 
                       setFilters(prev => ({ 
                         ...prev, 
-                        selectedInvestmentTypes: value === "all" ? [] : [value] 
+                        selectedReportTypes: value === "all" ? [] : [value] 
                       }))
                     }
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select type" />
+                      <SelectValue placeholder="Select report type" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Types</SelectItem>
-                      {uniqueInvestmentTypes.map(type => (
+                      {uniqueReportTypes.map(type => (
                         <SelectItem key={type} value={type}>{type}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-
-                {/* Expected Return Filter */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Expected Returns</Label>
-                  <div className="flex gap-2 mb-2">
-                    <Button
-                      variant={filters.expectedReturnMode === 'range' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setFilters(prev => ({ ...prev, expectedReturnMode: 'range' }))}
-                    >
-                      Range
-                    </Button>
-                    <Button
-                      variant={filters.expectedReturnMode === 'specific' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setFilters(prev => ({ ...prev, expectedReturnMode: 'specific' }))}
-                    >
-                      Specific
-                    </Button>
-                  </div>
-                  {filters.expectedReturnMode === 'range' ? (
-                    <div className="space-y-2">
-                      <div className="px-2">
-                        <Slider
-                          value={filters.expectedReturnRange}
-                          onValueChange={(value) => setFilters(prev => ({ ...prev, expectedReturnRange: value as [number, number] }))}
-                          max={50}
-                          min={0}
-                          step={1}
-                        />
-                      </div>
-                      <div className="flex justify-between text-sm text-gray-600">
-                        <span>{filters.expectedReturnRange[0]}%</span>
-                        <span>{filters.expectedReturnRange[1]}%</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <Input
-                      type="number"
-                      placeholder="Enter specific return %"
-                      value={filters.expectedReturnSpecific}
-                      onChange={(e) => setFilters(prev => ({ ...prev, expectedReturnSpecific: e.target.value }))}
-                    />
-                  )}
-                </div>
-
-                {/* Amount Range Filter */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Amount Range</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      type="number"
-                      placeholder="Min amount"
-                      value={filters.amountMin}
-                      onChange={(e) => setFilters(prev => ({ ...prev, amountMin: e.target.value }))}
-                    />
-                    <Input
-                      type="number"
-                      placeholder="Max amount"
-                      value={filters.amountMax}
-                      onChange={(e) => setFilters(prev => ({ ...prev, amountMax: e.target.value }))}
-                    />
-                  </div>
                 </div>
 
                 {/* Clear Filters Button */}
