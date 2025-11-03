@@ -6,9 +6,9 @@ export default function WorkshopPage() {
   const [, setLocation] = useLocation();
   const templates = [
     {
-      name: "Investment Portal",
-      description: "Complete investment management system with proposals, approvals, and tracking",
-      icon: Briefcase,
+      name: "Report Portal",
+      description: "Complete report creation system with templates, approvals, and tracking",
+      icon: FileText,
       route: "/investment-portal",
     },
     {

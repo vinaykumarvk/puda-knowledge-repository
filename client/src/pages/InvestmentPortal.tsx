@@ -20,16 +20,16 @@ export default function InvestmentPortal() {
       description: "Overview & Analytics"
     },
     {
-      name: "New Investment",
+      name: "New Report",
       icon: TrendingUp,
       path: "/investment-portal/new",
-      description: "Create Proposal"
+      description: "Create Report"
     },
     {
-      name: "My Investments",
+      name: "My Reports",
       icon: Briefcase,
       path: "/investment-portal/investments",
-      description: "Track Requests"
+      description: "Track Reports"
     },
     {
       name: "My Tasks",
@@ -41,7 +41,7 @@ export default function InvestmentPortal() {
       name: "Templates",
       icon: FileText,
       path: "/investment-portal/templates",
-      description: "Proposal Templates"
+      description: "Report Templates"
     }
   ];
 
@@ -50,7 +50,7 @@ export default function InvestmentPortal() {
       {/* Sidebar - Desktop */}
       <div className="hidden md:flex md:w-64 md:flex-col bg-card border-r border-border">
         <div className="p-4 border-b border-border">
-          <h2 className="text-lg font-bold text-foreground">Investment Portal</h2>
+          <h2 className="text-lg font-bold text-foreground">Report Portal</h2>
           <p className="text-xs text-muted-foreground mt-1">Document Generation System</p>
         </div>
         
@@ -84,7 +84,7 @@ export default function InvestmentPortal() {
 
         <div className="p-3 border-t border-border">
           <div className="text-xs text-muted-foreground text-center">
-            Investment Management System
+            Report Management System
           </div>
         </div>
       </div>
@@ -93,7 +93,7 @@ export default function InvestmentPortal() {
       <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-card border-b border-border">
         <div className="flex items-center justify-between p-4">
           <div>
-            <h2 className="text-lg font-bold text-foreground">Investment Portal</h2>
+            <h2 className="text-lg font-bold text-foreground">Report Portal</h2>
             <p className="text-xs text-muted-foreground">Document System</p>
           </div>
           <Button
