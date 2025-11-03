@@ -6,7 +6,7 @@ export default function NewInvestment() {
     <div className="p-6">
       <Card className="max-w-4xl mx-auto">
         <CardHeader>
-          <CardTitle className="text-2xl">New Investment Request</CardTitle>
+          <CardTitle className="text-2xl">New Report Request</CardTitle>
         </CardHeader>
         <CardContent>
           <InvestmentForm />

@@ -440,19 +440,19 @@ export function InvestmentForm() {
           <h3 className="text-lg font-semibold mb-4">Basic Information</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-              <Label htmlFor="investmentType">Investment Type</Label>
+              <Label htmlFor="investmentType">Report Type</Label>
               <Select 
                 value={form.watch("investmentType")} 
                 onValueChange={(value) => form.setValue("investmentType", value)}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select investment type..." />
+                  <SelectValue placeholder="Select report type..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="equity">Equity Investment</SelectItem>
-                  <SelectItem value="debt">Debt Investment</SelectItem>
-                  <SelectItem value="real_estate">Real Estate</SelectItem>
-                  <SelectItem value="alternative">Alternative Investment</SelectItem>
+                  <SelectItem value="equity">Financial Analysis</SelectItem>
+                  <SelectItem value="debt">Market Research</SelectItem>
+                  <SelectItem value="real_estate">Client Proposal</SelectItem>
+                  <SelectItem value="alternative">Custom Report</SelectItem>
                 </SelectContent>
               </Select>
               {form.formState.errors.investmentType && (
@@ -461,10 +461,10 @@ export function InvestmentForm() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="targetCompany">Target Company</Label>
+              <Label htmlFor="targetCompany">Subject / Client Name</Label>
               <Input
                 id="targetCompany"
-                placeholder="Enter company name"
+                placeholder="Enter subject or client name"
                 {...form.register("targetCompany")}
               />
               {form.formState.errors.targetCompany && (
@@ -475,7 +475,7 @@ export function InvestmentForm() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
             <div className="space-y-2">
-              <Label htmlFor="amount">Investment Amount ($)</Label>
+              <Label htmlFor="amount">Project Value / Budget ($)</Label>
               <Input
                 id="amount"
                 type="number"
@@ -489,7 +489,7 @@ export function InvestmentForm() {
             </div>
 
             <div className="space-y-3">
-              <Label>Expected Return (%)</Label>
+              <Label>Confidence Level (%)</Label>
               
               {/* Toggle between Absolute and Range */}
               <RadioGroup
@@ -508,11 +508,11 @@ export function InvestmentForm() {
               >
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="absolute" id="absolute" />
-                  <Label htmlFor="absolute">Absolute Return</Label>
+                  <Label htmlFor="absolute">Single Value</Label>
                 </div>
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="range" id="range" />
-                  <Label htmlFor="range">Return Range</Label>
+                  <Label htmlFor="range">Range</Label>
                 </div>
               </RadioGroup>
 
@@ -558,12 +558,12 @@ export function InvestmentForm() {
           </div>
 
           <div className="mt-6">
-            <Label htmlFor="description">Investment Description</Label>
+            <Label htmlFor="description">Report Description</Label>
             <div className="relative">
               <Textarea
                 id="description"
                 rows={4}
-                placeholder="Describe the investment opportunity..."
+                placeholder="Describe the report objectives and scope..."
                 {...form.register("description")}
                 className="mt-2"
               />
