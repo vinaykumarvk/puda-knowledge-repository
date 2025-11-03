@@ -523,9 +523,9 @@ export default function Dashboard() {
                             </div>
                           </div>
 
-                          {/* Investment Type Filter */}
+                          {/* Report Type Filter */}
                           <div>
-                            <label className="text-sm font-medium mb-2 block">Investment Type</label>
+                            <label className="text-sm font-medium mb-2 block">Report Type</label>
                             <Select 
                               value={proposalFilters.selectedInvestmentTypes.length > 0 ? proposalFilters.selectedInvestmentTypes[0] : "all"}
                               onValueChange={(value) => {

@@ -94,7 +94,7 @@ export default function InvestmentPortal() {
         <div className="flex items-center justify-between p-4">
           <div>
             <h2 className="text-lg font-bold text-foreground">Report Portal</h2>
-            <p className="text-xs text-muted-foreground">Document System</p>
+            <p className="text-xs text-muted-foreground">Document Generation System</p>
           </div>
           <Button
             variant="ghost"
