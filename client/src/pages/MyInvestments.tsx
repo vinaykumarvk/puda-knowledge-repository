@@ -51,7 +51,7 @@ export default function MyInvestments() {
   });
 
   const { data: investments, isLoading } = useQuery({
-    queryKey: ["/api/investments", { my: true }],
+    queryKey: ["/api/investments"],
   });
 
   const handleToggleDetails = (investmentId: number) => {
