@@ -799,16 +799,25 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createInvestmentRequest(request: InsertInvestmentRequest): Promise<InvestmentRequest> {
+    // Generate unique request ID if not provided (INV-YYYY-XXX format)
+    let requestId = request.requestId;
+    if (!requestId) {
+      const year = new Date().getFullYear();
+      const sequenceValue = await this.getNextSequenceValue('investment-request', year);
+      requestId = `INV-${year}-${String(sequenceValue).padStart(3, '0')}`;
+    }
+    
     // Generate unique report code if not provided (RPT-YYYY-XXX format)
     let reportCode = request.reportCode;
     if (!reportCode) {
       const year = new Date().getFullYear();
-      const sequenceValue = await this.getNextSequenceValue('report', year);
+      const sequenceValue = await this.getNextSequenceValue('report-code', year);
       reportCode = `RPT-${year}-${String(sequenceValue).padStart(3, '0')}`;
     }
     
     const requestData = {
       ...request,
+      requestId,
       reportCode
     };
     
