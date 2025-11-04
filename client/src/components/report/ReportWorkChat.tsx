@@ -33,16 +33,27 @@ export function ReportWorkChat({ reportId, reportTitle, onClose }: ReportWorkCha
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Fetch available templates
+  // Fetch available investment templates
   const { data: templates } = useQuery({
-    queryKey: ['/api/templates'],
+    queryKey: ['/api/templates/investment'],
   });
 
-  // Fetch template sections when template is selected
-  const { data: sections } = useQuery({
-    queryKey: [`/api/templates/${selectedTemplateId}/sections`],
-    enabled: !!selectedTemplateId,
-  });
+  // Parse template data to get sections when template is selected
+  const templateSections = selectedTemplateId && templates 
+    ? (() => {
+        const template = (templates as any[]).find((t: any) => t.id === selectedTemplateId);
+        if (template && template.templateData) {
+          try {
+            const data = JSON.parse(template.templateData);
+            return data.sections || [];
+          } catch (e) {
+            console.error('Failed to parse template data:', e);
+            return [];
+          }
+        }
+        return [];
+      })()
+    : [];
 
   // Fetch report details for context
   const { data: reportDetails } = useQuery({
@@ -166,7 +177,7 @@ Please select a template and section to get started, or ask me any questions abo
               <SelectContent>
                 {templates?.map((template: any) => (
                   <SelectItem key={template.id} value={template.id.toString()}>
-                    {template.title}
+                    {template.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -184,9 +195,9 @@ Please select a template and section to get started, or ask me any questions abo
                 <SelectValue placeholder="Select section..." />
               </SelectTrigger>
               <SelectContent>
-                {sections?.map((section: any) => (
-                  <SelectItem key={section.id} value={section.sectionName}>
-                    {section.sectionName}
+                {templateSections?.map((section: any, idx: number) => (
+                  <SelectItem key={idx} value={section.name || section.title || section}>
+                    {section.name || section.title || section}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -206,7 +217,7 @@ Please select a template and section to get started, or ask me any questions abo
           </Badge>
           {selectedTemplateId && (
             <Badge variant="secondary" className="text-xs">
-              {templates?.find((t: any) => t.id === selectedTemplateId)?.title}
+              {templates?.find((t: any) => t.id === selectedTemplateId)?.name}
             </Badge>
           )}
           {selectedSection && (
