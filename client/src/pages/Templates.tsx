@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -15,7 +15,9 @@ import {
   ChevronDown,
   ChevronRight,
   History,
-  Download
+  Download,
+  FolderOpen,
+  ArrowLeft
 } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { apiRequest, queryClient } from '@/lib/queryClient';
@@ -34,6 +36,7 @@ export default function Templates() {
   const [editingContent, setEditingContent] = useState<string>('');
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [showRevisionHistory, setShowRevisionHistory] = useState(false);
+  const [templateExpanded, setTemplateExpanded] = useState(false);
 
   // Fetch complete template
   const { data: completeTemplate, isLoading } = useQuery({
@@ -226,15 +229,89 @@ export default function Templates() {
 
   const { template, sections, revisions } = completeTemplate;
 
+  // Template card view (collapsed)
+  if (!templateExpanded) {
+    return (
+      <div className="max-w-4xl mx-auto px-6 py-8">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-foreground">Report Templates</h1>
+          <p className="text-muted-foreground mt-1">
+            Select a template to view and customize
+          </p>
+        </div>
+
+        {/* Template Card */}
+        <Card 
+          className="cursor-pointer hover:border-primary hover:shadow-lg transition-all duration-200"
+          onClick={() => setTemplateExpanded(true)}
+          data-testid="card-template"
+        >
+          <CardHeader>
+            <div className="flex items-start justify-between">
+              <div className="flex items-start gap-4 flex-1">
+                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <FileText className="w-6 h-6 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <CardTitle className="text-xl flex items-center gap-2">
+                    {template.title}
+                    {template.isDefault && (
+                      <Badge variant="secondary" className="text-xs">Default</Badge>
+                    )}
+                  </CardTitle>
+                  <CardDescription className="mt-2">
+                    {template.description || "Business Analyst standard format for system change documentation"}
+                  </CardDescription>
+                  <div className="flex items-center gap-4 mt-4 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <FileText className="w-4 h-4" />
+                      <span>{sections.length} sections</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <History className="w-4 h-4" />
+                      <span>{revisions.length} revisions</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <FolderOpen className="w-5 h-5 text-muted-foreground flex-shrink-0 ml-4" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between pt-2 border-t border-border">
+              <p className="text-sm text-muted-foreground">
+                Click to view and edit template sections
+              </p>
+              <ChevronRight className="w-5 h-5 text-muted-foreground" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Expanded template view with all sections
   return (
     <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
-      {/* Header */}
+      {/* Header with Back Button */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Solution Document Template</h1>
-          <p className="text-muted-foreground mt-1">
-            Business Analyst standard format for system change documentation
-          </p>
+        <div className="flex items-center gap-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setTemplateExpanded(false)}
+            data-testid="button-back-to-templates"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Templates
+          </Button>
+          <div className="border-l border-border h-6"></div>
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">{template.title}</h1>
+            <p className="text-muted-foreground mt-1">
+              Business Analyst standard format for system change documentation
+            </p>
+          </div>
         </div>
         <div className="flex gap-2">
           <Button
@@ -256,24 +333,6 @@ export default function Templates() {
           </Button>
         </div>
       </div>
-
-      {/* Template Info */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="w-5 h-5" />
-              {template.title}
-            </CardTitle>
-            {template.isDefault && (
-              <Badge variant="secondary">Default Template</Badge>
-            )}
-          </div>
-          {template.description && (
-            <p className="text-sm text-muted-foreground mt-2">{template.description}</p>
-          )}
-        </CardHeader>
-      </Card>
 
       {/* Revision History */}
       {showRevisionHistory && (
