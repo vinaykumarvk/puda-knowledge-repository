@@ -418,68 +418,7 @@ export function InvestmentDetailsInline({ investment, isExpanded, onToggle }: In
           </div>
         ) : investmentDetails && typeof investmentDetails === 'object' && 'targetCompany' in investmentDetails ? (
           <div className="space-y-6">
-            {/* I. Attached Documents with AI Analysis */}
-            {documents && Array.isArray(documents) && documents.length > 0 && (
-              <Card>
-                <CardHeader 
-                  className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors py-3"
-                  onClick={() => setIsDocumentsExpanded(!isDocumentsExpanded)}
-                >
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="flex items-center gap-2 text-base">
-                      <FileText className="h-4 w-4" />
-                      Attached Documents
-                    </CardTitle>
-                    {isDocumentsExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </div>
-                </CardHeader>
-                {isDocumentsExpanded && (
-                  <CardContent className="pt-0 pb-4">
-                  <div className="space-y-4">
-                    {Array.isArray(documents) && documents.map((doc: any) => (
-                      <div key={doc.id} className="border rounded-lg p-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <FileText className="h-4 w-4 text-blue-600" />
-                            <span className="font-medium text-sm">{doc.originalName}</span>
-                            <span className="text-xs text-gray-500">
-                              ({(doc.fileSize / 1024 / 1024).toFixed(2)} MB)
-                            </span>
-                          </div>
-                        </div>
-                        <DocumentAIAnalysis document={doc} />
-                      </div>
-                    ))}
-                  </div>
-                  </CardContent>
-                )}
-              </Card>
-            )}
-
-            {/* II. Market Regulation Research */}
-            <Card>
-              <CardHeader 
-                className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors py-3"
-                onClick={() => setIsResearchExpanded(!isResearchExpanded)}
-              >
-                <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Search className="h-4 w-4" />
-                    Market Regulation Research
-                  </CardTitle>
-                  {isResearchExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                </div>
-              </CardHeader>
-              {isResearchExpanded && (
-                <CardContent className="pt-0 pb-4">
-                  <MarketRegulationResearch 
-                    projectContext={investment?.targetCompany ? `Project: ${investment.targetCompany}` : undefined}
-                  />
-                </CardContent>
-              )}
-            </Card>
-
-            {/* III. Report Details Summary */}
+            {/* I. Report Details Summary */}
             <Card>
               <CardHeader className="py-3">
                 <CardTitle className="flex items-center gap-2 text-base">
@@ -515,7 +454,7 @@ export function InvestmentDetailsInline({ investment, isExpanded, onToggle }: In
               </CardContent>
             </Card>
 
-            {/* IV. Analyst Notes / Description */}
+            {/* II. Analyst Notes / Description */}
             <Card>
               <CardHeader 
                 className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors py-3"
@@ -605,7 +544,7 @@ export function InvestmentDetailsInline({ investment, isExpanded, onToggle }: In
                   </div>
                 )}
                 
-                {/* Draft Actions */}
+                {/* Edit Draft Actions */}
                 {(investmentDetails && typeof investmentDetails === 'object' && 'status' in investmentDetails && 
                   ((investmentDetails as any).status?.toLowerCase() === 'draft' || (investmentDetails as any).status?.toLowerCase() === 'changes_requested')) && (
                   <div className="mt-4 flex gap-2">
@@ -643,18 +582,6 @@ export function InvestmentDetailsInline({ investment, isExpanded, onToggle }: In
                         Edit Draft
                       </Button>
                     )}
-                    
-                    <Button 
-                      size="sm"
-                      onClick={handleSubmitDraft}
-                      disabled={submitDraftMutation.isPending}
-                      className="flex items-center gap-2"
-                    >
-                      <Send className="h-4 w-4" />
-                      {submitDraftMutation.isPending ? 'Submitting...' : 
-                       (investmentDetails && typeof investmentDetails === 'object' && 'status' in investmentDetails && 
-                        (investmentDetails as any).status?.toLowerCase() === 'changes_requested') ? 'Resubmit for Approval' : 'Submit for Approval'}
-                    </Button>
                   </div>
                 )}
                 
@@ -778,7 +705,7 @@ export function InvestmentDetailsInline({ investment, isExpanded, onToggle }: In
               )}
             </Card>
 
-            {/* Work on Report Section */}
+            {/* III. Work on Report Section */}
             {!isWorkChatOpen ? (
               <Card>
                 <CardContent className="py-8">
@@ -833,6 +760,67 @@ export function InvestmentDetailsInline({ investment, isExpanded, onToggle }: In
               />
             )}
 
+            {/* IV. Attached Documents with AI Analysis */}
+            {documents && Array.isArray(documents) && documents.length > 0 && (
+              <Card>
+                <CardHeader 
+                  className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors py-3"
+                  onClick={() => setIsDocumentsExpanded(!isDocumentsExpanded)}
+                >
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <FileText className="h-4 w-4" />
+                      Attached Documents
+                    </CardTitle>
+                    {isDocumentsExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </div>
+                </CardHeader>
+                {isDocumentsExpanded && (
+                  <CardContent className="pt-0 pb-4">
+                  <div className="space-y-4">
+                    {Array.isArray(documents) && documents.map((doc: any) => (
+                      <div key={doc.id} className="border rounded-lg p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-4 w-4 text-blue-600" />
+                            <span className="font-medium text-sm">{doc.originalName}</span>
+                            <span className="text-xs text-gray-500">
+                              ({(doc.fileSize / 1024 / 1024).toFixed(2)} MB)
+                            </span>
+                          </div>
+                        </div>
+                        <DocumentAIAnalysis document={doc} />
+                      </div>
+                    ))}
+                  </div>
+                  </CardContent>
+                )}
+              </Card>
+            )}
+
+            {/* V. Market Regulation Research */}
+            <Card>
+              <CardHeader 
+                className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors py-3"
+                onClick={() => setIsResearchExpanded(!isResearchExpanded)}
+              >
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Search className="h-4 w-4" />
+                    Market Regulation Research
+                  </CardTitle>
+                  {isResearchExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </div>
+              </CardHeader>
+              {isResearchExpanded && (
+                <CardContent className="pt-0 pb-4">
+                  <MarketRegulationResearch 
+                    projectContext={investment?.targetCompany ? `Project: ${investment.targetCompany}` : undefined}
+                  />
+                </CardContent>
+              )}
+            </Card>
+
             {/* VI. Approval History */}
             <ApprovalHistoryCard
               requestType="investment"
@@ -840,6 +828,37 @@ export function InvestmentDetailsInline({ investment, isExpanded, onToggle }: In
               isExpanded={isApprovalExpanded}
               onToggle={() => setIsApprovalExpanded(!isApprovalExpanded)}
             />
+
+            {/* VII. Submit for Approval - At the bottom */}
+            {(investmentDetails && typeof investmentDetails === 'object' && 'status' in investmentDetails && 
+              ((investmentDetails as any).status?.toLowerCase() === 'draft' || (investmentDetails as any).status?.toLowerCase() === 'changes_requested')) && !isInlineEditing && (
+              <Card className="border-2 border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
+                <CardContent className="py-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-semibold text-lg mb-1">Ready to submit?</h3>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        {(investmentDetails as any).status?.toLowerCase() === 'changes_requested' 
+                          ? 'Review your changes and resubmit for approval when ready.'
+                          : 'Submit this draft report for approval once you\'ve completed all sections.'}
+                      </p>
+                    </div>
+                    <Button 
+                      size="lg"
+                      onClick={handleSubmitDraft}
+                      disabled={submitDraftMutation.isPending}
+                      className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                      data-testid="button-submit-for-approval"
+                    >
+                      <Send className="h-4 w-4" />
+                      {submitDraftMutation.isPending ? 'Submitting...' : 
+                       (investmentDetails && typeof investmentDetails === 'object' && 'status' in investmentDetails && 
+                        (investmentDetails as any).status?.toLowerCase() === 'changes_requested') ? 'Resubmit for Approval' : 'Submit for Approval'}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
         ) : (
           <div className="text-center p-8 text-gray-500">
