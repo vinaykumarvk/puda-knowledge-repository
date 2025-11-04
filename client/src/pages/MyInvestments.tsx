@@ -23,7 +23,9 @@ import {
   Clock,
   CheckCircle,
   AlertTriangle,
-  Trash2
+  Trash2,
+  FileText,
+  User
 } from "lucide-react";
 import { format } from "date-fns";
 import { useState, useMemo } from "react";
@@ -441,52 +443,63 @@ function InvestmentList({ investments, onToggleDetails, expandedInvestment }: {
                 <div className="flex items-center gap-3 mb-3">
                   <div className="flex items-center gap-2">
                     <Briefcase className="w-5 h-5 text-blue-600" />
-                    <h3 className="font-semibold text-lg">{investment.targetCompany}</h3>
+                    <h3 className="font-semibold text-lg">{investment.reportTitle || investment.targetCompany}</h3>
                   </div>
                   <Badge className={getStatusColor(investment.status)}>
                     {investment.status}
                   </Badge>
-                  <Badge className={getRiskColor(investment.riskLevel)}>
-                    {investment.riskLevel} risk
-                  </Badge>
                 </div>
                 
-                {/* Show Request ID and Investment Type on main card */}
-                <div className="flex items-center gap-4 text-sm mb-3">
+                {/* Report metadata */}
+                <div className="flex flex-wrap items-center gap-4 text-sm mb-3">
                   <div className="flex items-center gap-1 font-semibold text-blue-600">
+                    <span>Report Code:</span>
+                    <span>{investment.reportCode}</span>
+                  </div>
+                  <div className="flex items-center gap-1 text-gray-600">
                     <span>Request ID:</span>
-                    <span>{investment.requestId}</span>
+                    <span className="font-medium">{investment.requestId}</span>
                   </div>
                   <div className="flex items-center gap-1 font-semibold text-purple-600">
                     <span>Type:</span>
-                    <span className="capitalize">{investment.investmentType}</span>
+                    <span className="capitalize">{investment.investmentType.replace(/_/g, ' ')}</span>
                   </div>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
                   <div className="flex items-center gap-2">
-                    <DollarSign className="w-4 h-4 text-green-600" />
-                    <span className="text-sm text-gray-600">Amount:</span>
-                    <span className="font-semibold">${investment.amount}</span>
+                    <Briefcase className="w-4 h-4 text-blue-600" />
+                    <div className="flex flex-col">
+                      <span className="text-xs text-gray-500">Subject</span>
+                      <span className="text-sm font-semibold">{investment.targetCompany}</span>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-blue-600" />
-                    <span className="text-sm text-gray-600">Expected Return:</span>
-                    <span className="font-semibold">
-                      {investment.expectedReturnType === 'range' && investment.expectedReturnMin && investment.expectedReturnMax
-                        ? `${investment.expectedReturnMin}% - ${investment.expectedReturnMax}%`
-                        : `${investment.expectedReturn}%`
-                      }
-                    </span>
+                    <User className="w-4 h-4 text-purple-600" />
+                    <div className="flex flex-col">
+                      <span className="text-xs text-gray-500">Author</span>
+                      <span className="text-sm font-semibold">{investment.createdBy || 'Anonymous'}</span>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-gray-600" />
-                    <span className="text-sm text-gray-600">Created:</span>
-                    <span className="font-semibold">{format(new Date(investment.createdAt), 'MMM dd, yyyy')}</span>
+                    <Calendar className="w-4 h-4 text-green-600" />
+                    <div className="flex flex-col">
+                      <span className="text-xs text-gray-500">Created</span>
+                      <span className="text-sm font-semibold">{format(new Date(investment.createdAt), 'MMM dd, yyyy')}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-orange-600" />
+                    <div className="flex flex-col">
+                      <span className="text-xs text-gray-500">Documents</span>
+                      <span className="text-sm font-semibold">{investment.documentCount || 0}</span>
+                    </div>
                   </div>
                 </div>
                 
-                <p className="text-sm text-gray-600 mb-4">{investment.description}</p>
+                {investment.description && (
+                  <p className="text-sm text-gray-600 mb-4">{investment.description}</p>
+                )}
               </div>
               
               {/* Action buttons */}

@@ -352,7 +352,10 @@ export const investmentRequests = pgTable("investment_requests", {
   reportCode: text("report_code").unique(), // Unique code like RPT-2025-001 for searching and filtering
   requesterId: varchar("requester_id").references(() => users.id), // Changed to varchar for UUID
   targetCompany: text("target_company").notNull(),
-  investmentType: text("investment_type").notNull(), // equity, debt, real_estate, alternative
+  investmentType: text("investment_type").notNull(), // equity, debt, real_estate, alternative, base_document
+  reportTitle: text("report_title"), // Title of the report (for report drafting platform)
+  reportDate: text("report_date"), // Date of the report
+  createdBy: text("created_by"), // Name of the author/creator
   amount: text("amount").notNull(), // Using text instead of decimal for simplicity
   expectedReturn: text("expected_return"),
   expectedReturnMin: text("expected_return_min"),

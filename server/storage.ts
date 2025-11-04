@@ -141,7 +141,7 @@ export interface IStorage {
   // Investment Portal methods
   // Investment operations
   getInvestmentRequest(id: number): Promise<InvestmentRequest | undefined>;
-  getInvestmentRequests(filters?: { userId?: string; status?: string }): Promise<InvestmentRequest[]>;
+  getInvestmentRequests(filters?: { userId?: string; status?: string }): Promise<(InvestmentRequest & { documentCount: number })[]>;
   createInvestmentRequest(request: InsertInvestmentRequest): Promise<InvestmentRequest>;
   updateInvestmentRequest(id: number, request: Partial<InsertInvestmentRequest>): Promise<InvestmentRequest>;
   softDeleteInvestmentRequest(id: number): Promise<boolean>;
@@ -787,14 +787,52 @@ export class DatabaseStorage implements IStorage {
     return request;
   }
 
-  async getInvestmentRequests(filters?: { userId?: string; status?: string }): Promise<InvestmentRequest[]> {
-    let query = db.select().from(investmentRequests).where(isNull(investmentRequests.deletedAt));
-    
+  async getInvestmentRequests(filters?: { userId?: string; status?: string }): Promise<(InvestmentRequest & { documentCount: number })[]> {
     const conditions = [isNull(investmentRequests.deletedAt)];
     if (filters?.userId) conditions.push(eq(investmentRequests.requesterId, filters.userId));
     if (filters?.status) conditions.push(eq(investmentRequests.status, filters.status));
     
-    const requests = await db.select().from(investmentRequests).where(and(...conditions)).orderBy(desc(investmentRequests.createdAt));
+    // Use SQL to count documents in a single query
+    const requests = await db
+      .select({
+        id: investmentRequests.id,
+        requestId: investmentRequests.requestId,
+        reportCode: investmentRequests.reportCode,
+        requesterId: investmentRequests.requesterId,
+        targetCompany: investmentRequests.targetCompany,
+        investmentType: investmentRequests.investmentType,
+        amount: investmentRequests.amount,
+        expectedReturn: investmentRequests.expectedReturn,
+        expectedReturnMin: investmentRequests.expectedReturnMin,
+        expectedReturnMax: investmentRequests.expectedReturnMax,
+        expectedReturnType: investmentRequests.expectedReturnType,
+        description: investmentRequests.description,
+        enhancedDescription: investmentRequests.enhancedDescription,
+        riskLevel: investmentRequests.riskLevel,
+        status: investmentRequests.status,
+        currentApprovalStage: investmentRequests.currentApprovalStage,
+        slaDeadline: investmentRequests.slaDeadline,
+        deletedAt: investmentRequests.deletedAt,
+        createdAt: investmentRequests.createdAt,
+        updatedAt: investmentRequests.updatedAt,
+        currentApprovalCycle: investmentRequests.currentApprovalCycle,
+        reportTitle: investmentRequests.reportTitle,
+        reportDate: investmentRequests.reportDate,
+        createdBy: investmentRequests.createdBy,
+        documentCount: sql<number>`COALESCE(COUNT(${documents.id}), 0)`
+      })
+      .from(investmentRequests)
+      .leftJoin(
+        documents, 
+        and(
+          eq(documents.requestId, investmentRequests.id),
+          eq(documents.requestType, 'investment')
+        )
+      )
+      .where(and(...conditions))
+      .groupBy(investmentRequests.id)
+      .orderBy(desc(investmentRequests.createdAt));
+    
     return requests;
   }
 
