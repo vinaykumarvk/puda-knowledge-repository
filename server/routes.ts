@@ -1128,7 +1128,7 @@ Write the response now:`;
             fileSize: file.size,
             mimeType: file.mimetype,
             fileUrl: file.path,
-            uploaderId: 'bypass-user', // Using bypass user since auth is bypassed
+            uploaderId: null, // Nullable since auth is bypassed
             requestType,
             requestId: parseInt(requestId),
           };
