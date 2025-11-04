@@ -51,6 +51,7 @@ export function InvestmentDetailsInline({ investment, isExpanded, onToggle }: In
   const [isDocumentsExpanded, setIsDocumentsExpanded] = useState(false);
   const [isResearchExpanded, setIsResearchExpanded] = useState(false);
   const [isApprovalExpanded, setIsApprovalExpanded] = useState(true);
+  const [isRationaleExpanded, setIsRationaleExpanded] = useState(true);
 
   // Fetch detailed investment data when expanded
   const { data: investmentDetails, isLoading: isInvestmentLoading } = useQuery({
