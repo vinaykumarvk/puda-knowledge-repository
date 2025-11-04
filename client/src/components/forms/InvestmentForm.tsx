@@ -69,162 +69,6 @@ export function InvestmentForm() {
     },
   })
 
-  const createInvestment = useMutation({
-    mutationFn: async (data: FormData) => {
-      try {
-        console.log("=== REPORT CREATION STARTED ===")
-        console.log("Original form data:", data)
-        
-        // Prepare API data with new fields
-        const apiData = {
-          ...data,
-          amount: "0", // Default value for backward compatibility
-          expectedReturn: null,
-          expectedReturnMin: null,
-          expectedReturnMax: null,
-          riskLevel: "medium", // Default value for backward compatibility
-          status: "opportunity", // Set status to "opportunity" for admin review workflow
-        }
-        console.log("Converted API data:", apiData)
-        
-        console.log("Making API request to /api/investments...")
-        const response = await apiRequest("POST", "/api/investments", apiData)
-        console.log("API response received:", response.status)
-        
-        const investment = await response.json()
-        console.log("Investment created:", investment)
-        
-        // Upload files from document tabs with improved error handling
-        if (documentTabs.length > 0) {
-          console.log(`Starting upload process for ${documentTabs.length} document tabs`)
-          
-          try {
-            // Process each tab sequentially to avoid race conditions
-            for (let i = 0; i < documentTabs.length; i++) {
-              const tab = documentTabs[i]
-              
-              if (tab.files.length > 0 && tab.categoryId) {
-                console.log(`Uploading files for tab ${i + 1}/${documentTabs.length}:`, tab.id)
-                
-                // Retry logic for each tab (unlimited retries for testing)
-                let uploadSuccess = false
-                let retryCount = 0
-                const maxRetries = 10 // Increased for testing purposes
-                
-                while (!uploadSuccess && retryCount < maxRetries) {
-                  try {
-                    const formData = new FormData()
-                    tab.files.forEach((file) => {
-                      formData.append('documents', file)
-                    })
-                    formData.append('requestType', 'investment')
-                    formData.append('requestId', investment.id.toString())
-                    
-                    // Create category data for this tab
-                    const categoryData = {
-                      categoryId: tab.categoryId,
-                      customCategoryName: tab.customCategoryName || ''
-                    }
-                    formData.append('categories', JSON.stringify([categoryData]))
-                    
-                    // Add timeout to prevent hanging requests
-                    const controller = new AbortController()
-                    const timeoutId = setTimeout(() => controller.abort(), 120000) // 2 minute timeout for large files
-                    
-                    const uploadResponse = await fetch('/api/documents/upload', {
-                      method: 'POST',
-                      body: formData,
-                      credentials: 'include',
-                      signal: controller.signal,
-                    })
-                    
-                    clearTimeout(timeoutId)
-                    
-                    if (!uploadResponse.ok) {
-                      const errorText = await uploadResponse.text()
-                      throw new Error(`Upload failed with status ${uploadResponse.status}: ${errorText}`)
-                    }
-                    
-                    const result = await uploadResponse.json()
-                    const documentsCount = result.documents ? result.documents.length : (result.length || 0)
-                    console.log(`Files uploaded successfully for tab ${tab.id}:`, documentsCount, 'documents')
-                    
-                    // Check for partial upload warnings
-                    if (result.errors && result.errors.length > 0) {
-                      console.warn(`Partial upload for tab ${tab.id}:`, result.errors)
-                    }
-                    uploadSuccess = true
-                    
-                  } catch (error) {
-                    retryCount++
-                    console.warn(`Upload attempt ${retryCount} failed for tab ${tab.id}:`, error)
-                    
-                    if (retryCount < maxRetries) {
-                      console.log(`Retrying upload for tab ${tab.id} in 2 seconds...`)
-                      await new Promise(resolve => setTimeout(resolve, 2000)) // Wait 2 seconds before retry
-                    } else {
-                      console.error(`All retry attempts failed for tab ${tab.id}`)
-                      let errorMessage = "Failed to upload documents";
-                      if (error instanceof Error) {
-                        if (error.name === 'AbortError') {
-                          errorMessage = "Upload timeout - files may be too large or connection too slow";
-                        } else if (error.message.includes('413')) {
-                          errorMessage = "File too large - maximum size is 50MB per file";
-                        } else if (error.message.includes('415')) {
-                          errorMessage = "Unsupported file type - only PDF, DOC, XLS, TXT and images are allowed";
-                        } else {
-                          errorMessage = error.message;
-                        }
-                      }
-                      throw new Error(`${errorMessage} after ${maxRetries} attempts`);
-                    }
-                  }
-                }
-              } else if (tab.files.length > 0 && !tab.categoryId) {
-                console.warn(`Tab ${tab.id} has files but no category selected - skipping upload`)
-              }
-            }
-            
-            console.log("All document uploads completed successfully")
-          } catch (uploadError) {
-            console.error("Document upload process failed:", uploadError)
-            // Don't delete the investment if upload fails - user can manually upload later
-            console.log("Investment created but document upload failed - user can upload documents manually")
-            throw new Error(`Investment created successfully, but failed to upload documents: ${uploadError instanceof Error ? uploadError.message : String(uploadError)}`)
-          }
-        } else {
-          console.log("No documents to upload, skipping upload process")
-        }
-        
-        console.log("=== INVESTMENT CREATION COMPLETED ===")
-        return investment
-      } catch (error) {
-        console.error("=== INVESTMENT CREATION FAILED ===", error)
-        throw error
-      }
-    },
-    onSuccess: (investment) => {
-      console.log("Investment created successfully:", investment)
-      queryClient.invalidateQueries({ queryKey: ["/api/investments"] })
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] })
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/recent-requests"] })
-      
-      toast({
-        title: "Investment request created",
-        description: `Request ${investment.requestId} has been submitted for approval`,
-      })
-      
-      setLocation("/")
-    },
-    onError: (error: any) => {
-      console.error("Investment creation error:", error)
-      toast({
-        title: "Error creating investment request",
-        description: error.message || "Something went wrong",
-        variant: "destructive",
-      })
-    },
-  })
 
   const saveDraft = useMutation({
     mutationFn: async (data: FormData) => {
@@ -351,11 +195,12 @@ export function InvestmentForm() {
       
       toast({
         title: "Draft saved",
-        description: "Your investment request has been saved as a draft",
+        description: "Your report has been saved as a draft",
       })
       
-      // Clear document tabs after successful save
+      // Clear document tabs and redirect to My Reports
       setDocumentTabs([])
+      setLocation("/investment-portal/investments")
     },
     onError: (error: any) => {
       console.error("Draft save error:", error)
@@ -367,24 +212,24 @@ export function InvestmentForm() {
     },
   })
 
-  const onSubmit = (data: FormData) => {
-    console.log("Form submission started...")
-    console.log("Form submission data:", data)
-    console.log("Form errors:", form.formState.errors)
-    console.log("Form is valid:", form.formState.isValid)
-    console.log("Document tabs:", documentTabs)
+  const onSaveDraft = async () => {
+    // Trigger form validation before saving
+    const isValid = await form.trigger()
+    if (!isValid) {
+      toast({
+        title: "Validation Error",
+        description: "Please fill in all required fields before saving",
+        variant: "destructive",
+      })
+      return
+    }
     
-    console.log("Validation passed, calling mutation...");
-    createInvestment.mutate(data)
-  }
-
-  const onSaveDraft = () => {
     const currentData = form.getValues()
     saveDraft.mutate(currentData)
   }
 
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+    <div className="space-y-6">
       {/* Basic Information */}
       <Card>
         <CardContent className="pt-6">
@@ -516,28 +361,18 @@ export function InvestmentForm() {
         <Button 
           type="button" 
           variant="outline"
-          onClick={() => setLocation("/")}
+          onClick={() => setLocation("/investment-portal")}
+          data-testid="button-cancel"
         >
           Cancel
         </Button>
         <Button
           type="button"
-          variant="secondary"
           onClick={onSaveDraft}
           disabled={saveDraft.isPending}
+          data-testid="button-save-draft"
         >
           {saveDraft.isPending ? "Saving..." : "Save as Draft"}
-        </Button>
-        <Button 
-          type="submit" 
-          disabled={createInvestment.isPending}
-          onClick={(e) => {
-            console.log("Submit button clicked!");
-            console.log("Form state:", form.formState);
-            console.log("Form values:", form.getValues());
-          }}
-        >
-          {createInvestment.isPending ? "Submitting..." : "Submit for Approval"}
         </Button>
       </div>
 
@@ -555,6 +390,6 @@ export function InvestmentForm() {
           });
         }}
       />
-    </form>
+    </div>
   )
 }
