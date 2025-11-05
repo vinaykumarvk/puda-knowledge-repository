@@ -1049,20 +1049,37 @@ Write the response now:`;
     }
   });
 
-  app.get("/api/investments/:id", async (req, res) => {
+  app.get("/api/investments/:id", requireAuth, async (req: any, res) => {
     try {
-      const investment = await storage.getInvestmentRequest(parseInt(req.params.id));
+      const investmentId = parseInt(req.params.id);
+      const userId = req.user.id;
+      
+      const investment = await storage.getInvestmentRequest(investmentId);
       if (!investment) return res.status(404).json({ error: "Investment not found" });
+      
+      // Allow access if user created it OR if user is the assigned approver
+      const approvals = await storage.getApprovalsByRequest('investment', investmentId);
+      const isApprover = approvals.some(approval => approval.approverId === userId);
+      
+      if (investment.createdBy !== userId && !isApprover) {
+        return res.status(403).json({ error: "Unauthorized: You don't have access to this investment" });
+      }
+      
       res.json(investment);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch investment" });
     }
   });
 
-  app.post("/api/investments", async (req, res) => {
+  app.post("/api/investments", requireAuth, async (req: any, res) => {
     try {
-      console.log("Creating investment with data:", req.body);
-      const investment = await storage.createInvestmentRequest(req.body);
+      // Override createdBy with the authenticated user's ID
+      const investmentData = {
+        ...req.body,
+        createdBy: req.user.id
+      };
+      console.log("Creating investment with data:", investmentData);
+      const investment = await storage.createInvestmentRequest(investmentData);
       res.json(investment);
     } catch (error) {
       console.error("Failed to create investment:", error);
@@ -1073,9 +1090,22 @@ Write the response now:`;
     }
   });
 
-  app.put("/api/investments/:id", async (req, res) => {
+  app.put("/api/investments/:id", requireAuth, async (req: any, res) => {
     try {
-      const investment = await storage.updateInvestmentRequest(parseInt(req.params.id), req.body);
+      const investmentId = parseInt(req.params.id);
+      const userId = req.user.id;
+      
+      // Verify the user owns this investment
+      const existingInvestment = await storage.getInvestmentRequest(investmentId);
+      if (!existingInvestment) {
+        return res.status(404).json({ error: "Investment not found" });
+      }
+      
+      if (existingInvestment.createdBy !== userId) {
+        return res.status(403).json({ error: "Unauthorized: You can only edit your own investments" });
+      }
+      
+      const investment = await storage.updateInvestmentRequest(investmentId, req.body);
       res.json(investment);
     } catch (error) {
       res.status(500).json({ error: "Failed to update investment" });
