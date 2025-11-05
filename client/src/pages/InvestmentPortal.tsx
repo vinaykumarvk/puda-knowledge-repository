@@ -160,7 +160,7 @@ export default function InvestmentPortal() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-auto md:mt-0 mt-20">
+      <div className="flex-1 w-full min-w-0 overflow-auto md:mt-0 mt-20">
         {location === "/investment-portal" && <DashboardPage />}
         {location === "/investment-portal/new" && <NewInvestmentPage />}
         {location === "/investment-portal/investments" && <MyInvestmentsPage />}
