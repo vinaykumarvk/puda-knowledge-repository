@@ -21,6 +21,7 @@ The UI features a comprehensive layout comprising a Global Top Header, Main Navi
 -   **Frontend State Management**: React with TanStack Query for data fetching and caching.
 -   **Thread Management**: Supports automatic creation, title generation, switching, searching, and deletion of conversation threads (last 30 days).
 -   **Database**: PostgreSQL with Drizzle ORM.
+-   **Approval System (Phase 1 - Database Foundation)**: Enhanced database schema for manager-based approval workflows. Added `managerId` field to users table for manager-employee relationships (BA → M1, Pre-sales → M2). Enhanced approvals table with `rejectionReason` and `editHistory` fields for detailed tracking. Implemented storage methods: `getUserManager`, `getApprovalsByApproverId`, and `updateApprovalStatus`. Updated investmentRequests status workflow states: draft, submitted, under_review, approved, rejected, revision_requested.
 
 ### Feature Specifications
 -   **Global Header**: Displays "Questions Asked" and "Quizzes Completed" counters, global search, and user menu.

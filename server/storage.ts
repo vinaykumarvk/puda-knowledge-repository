@@ -234,13 +234,15 @@ export interface IStorage {
 
 export class DatabaseStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user || undefined;
+    return await db.query.users.findFirst({ 
+      where: eq(users.id, id) 
+    });
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
-    return user || undefined;
+    return await db.query.users.findFirst({ 
+      where: eq(users.username, username) 
+    });
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
@@ -259,11 +261,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserManager(userId: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    const user = await db.query.users.findFirst({ 
+      where: eq(users.id, userId) 
+    });
     if (!user || !user.managerId) return undefined;
     
-    const [manager] = await db.select().from(users).where(eq(users.id, user.managerId));
-    return manager || undefined;
+    return await db.query.users.findFirst({ 
+      where: eq(users.id, user.managerId) 
+    });
   }
 
   // Session methods
