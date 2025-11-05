@@ -349,6 +349,32 @@ function InvestmentList({ investments, onToggleDetails, expandedInvestment }: {
 }) {
   const { toast } = useToast();
 
+  const submitInvestmentMutation = useMutation({
+    mutationFn: async (investmentId: number) => {
+      const response = await apiRequest('POST', `/api/investments/${investmentId}/submit`, {});
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to submit investment');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/investments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/approvals/my-tasks"] });
+      toast({
+        title: "Investment submitted",
+        description: "Your investment has been submitted for manager approval.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to submit investment",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  });
+
   const deleteInvestmentMutation = useMutation({
     mutationFn: async (investmentId: number) => {
       const response = await apiRequest('DELETE', `/api/investments/${investmentId}`);
@@ -504,6 +530,18 @@ function InvestmentList({ investments, onToggleDetails, expandedInvestment }: {
               
               {/* Action buttons */}
               <div className="flex flex-col gap-2 ml-4">
+                {investment.status?.toLowerCase() === 'draft' && (
+                  <Button 
+                    variant="default" 
+                    size="sm"
+                    onClick={() => submitInvestmentMutation.mutate(investment.id)}
+                    disabled={submitInvestmentMutation.isPending}
+                    data-testid={`button-submit-${investment.id}`}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    {submitInvestmentMutation.isPending ? 'Submitting...' : 'Submit'}
+                  </Button>
+                )}
                 {canDeleteInvestment(investment.status) && (
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
@@ -512,6 +550,7 @@ function InvestmentList({ investments, onToggleDetails, expandedInvestment }: {
                         size="sm"
                         className="w-10 h-10 p-0"
                         disabled={deleteInvestmentMutation.isPending}
+                        data-testid={`button-delete-${investment.id}`}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>

@@ -37,8 +37,9 @@ export default function MyTasks() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: tasks = [], isLoading } = useQuery({
-    queryKey: ["/api/tasks"],
+  // Fetch approval tasks for the logged-in manager
+  const { data: approvals = [], isLoading } = useQuery({
+    queryKey: ["/api/approvals/my-tasks"],
   });
 
   const getStatusColor = (status: string) => {
