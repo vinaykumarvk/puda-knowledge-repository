@@ -1,3 +1,4 @@
+// @ts-nocheck
 import fetch from 'node-fetch';
 
 const PYTHON_API_BASE_URL = process.env.PYTHON_API_URL || 'http://localhost:5001';

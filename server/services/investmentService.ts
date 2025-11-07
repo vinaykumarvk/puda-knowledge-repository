@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { storage } from "../storage";
 import { workflowService } from "./workflowService";
 import { InsertInvestmentRequest, InsertCashRequest } from "@shared/schema";

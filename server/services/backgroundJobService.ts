@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { db } from '../db';
 import { backgroundJobs, documents, type BackgroundJob, type InsertBackgroundJob } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';

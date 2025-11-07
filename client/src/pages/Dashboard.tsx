@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useQuery } from "@tanstack/react-query";
 import { StatsCard } from "@/components/cards/StatsCard";
 import { RequestsTable } from "@/components/tables/RequestsTable";

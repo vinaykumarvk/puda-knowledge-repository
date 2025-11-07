@@ -3,10 +3,11 @@ import { createServer, type Server } from "http";
 import { querySchema, insertConversationSchema } from "@shared/schema";
 import { storage } from "./storage";
 import OpenAI from "openai";
-import { verifyPassword, generateSessionToken, getSessionExpiry } from "./auth";
-import { z } from "zod";
 import multer from "multer";
 import fs from "fs/promises";
+import path from "node:path";
+import authRouter from "./routes/auth";
+import { requireAuth, type AuthenticatedRequest } from "./middleware/requireAuth";
 
 const EKG_API_URL = "https://ekg-service-47249889063.europe-west6.run.app";
 
@@ -38,10 +39,46 @@ const documentStorage = multer.diskStorage({
   }
 });
 
+const ALLOWED_DOCUMENT_MIME_TYPES = new Set([
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/plain",
+  "image/png",
+  "image/jpeg",
+]);
+
+const ALLOWED_DOCUMENT_EXTENSIONS = new Set([
+  ".pdf",
+  ".doc",
+  ".docx",
+  ".xls",
+  ".xlsx",
+  ".txt",
+  ".png",
+  ".jpg",
+  ".jpeg",
+]);
+
+const MAX_DOCUMENT_FILE_SIZE = 50 * 1024 * 1024;
+
 const documentUpload = multer({
   storage: documentStorage,
   limits: {
-    fileSize: 50 * 1024 * 1024, // 50MB max per file
+    fileSize: MAX_DOCUMENT_FILE_SIZE,
+  },
+  fileFilter: (_req, file, cb) => {
+    const extension = path.extname(file.originalname).toLowerCase();
+    if (
+      ALLOWED_DOCUMENT_MIME_TYPES.has(file.mimetype) &&
+      ALLOWED_DOCUMENT_EXTENSIONS.has(extension)
+    ) {
+      cb(null, true);
+    } else {
+      cb(new multer.MulterError("LIMIT_UNEXPECTED_FILE", file.fieldname));
+    }
   },
 });
 
@@ -64,176 +101,7 @@ function cleanAnswer(markdown: string): string {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // TEMPORARY: Database initialization endpoint
-  app.get("/api/init-db", async (req, res) => {
-    try {
-      const { db } = await import("./db");
-      const { users, sessions } = await import("@shared/schema");
-      const { sql } = await import("drizzle-orm");
-      const { hashPassword } = await import("./auth");
-      
-      // Create users table
-      await db.execute(sql`
-        CREATE TABLE IF NOT EXISTS users (
-          id SERIAL PRIMARY KEY,
-          username VARCHAR(255) UNIQUE NOT NULL,
-          password VARCHAR(255) NOT NULL,
-          full_name VARCHAR(255) NOT NULL,
-          email VARCHAR(255),
-          team VARCHAR(50) NOT NULL,
-          is_active BOOLEAN DEFAULT true NOT NULL,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-          last_login TIMESTAMP
-        )
-      `);
-      
-      // Create sessions table
-      await db.execute(sql`
-        CREATE TABLE IF NOT EXISTS sessions (
-          id VARCHAR(255) PRIMARY KEY,
-          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-          expires_at TIMESTAMP NOT NULL
-        )
-      `);
-      
-      // Seed sample users
-      const sampleUsers = [
-        { username: "admin", password: "Admin@2025", fullName: "Admin User", team: "admin", email: "admin@wealthforce.com" },
-        { username: "presales", password: "Presales@2025", fullName: "John Smith", team: "presales", email: "john.smith@wealthforce.com" },
-        { username: "ba_analyst", password: "BA@2025", fullName: "Sarah Johnson", team: "ba", email: "sarah.johnson@wealthforce.com" },
-        { username: "manager", password: "Manager@2025", fullName: "Michael Chen", team: "management", email: "michael.chen@wealthforce.com" },
-      ];
-      
-      for (const userData of sampleUsers) {
-        const hashedPassword = await hashPassword(userData.password);
-        await db.execute(sql`
-          INSERT INTO users (username, password, full_name, email, team, is_active)
-          VALUES (${userData.username}, ${hashedPassword}, ${userData.fullName}, ${userData.email}, ${userData.team}, true)
-          ON CONFLICT (username) DO NOTHING
-        `);
-      }
-      
-      res.json({ 
-        success: true, 
-        message: "Database initialized successfully! You can now login with: admin/Admin@2025, presales/Presales@2025, ba_analyst/BA@2025, or manager/Manager@2025" 
-      });
-    } catch (error: any) {
-      console.error("Database initialization error:", error);
-      res.status(500).json({ error: "Failed to initialize database", details: error.message });
-    }
-  });
-
-  // Authentication middleware to check if user is logged in
-  const requireAuth = async (req: any, res: any, next: any) => {
-    const sessionId = req.cookies?.wf_session;
-    
-    if (!sessionId) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-    
-    const sessionWithUser = await storage.getSessionWithUser(sessionId);
-    
-    if (!sessionWithUser) {
-      return res.status(401).json({ error: "Invalid or expired session" });
-    }
-    
-    req.user = sessionWithUser.user;
-    req.sessionId = sessionId;
-    next();
-  };
-
-  // Login endpoint
-  app.post("/api/auth/login", async (req, res) => {
-    try {
-      const loginSchema = z.object({
-        username: z.string().min(1),
-        password: z.string().min(1),
-      });
-      
-      const { username, password } = loginSchema.parse(req.body);
-      
-      // Get user by username
-      const user = await storage.getUserByUsername(username);
-      
-      if (!user) {
-        return res.status(401).json({ error: "Invalid credentials" });
-      }
-      
-      // Verify password
-      const isValid = await verifyPassword(password, user.password);
-      
-      if (!isValid) {
-        return res.status(401).json({ error: "Invalid credentials" });
-      }
-      
-      // Check if user is active
-      if (!user.isActive) {
-        return res.status(403).json({ error: "Account is inactive" });
-      }
-      
-      // Create session
-      const sessionToken = generateSessionToken();
-      const expiresAt = getSessionExpiry();
-      
-      await storage.createSession({
-        id: sessionToken,
-        userId: user.id,
-        expiresAt,
-      });
-      
-      // Update last login
-      await storage.updateUserLastLogin(user.id);
-      
-      // Set HTTP-only cookie
-      res.cookie("wf_session", sessionToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        expires: expiresAt,
-      });
-      
-      // Return user data (without password)
-      const { password: _, ...userWithoutPassword } = user;
-      res.json({ user: userWithoutPassword });
-    } catch (error) {
-      console.error("Login error:", error);
-      res.status(500).json({ error: "Login failed" });
-    }
-  });
-
-  // Logout endpoint
-  app.post("/api/auth/logout", async (req, res) => {
-    try {
-      const sessionId = req.cookies?.wf_session;
-      
-      if (sessionId) {
-        await storage.deleteSession(sessionId);
-      }
-      
-      // Clear cookie with same security attributes as login
-      res.clearCookie("wf_session", {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-      });
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Logout error:", error);
-      res.status(500).json({ error: "Logout failed" });
-    }
-  });
-
-  // Get current user endpoint
-  app.get("/api/auth/me", requireAuth, async (req: any, res) => {
-    try {
-      const { password: _, ...userWithoutPassword } = req.user;
-      res.json({ user: userWithoutPassword });
-    } catch (error) {
-      console.error("Get user error:", error);
-      res.status(500).json({ error: "Failed to get user" });
-    }
-  });
+  app.use("/api/auth", authRouter);
 
   // Voice transcription endpoint using OpenAI Whisper
   app.post("/api/voice/transcribe", upload.single('audio'), async (req, res) => {
@@ -1037,10 +905,11 @@ Write the response now:`;
   // ===== Investment Portal API Routes =====
   
   // Investment routes
-  app.get("/api/investments", requireAuth, async (req: any, res) => {
+  app.get("/api/investments", requireAuth, async (req, res) => {
     try {
+      const { user } = req as AuthenticatedRequest;
       // Only show investments created by the logged-in user
-      const userId = req.user.id;
+      const userId = user.id;
       const status = req.query.status as string;
       const investments = await storage.getInvestmentRequests({ userId, status });
       res.json(investments);
@@ -1049,11 +918,12 @@ Write the response now:`;
     }
   });
 
-  app.get("/api/investments/:id", requireAuth, async (req: any, res) => {
+  app.get("/api/investments/:id", requireAuth, async (req, res) => {
     try {
       const investmentId = parseInt(req.params.id);
-      const userId = req.user.id;
-      
+      const { user } = req as AuthenticatedRequest;
+      const userId = user.id;
+
       const investment = await storage.getInvestmentRequest(investmentId);
       if (!investment) return res.status(404).json({ error: "Investment not found" });
       
@@ -1071,30 +941,31 @@ Write the response now:`;
     }
   });
 
-  app.post("/api/investments", requireAuth, async (req: any, res) => {
+  app.post("/api/investments", requireAuth, async (req, res) => {
     try {
+      const { user } = req as AuthenticatedRequest;
       // Override createdBy with the authenticated user's ID
       const investmentData = {
         ...req.body,
-        createdBy: req.user.id
+        createdBy: user.id
       };
-      console.log("Creating investment with data:", investmentData);
       const investment = await storage.createInvestmentRequest(investmentData);
       res.json(investment);
     } catch (error) {
       console.error("Failed to create investment:", error);
-      res.status(500).json({ 
+      res.status(500).json({
         error: "Failed to create investment",
         details: error instanceof Error ? error.message : String(error)
       });
     }
   });
 
-  app.put("/api/investments/:id", requireAuth, async (req: any, res) => {
+  app.put("/api/investments/:id", requireAuth, async (req, res) => {
     try {
       const investmentId = parseInt(req.params.id);
-      const userId = req.user.id;
-      
+      const { user } = req as AuthenticatedRequest;
+      const userId = user.id;
+
       // Verify the user owns this investment
       const existingInvestment = await storage.getInvestmentRequest(investmentId);
       if (!existingInvestment) {
@@ -1112,10 +983,11 @@ Write the response now:`;
     }
   });
 
-  app.post("/api/investments/:id/submit", requireAuth, async (req: any, res) => {
+  app.post("/api/investments/:id/submit", requireAuth, async (req, res) => {
     try {
       const investmentId = parseInt(req.params.id);
-      const userId = req.user.id;
+      const { user } = req as AuthenticatedRequest;
+      const userId = user.id;
 
       // Get the user's manager
       const manager = await storage.getUserManager(userId);
@@ -1154,95 +1026,88 @@ Write the response now:`;
   // Document upload route
   app.post("/api/documents/upload", documentUpload.array('documents'), async (req, res) => {
     try {
-      const { requestType, requestId, categories, categoryId, subcategoryId } = req.body;
+      const { requestType, requestId, categoryId, subcategoryId } = req.body;
       const files = req.files as Express.Multer.File[];
-      
-      console.log(`Document upload request: requestType: ${requestType}, requestId: ${requestId}, files: ${files?.length || 0}`);
-      
-      if (!files || files.length === 0) {
-        console.warn('No files provided in upload request');
+      const totalFiles = files?.length ?? 0;
+
+      if (!files || totalFiles === 0) {
         return res.status(400).json({ message: 'No files uploaded' });
       }
 
       if (!requestType || !requestId) {
-        console.warn('Missing required parameters: requestType or requestId');
         return res.status(400).json({ message: 'Missing required parameters: requestType and requestId are required' });
       }
-      
-      const documents = [];
-      const errors = [];
-      
-      // Process files individually to handle partial failures
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+
+      const documents = [] as any[];
+      const errors: Array<{ fileName: string; error: string }> = [];
+
+      for (const file of files) {
         try {
-          console.log(`Processing file ${i + 1}/${files.length}: ${file.originalname} (${file.size} bytes)`);
-          
-          // Validate file
           if (!file.originalname || file.size === 0) {
             throw new Error(`Invalid file: ${file.originalname || 'unknown'}`);
           }
-          
+
+          if (file.size > MAX_DOCUMENT_FILE_SIZE) {
+            throw new Error(`File exceeds maximum size of ${MAX_DOCUMENT_FILE_SIZE / (1024 * 1024)}MB`);
+          }
+
+          const filePath = 'path' in file && typeof file.path === 'string'
+            ? file.path
+            : path.join('uploads', 'documents', file.filename);
+
           const documentData: any = {
             fileName: file.filename,
             originalName: file.originalname,
             fileSize: file.size,
             mimeType: file.mimetype,
-            fileUrl: file.path,
+            fileUrl: filePath,
             uploaderId: null, // Nullable since auth is bypassed
             requestType,
             requestId: parseInt(requestId),
           };
-          
-          // Add single category information if provided
+
           if (categoryId) {
             documentData.categoryId = parseInt(categoryId);
           }
           if (subcategoryId) {
             documentData.subcategoryId = parseInt(subcategoryId);
           }
-          
+
           const document = await storage.createDocument(documentData);
-          console.log(`Document record created: ${document.id} for file ${file.originalname}`);
-          
           documents.push(document);
         } catch (fileError) {
-          console.error(`Failed to process file ${file.originalname}:`, fileError);
+          if ('path' in file && file.path) {
+            await fs.unlink(file.path).catch(() => undefined);
+          }
+
           errors.push({
             fileName: file.originalname,
             error: fileError instanceof Error ? fileError.message : String(fileError)
           });
         }
       }
-      
-      // If no documents were successfully processed, return error
+
       if (documents.length === 0) {
-        console.error('No documents were successfully processed');
-        return res.status(500).json({ 
+        return res.status(500).json({
           message: 'Failed to upload any documents',
-          errors 
+          errors
         });
       }
-      
-      // Return success response with documents
-      const response: any = { 
+
+      const response: any = {
         documents,
         successful: documents.length,
-        total: files.length
+        total: totalFiles
       };
-      
+
       if (errors.length > 0) {
         response.errors = errors;
-        response.message = `${documents.length}/${files.length} documents uploaded successfully`;
-        console.warn(`Partial upload success: ${documents.length}/${files.length} files processed`);
-      } else {
-        console.log(`All ${documents.length} documents uploaded successfully`);
+        response.message = `${documents.length}/${totalFiles} documents uploaded successfully`;
       }
-      
+
       res.json(response);
     } catch (error) {
-      console.error("Failed to upload documents:", error);
-      res.status(500).json({ 
+      res.status(500).json({
         error: "Failed to upload documents",
         details: error instanceof Error ? error.message : String(error)
       });
@@ -1289,10 +1154,11 @@ Write the response now:`;
   });
 
   // Approval routes
-  app.get("/api/approvals/my-tasks", requireAuth, async (req: any, res) => {
+  app.get("/api/approvals/my-tasks", requireAuth, async (req, res) => {
     try {
+      const { user } = req as AuthenticatedRequest;
       // Only show approvals where the logged-in user is the approver (manager)
-      const approverId = req.user.id;
+      const approverId = user.id;
       const status = req.query.status as string;
       const approvals = await storage.getApprovalsByApproverId(approverId, status);
       res.json(approvals);
@@ -1319,11 +1185,12 @@ Write the response now:`;
     }
   });
 
-  app.put("/api/approvals/:id", requireAuth, async (req: any, res) => {
+  app.put("/api/approvals/:id", requireAuth, async (req, res) => {
     try {
       const approvalId = parseInt(req.params.id);
-      const userId = req.user.id;
-      
+      const { user } = req as AuthenticatedRequest;
+      const userId = user.id;
+
       // First, fetch the approval to verify authorization
       const existingApproval = await storage.getApprovalById(approvalId);
       if (!existingApproval) {

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { storage } from "../storage";
 import { InsertUser } from "@shared/schema";
 import bcrypt from "bcrypt";

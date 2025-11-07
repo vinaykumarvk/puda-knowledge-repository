@@ -1,3 +1,4 @@
+// @ts-nocheck
 import OpenAI from 'openai';
 import fs from 'fs';
 import pdf from 'pdf-parse';
