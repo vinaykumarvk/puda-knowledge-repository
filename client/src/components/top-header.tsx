@@ -1,6 +1,20 @@
-import { useState } from "react";
-import { Search, MessageSquare, Trophy, User, Sun, Moon, Menu, LogOut } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { useEffect, useMemo, useState } from "react";
+import { formatDistanceToNow } from "date-fns";
+import {
+  Search,
+  MessageSquare,
+  Trophy,
+  User,
+  Sun,
+  Moon,
+  Menu,
+  LogOut,
+  HelpCircle,
+  Sparkles,
+} from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+
+import type { Thread } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -10,9 +24,21 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+  CommandShortcut,
+} from "@/components/ui/command";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useTheme } from "@/components/theme-provider";
 import { MasteryBar } from "@/components/mastery-bar";
 import { useAuth } from "@/contexts/auth-context";
+import { conversationStarterCategories } from "@/constants/conversation-starters";
 
 interface TopHeaderProps {
   questionsAsked?: number;
@@ -22,13 +48,61 @@ interface TopHeaderProps {
 }
 
 export function TopHeader({ questionsAsked = 0, quizzesCompleted = 0, onSearch, onMenuClick }: TopHeaderProps) {
-  const [searchQuery, setSearchQuery] = useState("");
+  const [isCommandOpen, setIsCommandOpen] = useState(false);
+  const [commandQuery, setCommandQuery] = useState("");
+  const [isMac, setIsMac] = useState(false);
   const { theme, toggleTheme } = useTheme();
   const { user, logout } = useAuth();
+  const { data: threads = [] } = useQuery<Thread[]>({
+    queryKey: ["/api/threads"],
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setIsMac(/Mac|iPod|iPhone|iPad/.test(window.navigator.platform));
+  }, []);
+
+  useEffect(() => {
+    const down = (event: KeyboardEvent) => {
+      if ((event.key === "k" || event.key === "K") && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        setIsCommandOpen((open) => !open);
+      }
+    };
+
+    document.addEventListener("keydown", down);
+    return () => document.removeEventListener("keydown", down);
+  }, []);
+
+  const starterPrompts = useMemo(
+    () =>
+      conversationStarterCategories.flatMap((category) =>
+        category.prompts.slice(0, 3).map((prompt) => ({
+          prompt,
+          category: category.category,
+        })),
+      ),
+    [],
+  );
+
+  const recentThreads = useMemo(
+    () =>
+      [...threads]
+        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+        .slice(0, 6),
+    [threads],
+  );
+
+  const handleCommandSelect = (value: string) => {
+    onSearch?.(value);
+    setIsCommandOpen(false);
+    setCommandQuery("");
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    onSearch?.(searchQuery);
+    onSearch?.(commandQuery);
+    setIsCommandOpen(true);
   };
 
   const handleLogout = async () => {
@@ -36,7 +110,7 @@ export function TopHeader({ questionsAsked = 0, quizzesCompleted = 0, onSearch, 
   };
 
   return (
-    <div className="h-14 border-b border-border bg-card flex items-center justify-between px-4 md:px-6">
+    <div className="h-14 border-b border-border bg-card/80 backdrop-blur flex items-center justify-between px-4 md:px-6">
       {/* Left: Hamburger Menu (Mobile) + Stats */}
       <div className="flex items-center gap-3 md:gap-6">
         <Button
@@ -77,37 +151,42 @@ export function TopHeader({ questionsAsked = 0, quizzesCompleted = 0, onSearch, 
       {/* Center: Search Bar */}
       <div className="flex-1 max-w-md mx-2 sm:mx-6">
         <form onSubmit={handleSearch} className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search conversations, topics, or documents..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 pr-4 h-9 bg-background"
+          <button
+            type="button"
+            onClick={() => setIsCommandOpen(true)}
+            className="w-full flex items-center justify-between gap-2 rounded-lg border border-border bg-background/70 px-3 py-2 text-left text-sm text-muted-foreground shadow-sm transition hover:border-primary/40 hover:text-foreground"
             data-testid="input-global-search"
-          />
+          >
+            <span className="flex items-center gap-2">
+              <Search className="h-4 w-4 text-muted-foreground" />
+              Search conversations, documents, or prompts
+            </span>
+            <span className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+              {isMac ? "⌘" : "Ctrl"}
+              <span className="font-sans">K</span>
+            </span>
+          </button>
         </form>
       </div>
 
       {/* Right: Mastery Bar, Theme Toggle and User Menu */}
       <div className="flex items-center gap-3">
         <MasteryBar />
-        
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={toggleTheme}
-          className="w-9 h-9"
-          data-testid="button-theme-toggle"
-          title={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
-        >
-          {theme === "light" ? (
-            <Moon className="w-5 h-5" />
-          ) : (
-            <Sun className="w-5 h-5" />
-          )}
-        </Button>
-        
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="w-9 h-9"
+              title="View help resources"
+            >
+              <HelpCircle className="w-5 h-5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Browse guided tours and release notes</TooltipContent>
+        </Tooltip>
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -140,8 +219,20 @@ export function TopHeader({ questionsAsked = 0, quizzesCompleted = 0, onSearch, 
               View History
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem 
-              data-testid="menu-logout" 
+            <DropdownMenuItem onClick={toggleTheme} data-testid="menu-theme-toggle">
+              {theme === "light" ? (
+                <>
+                  <Moon className="mr-2 h-4 w-4" /> Switch to dark theme
+                </>
+              ) : (
+                <>
+                  <Sun className="mr-2 h-4 w-4" /> Switch to light theme
+                </>
+              )}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              data-testid="menu-logout"
               className="text-destructive"
               onClick={handleLogout}
             >
@@ -151,6 +242,65 @@ export function TopHeader({ questionsAsked = 0, quizzesCompleted = 0, onSearch, 
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      <CommandDialog open={isCommandOpen} onOpenChange={setIsCommandOpen}>
+        <CommandInput
+          placeholder="Search for threads, documents, or prompt starters..."
+          value={commandQuery}
+          onValueChange={setCommandQuery}
+        />
+        <CommandList>
+          <CommandEmpty>No results found.</CommandEmpty>
+          <CommandGroup heading="Quick Actions">
+            <CommandItem
+              onSelect={() => handleCommandSelect("Start a fresh conversation")}
+            >
+              <Sparkles className="mr-2 h-4 w-4" />
+              Start a new conversation
+              <CommandShortcut>{isMac ? "⌘" : "Ctrl"}+N</CommandShortcut>
+            </CommandItem>
+            <CommandItem onSelect={() => handleCommandSelect("Show mastery dashboard")}>
+              <Trophy className="mr-2 h-4 w-4" />
+              Open mastery dashboard
+            </CommandItem>
+          </CommandGroup>
+          <CommandSeparator />
+          {recentThreads.length > 0 && (
+            <CommandGroup heading="Recent Threads">
+              {recentThreads.map((thread) => (
+                <CommandItem
+                  key={thread.id}
+                  value={thread.title}
+                  onSelect={() => handleCommandSelect(`Open thread: ${thread.title}`)}
+                >
+                  <MessageSquare className="mr-2 h-4 w-4" />
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium">{thread.title}</span>
+                    <span className="text-xs text-muted-foreground">
+                      Updated {formatDistanceToNow(new Date(thread.updatedAt), { addSuffix: true })}
+                    </span>
+                  </div>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
+          <CommandSeparator />
+          <CommandGroup heading="Prompt Starters">
+            {starterPrompts.map((starter) => (
+              <CommandItem
+                key={`${starter.category}-${starter.prompt}`}
+                onSelect={() => handleCommandSelect(starter.prompt)}
+              >
+                <Sparkles className="mr-2 h-4 w-4 text-primary" />
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium">{starter.prompt}</span>
+                  <span className="text-xs text-muted-foreground">{starter.category}</span>
+                </div>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        </CommandList>
+      </CommandDialog>
     </div>
   );
 }

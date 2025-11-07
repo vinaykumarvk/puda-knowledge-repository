@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { Settings, ChevronLeft, ChevronRight } from "lucide-react";
+
+import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -15,6 +17,8 @@ import { Button } from "@/components/ui/button";
 
 interface AIConfigSidebarProps {
   onConfigChange?: (config: AIConfig) => void;
+  variant?: "default" | "panel";
+  className?: string;
 }
 
 export interface AIConfig {
@@ -25,7 +29,8 @@ export interface AIConfig {
   systemPrompt: string;
 }
 
-export function AIConfigSidebar({ onConfigChange }: AIConfigSidebarProps) {
+export function AIConfigSidebar({ onConfigChange, variant = "default", className }: AIConfigSidebarProps) {
+  const enableCollapse = variant === "default";
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [config, setConfig] = useState<AIConfig>({
     model: "GPT-4o",
@@ -41,7 +46,7 @@ export function AIConfigSidebar({ onConfigChange }: AIConfigSidebarProps) {
     onConfigChange?.(newConfig);
   };
 
-  if (isCollapsed) {
+  if (enableCollapse && isCollapsed) {
     return (
       <div className="w-12 border-l border-border bg-card flex flex-col h-full items-center py-4">
         <Button
@@ -60,8 +65,21 @@ export function AIConfigSidebar({ onConfigChange }: AIConfigSidebarProps) {
   }
 
   return (
-    <div className="w-80 border-l border-border bg-card flex flex-col h-full">
-      <div className="px-3 py-2.5 border-b border-border">
+    <div
+      className={cn(
+        "flex flex-col h-full",
+        enableCollapse
+          ? "w-80 border-l border-border bg-card"
+          : "bg-transparent",
+        className,
+      )}
+    >
+      <div
+        className={cn(
+          "px-3 py-2.5 border-border",
+          enableCollapse ? "border-b" : "border-b border-border/60 bg-card/60 backdrop-blur",
+        )}
+      >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Settings className="w-4 h-4 text-primary" />
@@ -69,16 +87,18 @@ export function AIConfigSidebar({ onConfigChange }: AIConfigSidebarProps) {
               AI Configuration
             </h3>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setIsCollapsed(true)}
-            data-testid="button-collapse-config-sidebar"
-            title="Collapse sidebar"
-            className="h-6 w-6"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </Button>
+          {enableCollapse && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsCollapsed(true)}
+              data-testid="button-collapse-config-sidebar"
+              title="Collapse sidebar"
+              className="h-6 w-6"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          )}
         </div>
       </div>
 

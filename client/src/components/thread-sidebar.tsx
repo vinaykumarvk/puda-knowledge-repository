@@ -1,21 +1,33 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { formatDistanceToNow } from "date-fns";
+import { Trash2, MessageSquarePlus, Search, ChevronLeft, ChevronRight } from "lucide-react";
+
+import type { Thread } from "@shared/schema";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
-import { Trash2, MessageSquarePlus, Search, ChevronLeft, ChevronRight } from "lucide-react";
-import { useState } from "react";
-import type { Thread } from "@shared/schema";
-import { formatDistanceToNow } from "date-fns";
 
 interface ThreadSidebarProps {
   onSelectThread: (thread: Thread) => void;
   onNewChat: () => void;
   onDeleteThread: (id: number) => void;
   selectedThreadId?: number;
+  variant?: "default" | "panel";
+  className?: string;
 }
 
-export function ThreadSidebar({ onSelectThread, onNewChat, onDeleteThread, selectedThreadId }: ThreadSidebarProps) {
+export function ThreadSidebar({
+  onSelectThread,
+  onNewChat,
+  onDeleteThread,
+  selectedThreadId,
+  variant = "default",
+  className,
+}: ThreadSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const enableCollapse = variant === "default";
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const { data: threads = [], isLoading } = useQuery<Thread[]>({
@@ -26,7 +38,7 @@ export function ThreadSidebar({ onSelectThread, onNewChat, onDeleteThread, selec
     thread.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  if (isCollapsed) {
+  if (enableCollapse && isCollapsed) {
     return (
       <div className="w-12 border-r border-border bg-card flex flex-col h-full items-center py-4">
         <Button
@@ -51,8 +63,21 @@ export function ThreadSidebar({ onSelectThread, onNewChat, onDeleteThread, selec
   }
 
   return (
-    <div className="w-64 border-r border-border bg-card flex flex-col h-full">
-      <div className="p-4 border-b border-border space-y-3">
+    <div
+      className={cn(
+        "flex flex-col h-full",
+        enableCollapse
+          ? "w-64 border-r border-border bg-card"
+          : "bg-transparent",
+        className,
+      )}
+    >
+      <div
+        className={cn(
+          "p-4 border-border space-y-3",
+          enableCollapse ? "border-b" : "border-b border-border/60 bg-card/60 backdrop-blur",
+        )}
+      >
         <div className="flex items-center justify-between gap-2">
           <Button
             data-testid="button-new-chat"
@@ -63,15 +88,17 @@ export function ThreadSidebar({ onSelectThread, onNewChat, onDeleteThread, selec
             <MessageSquarePlus className="w-5 h-5" />
             New Chat
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setIsCollapsed(true)}
-            data-testid="button-collapse-sidebar"
-            title="Collapse sidebar"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </Button>
+          {enableCollapse && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsCollapsed(true)}
+              data-testid="button-collapse-sidebar"
+              title="Collapse sidebar"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </Button>
+          )}
         </div>
 
         <div className="relative">
@@ -100,11 +127,12 @@ export function ThreadSidebar({ onSelectThread, onNewChat, onDeleteThread, selec
             filteredThreads.map((thread) => (
               <div
                 key={thread.id}
-                className={`group relative flex items-start gap-2 rounded-lg p-2.5 cursor-pointer transition-colors ${
+                className={cn(
+                  "group relative flex items-start gap-2 rounded-lg p-2.5 cursor-pointer transition-colors",
                   selectedThreadId === thread.id
                     ? "bg-primary/10 border border-primary/20"
-                    : "hover:bg-muted/50"
-                }`}
+                    : "hover:bg-muted/50",
+                )}
                 onClick={() => onSelectThread(thread)}
                 data-testid={`thread-item-${thread.id}`}
               >

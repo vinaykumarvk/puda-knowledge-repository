@@ -1,10 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { Trophy } from "lucide-react";
+
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface MasteryData {
   overallScore: number;
@@ -22,7 +24,11 @@ export function MasteryBar() {
     refetchInterval: false,
   });
 
-  if (isLoading || !mastery) {
+  if (isLoading) {
+    return <Skeleton className="hidden h-9 w-32 rounded-full sm:block" />;
+  }
+
+  if (!mastery) {
     return null;
   }
 

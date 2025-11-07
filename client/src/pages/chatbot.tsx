@@ -1,21 +1,17 @@
-import { useState, useEffect, useRef } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -25,9 +21,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { 
-  Loader2, 
-  Send, 
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import {
+  Loader2,
+  Send,
   Sparkles,
   User,
   Download,
@@ -35,22 +36,20 @@ import {
   FileText,
   FileType,
   Zap,
-  ShoppingCart,
-  Users,
-  Package,
-  ArrowRightLeft,
-  Network,
-  Shield,
-  FileBarChart
+  Star,
+  ThumbsUp,
+  ThumbsDown,
+  MoreHorizontal,
 } from "lucide-react";
 import jsPDF from "jspdf";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
-import { ThreadSidebar } from "@/components/thread-sidebar";
-import { AIConfigSidebar, type AIConfig } from "@/components/ai-config-sidebar";
+import { WorkspacePanel } from "@/components/workspace-panel";
+import { type AIConfig } from "@/components/ai-config-sidebar";
 import { QuizMessage } from "@/components/quiz-message";
 import { VoiceInputButton } from "@/components/voice-input-button";
+import { conversationStarterCategories } from "@/constants/conversation-starters";
 import type { Thread, Message } from "@shared/schema";
 import type { QuizData } from "@/types/quiz";
 
@@ -70,85 +69,45 @@ function removeKGTags(text: string): string {
 function cleanupCitations(text: string): string {
   // Remove the entire "Sources by File" section
   let cleaned = text.replace(/---\s*##\s*\*\*Sources by File\*\*[\s\S]*$/i, '');
-  
+
   // Remove bold formatting from citation filenames (e.g., **[1]** → [1])
   cleaned = cleaned.replace(/\*\*\[(\d+)\]\*\*/g, '[$1]');
-  
+
   // Remove bold from citation filenames (e.g., **filename.pdf** → filename.pdf)
   cleaned = cleaned.replace(/\*\*([^*]+\.(pdf|docx|doc|xlsx)[^*]*)\*\*/gi, '$1');
-  
+
   return cleaned;
 }
 
-// Conversation starter prompts organized by category (top 6 most relevant)
-const conversationStarters = [
+const responseProgressSteps = [
+  { id: "retrieving", label: "Retrieving context" },
+  { id: "reasoning", label: "Synthesizing answer" },
+  { id: "drafting", label: "Polishing response" },
+] as const;
+
+const responseModeOptions = [
   {
-    category: "Order Journey",
-    icon: ShoppingCart,
-    color: "from-blue-500/10 to-blue-500/5 border-blue-500/20 hover:border-blue-500/40",
-    iconColor: "text-blue-500",
-    prompts: [
-      "How does the order placement workflow work?",
-      "What's the difference between buy and sell orders?",
-      "Explain the order settlement process"
-    ]
+    value: "concise" as const,
+    label: "Concise",
+    description: "Sharp summaries under 150 words.",
   },
   {
-    category: "Customer Management",
-    icon: Users,
-    color: "from-purple-500/10 to-purple-500/5 border-purple-500/20 hover:border-purple-500/40",
-    iconColor: "text-purple-500",
-    prompts: [
-      "Explain the KYC verification process",
-      "How are customer accounts categorized?",
-      "What is customer onboarding workflow?"
-    ]
+    value: "balanced" as const,
+    label: "Balanced",
+    description: "Context-rich responses with key takeaways.",
   },
   {
-    category: "Products & Securities",
-    icon: Package,
-    color: "from-green-500/10 to-green-500/5 border-green-500/20 hover:border-green-500/40",
-    iconColor: "text-green-500",
-    prompts: [
-      "What types of mutual funds are available?",
-      "How does portfolio rebalancing work?",
-      "Explain different security types"
-    ]
+    value: "deep" as const,
+    label: "Deep",
+    description: "Exhaustive analysis with supporting detail.",
   },
-  {
-    category: "Transactions",
-    icon: ArrowRightLeft,
-    color: "from-amber-500/10 to-amber-500/5 border-amber-500/20 hover:border-amber-500/40",
-    iconColor: "text-amber-500",
-    prompts: [
-      "What's the difference between SIP and SWP?",
-      "How do redemption transactions work?",
-      "Explain systematic transfer plans"
-    ]
-  },
-  {
-    category: "Compliance",
-    icon: Shield,
-    color: "from-red-500/10 to-red-500/5 border-red-500/20 hover:border-red-500/40",
-    iconColor: "text-red-500",
-    prompts: [
-      "What are SEBI regulations for wealth management?",
-      "Explain AML compliance requirements",
-      "What are KYC documentation standards?"
-    ]
-  },
-  {
-    category: "Reports",
-    icon: FileBarChart,
-    color: "from-indigo-500/10 to-indigo-500/5 border-indigo-500/20 hover:border-indigo-500/40",
-    iconColor: "text-indigo-500",
-    prompts: [
-      "What reports are generated for clients?",
-      "How to interpret portfolio statements?",
-      "Explain transaction confirmation documents"
-    ]
-  }
 ];
+
+const quickPromptTemplates = [
+  "Summarize this conversation",
+  "Compare the last two responses",
+  "Explain this for a first-time investor",
+] as const;
 
 // Helper function to format API responses professionally
 function formatProfessionally(text: string): string {
@@ -437,6 +396,12 @@ export default function ChatbotPage() {
     tokenLimit: 2048,
     systemPrompt: "You are a helpful wealth management AI assistant.",
   });
+  const [pinnedPrompts, setPinnedPrompts] = useState<string[]>([]);
+  const [activeStarterCategory, setActiveStarterCategory] = useState(
+    conversationStarterCategories[0]?.category ?? "",
+  );
+  const [isWorkspaceSheetOpen, setWorkspaceSheetOpen] = useState(false);
+  const [activeProgressStep, setActiveProgressStep] = useState(responseProgressSteps.length - 1);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const lastAssistantMessageRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
@@ -633,8 +598,9 @@ export default function ChatbotPage() {
     }
   };
 
-  const handleSelectThread = async (thread: Thread) => {
+  const handleSelectThread = (thread: Thread) => {
     setCurrentThreadId(thread.id);
+    setWorkspaceSheetOpen(false);
   };
 
   const handleNewChat = () => {
@@ -668,28 +634,73 @@ export default function ChatbotPage() {
   const isLoading = queryMutation.isPending;
   const hasMessages = messages.length > 0;
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const timers: number[] = [];
+
+    if (isLoading) {
+      setActiveProgressStep(0);
+      responseProgressSteps.slice(1).forEach((_, index) => {
+        const timer = window.setTimeout(() => setActiveProgressStep(index + 1), (index + 1) * 1100);
+        timers.push(timer);
+      });
+    } else {
+      setActiveProgressStep(responseProgressSteps.length - 1);
+    }
+
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [isLoading]);
+
   const handleConfigChange = (config: AIConfig) => {
     setAIConfig(config);
     // Future: Send config to backend or use in API calls
   };
 
+  const handlePromptSelection = (prompt: string) => {
+    setQuestion(prompt);
+    handleSubmit(prompt);
+  };
+
+  const togglePinnedPrompt = (prompt: string) => {
+    setPinnedPrompts((prev) =>
+      prev.includes(prompt) ? prev.filter((item) => item !== prompt) : [...prev, prompt],
+    );
+  };
+
+  const handleReaction = (type: "positive" | "negative") => {
+    toast({
+      title: type === "positive" ? "Glad that helped!" : "Thanks for the feedback",
+      description:
+        type === "positive"
+          ? "We'll keep responses focused on what resonated."
+          : "We're refining future answers based on your signal.",
+    });
+  };
+
+  const selectedStarterCategory =
+    conversationStarterCategories.find((category) => category.category === activeStarterCategory) ??
+    conversationStarterCategories[0];
+
   return (
     <div className="flex flex-1 bg-background">
-      <div className="hidden md:block">
-        <ThreadSidebar
-          onSelectThread={handleSelectThread}
-          onNewChat={handleNewChat}
-          onDeleteThread={handleDeleteThread}
-          selectedThreadId={currentThreadId}
-        />
-      </div>
-      
-      <div className="flex-1 flex flex-col">
+      <WorkspacePanel
+        layout="desktop"
+        onSelectThread={handleSelectThread}
+        onNewChat={handleNewChat}
+        onDeleteThread={handleDeleteThread}
+        selectedThreadId={currentThreadId}
+        onConfigChange={handleConfigChange}
+      />
+
+      <div className="flex flex-1 flex-col">
         {/* Header */}
-        <header className="border-b border-border bg-card/30 backdrop-blur-sm px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-6 h-6 text-primary" />
+        <header className="border-b border-border bg-card/30 backdrop-blur-sm px-4 py-4 sm:px-6">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-start gap-3">
+              <Sparkles className="mt-1 h-6 w-6 text-primary" />
               <div>
                 <h1 className="text-2xl font-bold text-foreground" data-testid="text-title">
                   WealthForce Knowledge Agent
@@ -699,39 +710,38 @@ export default function ChatbotPage() {
                 </p>
               </div>
             </div>
-            
-            {/* Mode Selector and Actions */}
-            <div className="flex items-center gap-3">
-              {/* Download Thread Button */}
+
+            <div className="flex flex-wrap items-center gap-2 md:justify-end">
+              <Sheet open={isWorkspaceSheetOpen} onOpenChange={setWorkspaceSheetOpen}>
+                <SheetTrigger asChild>
+                  <Button variant="outline" size="sm" className="md:hidden">
+                    Workspace
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="left" className="w-full sm:max-w-sm p-0">
+                  <WorkspacePanel
+                    layout="mobile"
+                    onSelectThread={handleSelectThread}
+                    onNewChat={handleNewChat}
+                    onDeleteThread={handleDeleteThread}
+                    selectedThreadId={currentThreadId}
+                    onConfigChange={handleConfigChange}
+                  />
+                </SheetContent>
+              </Sheet>
+
               {currentThreadId && hasMessages && (
                 <Button
                   variant="outline"
                   size="sm"
                   data-testid="button-download-thread"
                   onClick={() => setShowDownloadDialog(true)}
+                  className="gap-2"
                 >
-                  <Download className="w-4 h-4 mr-2" />
+                  <Download className="h-4 w-4" />
                   Download Thread
                 </Button>
               )}
-              
-              <span className="text-sm text-muted-foreground">Mode:</span>
-              <Select value={mode} onValueChange={(value) => setMode(value as "concise" | "balanced" | "deep")}>
-                <SelectTrigger className="w-[160px]" data-testid="select-mode">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="concise" data-testid="option-short">
-                    Short
-                  </SelectItem>
-                  <SelectItem value="balanced" data-testid="option-standard">
-                    Standard
-                  </SelectItem>
-                  <SelectItem value="deep" data-testid="option-comprehensive">
-                    Comprehensive
-                  </SelectItem>
-                </SelectContent>
-              </Select>
             </div>
           </div>
         </header>
@@ -740,59 +750,115 @@ export default function ChatbotPage() {
         <ScrollArea ref={scrollAreaRef} className="flex-1">
           <div className="max-w-4xl mx-auto px-6 py-8">
             {!hasMessages && !isLoading && (
-              <div className="flex flex-col items-center justify-center space-y-5 py-6">
-                <div className="text-center space-y-2">
-                  <Sparkles className="w-12 h-12 text-primary/50 mx-auto" />
+              <div className="flex flex-col items-center justify-center gap-6 py-6">
+                <div className="space-y-2 text-center">
+                  <Sparkles className="mx-auto h-12 w-12 text-primary/50" />
                   <h2 className="text-xl font-semibold text-foreground">
                     Start a New Conversation
                   </h2>
-                  <p className="text-sm text-muted-foreground max-w-md">
-                    Choose a topic below or ask your own question
+                  <p className="mx-auto max-w-md text-sm text-muted-foreground">
+                    Choose a curated prompt, pin your favorites, or ask your own question.
                   </p>
                 </div>
 
-                {/* Conversation Starter Cards */}
-                <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {conversationStarters.map((starter, categoryIndex) => {
-                    const Icon = starter.icon;
-                    // Randomly pick one prompt from each category to display
-                    const randomPrompt = starter.prompts[Math.floor(Math.random() * starter.prompts.length)];
-                    
-                    return (
-                      <button
-                        key={categoryIndex}
-                        onClick={() => {
-                          handleSubmit(randomPrompt);
-                        }}
-                        className={`group relative p-4 rounded-lg border bg-gradient-to-br transition-all hover:shadow-lg hover:scale-[1.02] text-left ${starter.color}`}
-                        data-testid={`starter-card-${categoryIndex}`}
-                      >
-                        <div className="flex items-start gap-2.5">
-                          <div className={`flex-shrink-0 w-9 h-9 rounded-lg bg-background/50 flex items-center justify-center ${starter.iconColor}`}>
-                            <Icon className="w-4 h-4" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h3 className="text-sm font-semibold text-foreground mb-1.5 line-clamp-1">
-                              {starter.category}
-                            </h3>
-                            <p className="text-xs text-muted-foreground line-clamp-2 leading-snug">
-                              {randomPrompt}
-                            </p>
-                          </div>
-                        </div>
-                        
-                        {/* Hover indicator */}
-                        <div className="absolute bottom-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Send className="w-3.5 h-3.5 text-muted-foreground" />
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
+                {pinnedPrompts.length > 0 && (
+                  <div className="w-full max-w-3xl text-left">
+                    <h3 className="text-sm font-semibold text-foreground">Pinned prompts</h3>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {pinnedPrompts.map((prompt) => (
+                        <Button
+                          key={`pinned-${prompt}`}
+                          variant="secondary"
+                          size="sm"
+                          className="gap-2 rounded-full"
+                          onClick={() => handlePromptSelection(prompt)}
+                        >
+                          <Sparkles className="h-4 w-4 text-primary" />
+                          {prompt}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-                {/* Additional help text */}
-                <p className="text-xs text-muted-foreground/70 text-center">
-                  💡 Click any card to start, or type your own question below
+                <Tabs value={activeStarterCategory} onValueChange={setActiveStarterCategory} className="w-full">
+                  <TabsList className="grid w-full grid-cols-1 gap-2 bg-transparent p-0 sm:grid-cols-2 lg:grid-cols-3">
+                    {conversationStarterCategories.map((starter) => {
+                      const Icon = starter.icon;
+                      return (
+                        <TabsTrigger
+                          key={starter.category}
+                          value={starter.category}
+                          className="flex items-center justify-start gap-3 rounded-lg border border-border/60 bg-background/80 px-4 py-3 text-left text-sm font-medium shadow-sm transition data-[state=active]:border-primary/50 data-[state=active]:text-foreground"
+                        >
+                          <Icon className={`h-4 w-4 ${starter.iconColor}`} />
+                          {starter.category}
+                        </TabsTrigger>
+                      );
+                    })}
+                  </TabsList>
+
+                  <p className="mt-3 text-center text-xs text-muted-foreground">
+                    Showing curated prompts for {selectedStarterCategory?.category}.
+                  </p>
+
+                  {conversationStarterCategories.map((starter) => (
+                    <TabsContent key={starter.category} value={starter.category} forceMount className="mt-4">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        {starter.prompts.map((prompt) => {
+                          const isPinned = pinnedPrompts.includes(prompt);
+                          return (
+                            <button
+                              key={prompt}
+                              onClick={() => handlePromptSelection(prompt)}
+                              className={`group relative flex w-full items-start justify-between gap-3 rounded-xl border bg-gradient-to-br p-4 text-left transition-all hover:shadow-lg ${starter.color}`}
+                              data-testid={`starter-card-${starter.category}-${prompt}`}
+                            >
+                              <div className="flex flex-1 flex-col gap-1.5">
+                                <span className="text-sm font-semibold text-foreground">{prompt}</span>
+                                <span className="text-xs text-muted-foreground">Click to ask instantly</span>
+                              </div>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className={`h-8 w-8 rounded-full border border-transparent bg-background/80 transition ${
+                                      isPinned
+                                        ? "border-yellow-500/50 text-yellow-500"
+                                        : "text-muted-foreground hover:text-foreground"
+                                    }`}
+                                    onClick={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      togglePinnedPrompt(prompt);
+                                    }}
+                                  >
+                                    <Star
+                                      className={`h-4 w-4 ${
+                                        isPinned ? "fill-yellow-400 text-yellow-500" : ""
+                                      }`}
+                                    />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top">
+                                  {isPinned ? "Remove from favorites" : "Pin for quick access"}
+                                </TooltipContent>
+                              </Tooltip>
+                              <div className="absolute bottom-2 right-2 opacity-0 transition-opacity group-hover:opacity-100">
+                                <Send className="h-3.5 w-3.5 text-muted-foreground" />
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </TabsContent>
+                  ))}
+                </Tabs>
+
+                <p className="text-center text-xs text-muted-foreground/70">
+                  💡 Click any prompt to jump-start the conversation or craft your own below.
                 </p>
               </div>
             )}
@@ -843,61 +909,80 @@ export default function ChatbotPage() {
                     
                     {/* Action buttons for assistant messages */}
                     {message.role === "assistant" && userMessage && (
-                      <div className="flex gap-2 mt-2">
+                      <div className="mt-2 flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          data-testid={`button-feedback-positive-${message.id}`}
+                          onClick={() => handleReaction("positive")}
+                        >
+                          <ThumbsUp className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          data-testid={`button-feedback-negative-${message.id}`}
+                          onClick={() => handleReaction("negative")}
+                        >
+                          <ThumbsDown className="h-4 w-4" />
+                        </Button>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
                               variant="ghost"
-                              size="sm"
-                              className="h-8 text-xs"
-                              data-testid={`button-download-message-${message.id}`}
+                              size="icon"
+                              className="h-8 w-8"
+                              data-testid={`button-message-actions-${message.id}`}
                             >
-                              <Download className="w-3 h-3 mr-1" />
-                              Download
+                              <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent>
-                            <DropdownMenuItem 
-                              onClick={() => downloadMessageMarkdown(
-                                userMessage.content,
-                                message.content,
-                                typeof message.createdAt === 'string' ? message.createdAt : message.createdAt.toISOString()
-                              )}
+                          <DropdownMenuContent align="start" className="w-56">
+                            <DropdownMenuLabel>Response actions</DropdownMenuLabel>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                downloadMessageMarkdown(
+                                  userMessage.content,
+                                  message.content,
+                                  typeof message.createdAt === "string"
+                                    ? message.createdAt
+                                    : message.createdAt.toISOString(),
+                                )
+                              }
                             >
-                              <FileText className="w-4 h-4 mr-2" />
+                              <FileText className="mr-2 h-4 w-4" />
                               Download as Markdown (.md)
                             </DropdownMenuItem>
-                            <DropdownMenuItem 
-                              onClick={() => downloadMessagePDF(
-                                userMessage.content,
-                                message.content,
-                                typeof message.createdAt === 'string' ? message.createdAt : message.createdAt.toISOString()
-                              )}
+                            <DropdownMenuItem
+                              onClick={() =>
+                                downloadMessagePDF(
+                                  userMessage.content,
+                                  message.content,
+                                  typeof message.createdAt === "string"
+                                    ? message.createdAt
+                                    : message.createdAt.toISOString(),
+                                )
+                              }
                             >
-                              <FileType className="w-4 h-4 mr-2" />
+                              <FileType className="mr-2 h-4 w-4" />
                               Download as PDF (.pdf)
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() =>
+                                queryMutation.mutate({
+                                  question: userMessage.content,
+                                  threadId: currentThreadId,
+                                })
+                              }
+                            >
+                              <RefreshCw className="mr-2 h-4 w-4" />
+                              Regenerate response
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
-                        
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 text-xs"
-                          data-testid={`button-refresh-message-${message.id}`}
-                          onClick={() => {
-                            if (userMessage) {
-                              // Directly call mutation with the stored question
-                              queryMutation.mutate({
-                                question: userMessage.content,
-                                threadId: currentThreadId,
-                              });
-                            }
-                          }}
-                        >
-                          <RefreshCw className="w-3 h-3 mr-1" />
-                          Regenerate
-                        </Button>
                       </div>
                     )}
                   </div>
@@ -919,14 +1004,36 @@ export default function ChatbotPage() {
             ))}
 
             {isLoading && (
-              <div className="mb-6 flex gap-4 justify-start" data-testid="loading-indicator">
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Sparkles className="w-4 h-4 text-primary" />
+              <div className="mb-6 space-y-3" data-testid="loading-indicator">
+                <div className="flex gap-4">
+                  <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                  </div>
+                  <div className="flex-1 rounded-lg bg-muted px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="text-sm text-muted-foreground">Crafting your answer…</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="max-w-[80%] rounded-lg px-4 py-3 bg-muted">
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span className="text-sm text-muted-foreground">Thinking...</span>
+                <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-3 text-xs text-muted-foreground">
+                  <div className="flex flex-col gap-2">
+                    {responseProgressSteps.map((step, index) => (
+                      <div key={step.id} className="flex items-center gap-2">
+                        <div
+                          className={`h-2 w-2 rounded-full ${
+                            index <= activeProgressStep ? "bg-primary" : "bg-muted-foreground/40"
+                          }`}
+                        />
+                        <span
+                          className={`${
+                            index <= activeProgressStep ? "text-foreground font-medium" : "text-muted-foreground"
+                          }`}
+                        >
+                          {step.label}
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -936,72 +1043,116 @@ export default function ChatbotPage() {
 
         {/* Input Area - Fixed at bottom */}
         <div className="border-t border-border bg-card/30 backdrop-blur-sm p-4">
-          <div className="max-w-4xl mx-auto">
-            <div className="flex gap-3 items-end">
+          <div className="mx-auto flex max-w-4xl flex-col gap-4">
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Response style
+                </Label>
+                <ToggleGroup
+                  type="single"
+                  value={mode}
+                  onValueChange={(value) => value && setMode(value as "concise" | "balanced" | "deep")}
+                  className="flex gap-1"
+                >
+                  {responseModeOptions.map((option) => (
+                    <Tooltip key={option.value}>
+                      <TooltipTrigger asChild>
+                        <ToggleGroupItem
+                          value={option.value}
+                          className="rounded-full px-3 py-1.5 text-xs data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                        >
+                          {option.label}
+                        </ToggleGroupItem>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">{option.description}</TooltipContent>
+                    </Tooltip>
+                  ))}
+                </ToggleGroup>
+              </div>
+
               <Textarea
                 data-testid="input-question"
                 placeholder="Ask a follow-up question or use voice input..."
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
                 onKeyDown={handleKeyDown}
-                className="flex-1 min-h-[60px] max-h-[200px] resize-none"
+                className="min-h-[80px] max-h-[220px] resize-none rounded-xl border border-border/60 bg-background/90"
                 disabled={isLoading}
               />
-              
-              {/* Voice Input Button */}
-              <VoiceInputButton
-                onTranscriptionComplete={(text) => {
-                  setQuestion(text);
-                }}
-                disabled={isLoading}
-              />
-              
-              {/* Quiz Me Button - Shows when there's enough conversation */}
-              {hasMessages && messages.length >= 2 && (
+
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">Quick templates:</span>
+                {quickPromptTemplates.map((template) => (
+                  <Button
+                    key={template}
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 rounded-full border border-dashed border-border/60"
+                    onClick={() => handlePromptSelection(template)}
+                  >
+                    {template}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div className="flex items-center gap-3">
+                <VoiceInputButton
+                  onTranscriptionComplete={(text) => {
+                    setQuestion(text);
+                  }}
+                  disabled={isLoading}
+                />
+                <span className="hidden text-xs text-muted-foreground sm:inline">
+                  Hold to talk or tap once for quick dictation.
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {hasMessages && messages.length >= 2 && (
+                  <Button
+                    data-testid="button-quiz-me"
+                    onClick={handleGenerateQuiz}
+                    disabled={quizMutation.isPending}
+                    size="lg"
+                    variant="outline"
+                    className="h-11 gap-2 sm:h-12"
+                  >
+                    {quizMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        <span className="hidden sm:inline">Generating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="h-5 w-5" />
+                        <span className="hidden sm:inline">Quiz Me</span>
+                      </>
+                    )}
+                  </Button>
+                )}
+
                 <Button
-                  data-testid="button-quiz-me"
-                  onClick={handleGenerateQuiz}
-                  disabled={quizMutation.isPending}
+                  data-testid="button-submit"
+                  onClick={() => handleSubmit()}
+                  disabled={!question.trim() || isLoading}
                   size="lg"
-                  variant="outline"
-                  className="h-[60px] px-4 gap-2"
+                  className="h-11 w-11 rounded-full p-0 sm:h-12 sm:w-12"
                 >
-                  {quizMutation.isPending ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      <span className="hidden sm:inline">Generating...</span>
-                    </>
+                  {isLoading ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
                   ) : (
-                    <>
-                      <Zap className="w-5 h-5" />
-                      <span className="hidden sm:inline">Quiz Me</span>
-                    </>
+                    <Send className="h-5 w-5" />
                   )}
                 </Button>
-              )}
-              
-              <Button
-                data-testid="button-submit"
-                onClick={() => handleSubmit()}
-                disabled={!question.trim() || isLoading}
-                size="lg"
-                className="h-[60px] w-[60px] p-0"
-              >
-                {isLoading ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <Send className="w-5 h-5" />
-                )}
-              </Button>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="hidden md:block">
-        <AIConfigSidebar onConfigChange={handleConfigChange} />
-      </div>
-      
       {/* Download Format Selection Dialog */}
       <Dialog open={showDownloadDialog} onOpenChange={setShowDownloadDialog}>
         <DialogContent className="sm:max-w-md">
