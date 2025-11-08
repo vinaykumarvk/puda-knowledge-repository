@@ -3,6 +3,7 @@ import cookieParser from "cookie-parser";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { seedUsers } from "./seed-users";
+import { initializeDomainRegistry } from "./services/domainRegistry";
 
 const app = express();
 app.use(express.json());
@@ -40,6 +41,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Ensure domain registry reflects latest vector stores before wiring routes
+  await initializeDomainRegistry();
+
   // Serve attached assets FIRST (before routes and Vite)
   // This ensures the static files are served correctly
   app.use("/attached_assets", express.static("attached_assets"));

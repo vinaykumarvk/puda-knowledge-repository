@@ -8,14 +8,18 @@ import fs from "fs/promises";
 import path from "node:path";
 import authRouter from "./routes/auth";
 import { requireAuth, type AuthenticatedRequest } from "./middleware/requireAuth";
+import { DomainRouter } from "./services/domainRouter";
+import { getDomainSyncInfo, listDomains, refreshDomainRegistry } from "./services/domainRegistry";
 
 const EKG_API_URL = "https://ekg-service-47249889063.europe-west6.run.app";
+const domainRouter = new DomainRouter();
 
 // Initialize OpenAI client for quiz generation using Replit AI Integrations
-const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+// Fallback to regular OpenAI API key if Replit integrations are not available
+const openai = (process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY) ? new OpenAI({
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-});
+}) : null;
 
 // Configure multer for audio file uploads (memory storage)
 const upload = multer({ 
@@ -100,8 +104,49 @@ function cleanAnswer(markdown: string): string {
     .trim();
 }
 
+function extractDomainFromMetadata(metadata?: string | null): string | undefined {
+  if (!metadata) return undefined;
+  try {
+    const parsed = JSON.parse(metadata);
+    if (parsed?.domain) return parsed.domain;
+    if (parsed?.meta?.domain) return parsed.meta.domain;
+    if (parsed?.domainResolution?.domainId) {
+      return parsed.domainResolution.domainId;
+    }
+  } catch (error) {
+    console.warn("Failed to parse message metadata for domain:", error);
+  }
+  return undefined;
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   app.use("/api/auth", authRouter);
+
+  app.get("/api/domains", (_req, res) => {
+    const syncInfo = getDomainSyncInfo();
+    res.json({
+      domains: listDomains(),
+      lastSyncedAt: syncInfo.lastSyncedAt,
+    });
+  });
+
+  app.post("/api/domains/refresh", async (_req, res) => {
+    try {
+      const success = await refreshDomainRegistry();
+      const syncInfo = getDomainSyncInfo();
+      res.json({
+        success,
+        domains: listDomains(),
+        lastSyncedAt: syncInfo.lastSyncedAt,
+      });
+    } catch (error) {
+      console.error("Domain refresh endpoint failed:", error);
+      res.status(500).json({
+        success: false,
+        error: "Failed to refresh domains. Check server logs for details.",
+      });
+    }
+  });
 
   // Voice transcription endpoint using OpenAI Whisper
   app.post("/api/voice/transcribe", upload.single('audio'), async (req, res) => {
@@ -115,6 +160,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         mimetype: req.file.mimetype,
         size: req.file.size,
       });
+
+      if (!openai) {
+        return res.status(503).json({ error: "OpenAI API not configured. Please set OPENAI_API_KEY or AI_INTEGRATIONS_OPENAI_API_KEY" });
+      }
 
       // Create a temporary file from the buffer
       const tempFilePath = `/tmp/audio-${Date.now()}.webm`;
@@ -162,6 +211,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let threadId = validatedData.threadId;
       let previousResponseId: string | undefined;
       let existingConversationId: string | undefined;
+      let persistedDomain: string | undefined;
       
       // If threadId provided, get conversation context
       let chatHistory: Array<{question: string; answer: string}> = [];
@@ -175,6 +225,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const lastMessage = await storage.getLastAssistantMessage(threadId);
         if (lastMessage && lastMessage.responseId) {
           previousResponseId = lastMessage.responseId;
+        }
+        if (lastMessage?.metadata) {
+          persistedDomain = extractDomainFromMetadata(lastMessage.metadata);
         }
         
         // Get last 3 Q&A pairs for focused context window
@@ -243,10 +296,24 @@ Please follow these instructions when answering:
 User's Question: ${validatedData.question}`;
       }
       
+      const domainResolution = domainRouter.resolve({
+        question: validatedData.question,
+        conversationDomain: persistedDomain,
+        metadataDomain: persistedDomain,
+      });
+      const resolvedDomain = domainResolution.domainId;
+      console.log("Domain resolved", {
+        resolvedDomain,
+        strategy: domainResolution.strategy,
+        confidence: domainResolution.confidence,
+        persistedDomain,
+        matchedKeywords: domainResolution.matchedKeywords,
+      });
+
       // Prepare API request payload with correct structure
       const apiPayload: any = {
         question: questionToSend,
-        domain: "wealth_management",
+        domain: resolvedDomain,
         params: {
           _mode: validatedData.mode || "balanced"  // Send mode in params object
         }
@@ -299,10 +366,11 @@ User's Question: ${validatedData.question}`;
         }
         
         // Format metadata
-        let metadata = "";
-        if (result.meta) {
-          metadata = JSON.stringify(result.meta);
-        }
+        const metadataPayload = {
+          ...(result.meta || {}),
+          domainResolution,
+        };
+        const metadata = JSON.stringify(metadataPayload);
         
         // Save user message
         await storage.createMessage({
@@ -321,7 +389,7 @@ User's Question: ${validatedData.question}`;
           content: responseText,
           responseId: result.response_id || null,
           sources: sources || null,
-          metadata: metadata || null,
+          metadata,
         });
         
         // Capture and store conversation_id from API response for long-running context
@@ -336,10 +404,12 @@ User's Question: ${validatedData.question}`;
         res.json({
           threadId: threadId,
           data: responseText,
-          metadata: metadata || undefined,
+          metadata,
           citations: sources || undefined,
           responseId: result.response_id,
           isConversational: result.meta?.is_conversational || false,
+          resolvedDomain,
+          domainStrategy: domainResolution.strategy,
         });
       } else {
         res.status(500).json({
@@ -416,6 +486,10 @@ Generate quiz questions that:
 - Have 4 answer options (A, B, C, D)
 - Include the correct answer
 - Include a brief explanation (2-3 sentences) of why the answer is correct`;
+
+      if (!openai) {
+        return res.status(503).json({ error: "OpenAI API not configured. Please set OPENAI_API_KEY or AI_INTEGRATIONS_OPENAI_API_KEY" });
+      }
 
       // Call OpenAI to generate quiz
       const completion = await openai.chat.completions.create({
@@ -850,9 +924,14 @@ Generate quiz questions that:
       const { default: OpenAI } = await import("openai");
       
       // Initialize OpenAI client using Replit AI Integrations
+      const openaiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+      if (!openaiKey) {
+        return res.status(503).json({ error: "OpenAI API not configured. Please set OPENAI_API_KEY or AI_INTEGRATIONS_OPENAI_API_KEY" });
+      }
+      
       const openai = new OpenAI({
         baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY
+        apiKey: openaiKey
       });
       
       // Create prompt for RFP response generation
@@ -1278,6 +1357,10 @@ Write the response now:`;
         documentContent = `Document: ${document.originalName} (${document.mimeType})`;
       }
 
+      if (!openai) {
+        return res.status(503).json({ error: "OpenAI API not configured. Please set OPENAI_API_KEY or AI_INTEGRATIONS_OPENAI_API_KEY" });
+      }
+
       // Use OpenAI to analyze the document
       const completion = await openai.chat.completions.create({
         model: "gpt-4o-mini",
@@ -1319,6 +1402,10 @@ Write the response now:`;
 
       if (!question) {
         return res.status(400).json({ error: "Question is required" });
+      }
+
+      if (!openai) {
+        return res.status(503).json({ error: "OpenAI API not configured. Please set OPENAI_API_KEY or AI_INTEGRATIONS_OPENAI_API_KEY" });
       }
 
       // Use OpenAI to research market regulations
@@ -1605,6 +1692,10 @@ When drafting content:
         ...(conversationHistory || []).slice(-6), // Keep last 6 messages for context
         { role: "user", content: question }
       ];
+
+      if (!openai) {
+        return res.status(503).json({ error: "OpenAI API not configured. Please set OPENAI_API_KEY or AI_INTEGRATIONS_OPENAI_API_KEY" });
+      }
 
       // 7. Call OpenAI
       const completion = await openai.chat.completions.create({
