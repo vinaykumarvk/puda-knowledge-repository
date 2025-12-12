@@ -42,14 +42,26 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  // Ensure domain registry reflects latest vector stores before wiring routes
-  await initializeDomainRegistry();
+  try {
+    console.log('Starting server initialization...');
+    console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
+    console.log(`PORT: ${process.env.PORT || '5000'}`);
+    
+    // Ensure domain registry reflects latest vector stores before wiring routes
+    // This may fail if OpenAI API is not configured, but we continue anyway
+    console.log('Initializing domain registry...');
+    await initializeDomainRegistry().catch((err) => {
+      console.warn('Domain registry initialization failed (non-fatal):', err.message);
+    });
+    console.log('Domain registry initialized');
 
   // Serve attached assets FIRST (before routes and Vite)
   // This ensures the static files are served correctly
+  console.log('Setting up routes...');
   app.use("/attached_assets", express.static("attached_assets"));
   
   const server = await registerRoutes(app);
+  console.log('Routes registered');
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
@@ -67,10 +79,13 @@ app.use((req, res, next) => {
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
+  console.log('Setting up static file serving...');
   if (app.get("env") === "development") {
     await setupVite(app, server);
+    console.log('Vite dev server configured');
   } else {
     serveStatic(app);
+    console.log('Static file serving configured');
   }
 
   // Seed sample users on startup
@@ -82,11 +97,24 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
+  
+  // Use standard Node.js server.listen() syntax
+  // Cloud Run requires listening on 0.0.0.0 to accept external connections
+  server.listen(port, "0.0.0.0", () => {
     log(`serving on port ${port}`);
+    console.log(`Server started successfully on port ${port}`);
   });
+  
+  // Handle server errors
+  server.on('error', (err: any) => {
+    console.error('Server error:', err);
+    if (err.code === 'EADDRINUSE') {
+      console.error(`Port ${port} is already in use`);
+    }
+    process.exit(1);
+  });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
 })();
