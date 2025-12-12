@@ -7,3 +7,7 @@ vite.config.ts.*
 .env
 .env.local
 .env.*.local
+*.log
+server.log
+uploads/
+/tmp/
