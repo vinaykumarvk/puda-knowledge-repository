@@ -1,13 +1,9 @@
 import express, { type Express } from "express";
 import fs from "fs";
 import path from "path";
-import { createServer as createViteServer, createLogger } from "vite";
 import { type Server } from "http";
-import viteConfig from "../vite.config";
-import { nanoid } from "nanoid";
 
-const viteLogger = createLogger();
-
+// Log function - used in both dev and production
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",
@@ -19,7 +15,16 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
+// setupVite - ONLY called in development mode
+// Uses dynamic imports to avoid loading vite in production
 export async function setupVite(app: Express, server: Server) {
+  // Dynamic imports - only load vite packages when this function is called (development only)
+  const { createServer: createViteServer, createLogger } = await import("vite");
+  const { default: viteConfig } = await import("../vite.config");
+  const { nanoid } = await import("nanoid");
+  
+  const viteLogger = createLogger();
+  
   const serverOptions = {
     middlewareMode: true,
     hmr: { server },
@@ -67,6 +72,8 @@ export async function setupVite(app: Express, server: Server) {
   });
 }
 
+// serveStatic - used in production mode
+// No vite dependencies - safe for production
 export function serveStatic(app: Express) {
   // In production, built files are in dist/public (relative to server directory)
   // Try dist/public first (production build), then fallback to public (legacy)
@@ -81,6 +88,7 @@ export function serveStatic(app: Express) {
     );
   }
 
+  console.log(`Serving static files from: ${staticPath}`);
   app.use(express.static(staticPath));
 
   // fall through to index.html if the file doesn't exist
