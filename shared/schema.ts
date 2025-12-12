@@ -43,6 +43,30 @@ export const insertMessageSchema = createInsertSchema(messages).omit({
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type Message = typeof messages.$inferSelect;
 
+// Deep mode background jobs (persisted)
+export const deepModeJobs = pgTable("deep_mode_jobs", {
+  id: text("id").primaryKey(),
+  threadId: integer("thread_id").notNull().references(() => threads.id, { onDelete: "cascade" }),
+  messageId: integer("message_id").notNull().references(() => messages.id, { onDelete: "cascade" }),
+  question: text("question").notNull(),
+  responseId: text("response_id").notNull(),
+  status: text("status").notNull(), // queued | polling | retrieving | formatting | completed | failed
+  rawResponse: text("raw_response"),
+  formattedResult: text("formatted_result"),
+  metadata: text("metadata"), // JSON string
+  error: text("error"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertDeepModeJobSchema = createInsertSchema(deepModeJobs).omit({
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertDeepModeJob = z.infer<typeof insertDeepModeJobSchema>;
+export type DeepModeJob = typeof deepModeJobs.$inferSelect;
+
 // Old conversations table - kept for backward compatibility
 export const conversations = pgTable("conversations", {
   id: serial("id").primaryKey(),
@@ -65,7 +89,8 @@ export type Conversation = typeof conversations.$inferSelect;
 export const querySchema = z.object({
   question: z.string().min(1, "Question is required"),
   mode: z.enum(["balanced", "deep", "concise"]),
-  refresh: z.boolean(),
+  refresh: z.boolean().optional(),
+  refreshCache: z.boolean().optional(), // Bypass cache and get fresh answer
   threadId: z.number().optional(), // Optional thread ID for conversational mode
 });
 
@@ -704,3 +729,30 @@ export type TemplateWorkItem = typeof templateWorkItems.$inferSelect;
 
 export type InsertTemplateRevision = z.infer<typeof insertTemplateRevisionSchema>;
 export type TemplateRevision = typeof templateRevisions.$inferSelect;
+
+// Response Cache - stores cached responses for all modes (concise, balanced, deep)
+export const responseCache = pgTable("response_cache", {
+  id: serial("id").primaryKey(),
+  question: text("question").notNull(),
+  questionEmbedding: vector("question_embedding", { dimensions: 1536 }), // OpenAI text-embedding-3-small
+  mode: text("mode").notNull(), // "concise" | "balanced" | "deep"
+  response: text("response").notNull(), // Final formatted response
+  rawResponse: text("raw_response"), // Raw response (for deep mode before formatting)
+  metadata: text("metadata"), // JSON string with metadata
+  responseId: text("response_id"), // OpenAI/EKG response ID
+  isDeepMode: boolean("is_deep_mode").default(false), // Flag for deep mode
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  lastAccessedAt: timestamp("last_accessed_at").notNull().defaultNow(),
+  accessCount: integer("access_count").notNull().default(1),
+  isRefreshed: boolean("is_refreshed").default(false), // True if this was a refresh result
+  originalCacheId: integer("original_cache_id").references(() => responseCache.id), // Links to original cached entry if refreshed
+});
+
+export const insertResponseCacheSchema = createInsertSchema(responseCache).omit({
+  id: true,
+  createdAt: true,
+  lastAccessedAt: true,
+});
+
+export type InsertResponseCache = z.infer<typeof insertResponseCacheSchema>;
+export type ResponseCache = typeof responseCache.$inferSelect;

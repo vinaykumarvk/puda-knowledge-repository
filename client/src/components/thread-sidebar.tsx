@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { Trash2, MessageSquarePlus, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { Trash2, MessageSquarePlus, Search, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 
 import type { Thread } from "@shared/schema";
 import { cn } from "@/lib/utils";
@@ -34,9 +34,43 @@ export function ThreadSidebar({
     queryKey: ["/api/threads"],
   });
 
+  // Fetch thread statuses (for active deep mode jobs)
+  // Note: JSON keys are strings, so we use Record<string, ...>
+  const { data: threadStatuses = {} } = useQuery<Record<string, { status: string; jobId?: string; messageId?: number }>>({
+    queryKey: ["/api/threads/statuses"],
+    refetchInterval: (query) => {
+      // If there are active polling jobs, refetch more frequently (every 10 seconds)
+      // Otherwise, refetch every 30 seconds
+      const statuses = query.state.data || {};
+      const hasActiveJobs = Object.values(statuses).some(
+        (status) => status.status && status.status !== 'completed' && status.status !== 'failed'
+      );
+      return hasActiveJobs ? 10 * 1000 : 30 * 1000;
+    },
+  });
+
   const filteredThreads = threads.filter((thread) =>
     thread.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  // Helper function to get status display
+  const getStatusDisplay = (threadId: number) => {
+    // JSON keys are strings, so convert threadId to string for lookup
+    const status = threadStatuses[String(threadId)];
+    if (!status) return null;
+
+    const statusLabels: Record<string, string> = {
+      polling: "Polling...",
+      retrieving: "Retrieving...",
+      formatting: "Formatting...",
+      queued: "Queued...",
+    };
+
+    return {
+      label: statusLabels[status.status] || "Processing...",
+      isActive: true,
+    };
+  };
 
   if (enableCollapse && isCollapsed) {
     return (
@@ -137,9 +171,19 @@ export function ThreadSidebar({
                 data-testid={`thread-item-${thread.id}`}
               >
                 <div className="flex-1 min-w-0 overflow-hidden">
-                  <p className="text-sm font-normal text-foreground break-words line-clamp-2">
-                    {thread.title}
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-normal text-foreground break-words line-clamp-2 flex-1">
+                      {thread.title}
+                    </p>
+                    {getStatusDisplay(thread.id) && (
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                        <span className="text-xs text-primary font-medium">
+                          {getStatusDisplay(thread.id)?.label}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground mt-1">
                     {formatDistanceToNow(new Date(thread.updatedAt), { addSuffix: true })}
                   </p>

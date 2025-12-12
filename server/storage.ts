@@ -101,6 +101,7 @@ export interface IStorage {
   // Message methods
   getMessages(threadId: number): Promise<Message[]>;
   createMessage(message: InsertMessage): Promise<Message>;
+  updateMessage(id: number, updates: Partial<Pick<Message, 'content' | 'responseId' | 'sources' | 'metadata'>>): Promise<Message>;
   getLastAssistantMessage(threadId: number): Promise<Message | undefined>;
   getRecentMessagePairs(threadId: number, pairCount: number): Promise<Message[]>;
   
@@ -372,6 +373,18 @@ export class DatabaseStorage implements IStorage {
       .values(insertMessage)
       .returning();
     return message;
+  }
+
+  async updateMessage(id: number, updates: Partial<Pick<Message, 'content' | 'responseId' | 'sources' | 'metadata'>>): Promise<Message> {
+    const [updated] = await db
+      .update(messages)
+      .set(updates)
+      .where(eq(messages.id, id))
+      .returning();
+    if (!updated) {
+      throw new Error(`Message ${id} not found`);
+    }
+    return updated;
   }
 
   async getLastAssistantMessage(threadId: number): Promise<Message | undefined> {

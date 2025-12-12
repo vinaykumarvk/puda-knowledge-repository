@@ -1,7 +1,9 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { querySchema, insertConversationSchema } from "@shared/schema";
+import { querySchema, insertConversationSchema, messages } from "@shared/schema";
 import { storage } from "./storage";
+import { db } from "./db";
+import { sql, and, eq, desc } from "drizzle-orm";
 import OpenAI from "openai";
 import multer from "multer";
 import fs from "fs/promises";
@@ -9,10 +11,151 @@ import path from "node:path";
 import authRouter from "./routes/auth";
 import { requireAuth, type AuthenticatedRequest } from "./middleware/requireAuth";
 import { DomainRouter } from "./services/domainRouter";
-import { getDomainSyncInfo, listDomains, refreshDomainRegistry } from "./services/domainRegistry";
+import { getDomainSyncInfo, listDomains, refreshDomainRegistry, domainExists, DEFAULT_DOMAIN_ID, getDomainConfig } from "./services/domainRegistry";
+import { pollUntilComplete, extractAnswerText, isAsyncDeepModeResponse } from "./services/deepModePoller";
+import { findSimilarCachedResponse, saveCachedResponse } from "./services/responseCache";
+import { jobStore } from "./services/jobStore";
+import { getUploadDir } from "./utils/uploadPaths";
 
 const EKG_API_URL = "https://ekg-service-47249889063.europe-west6.run.app";
 const domainRouter = new DomainRouter();
+
+/**
+ * Background job processor for deep mode async responses
+ * Polls OpenAI until complete, formats with ChatGPT 5.1, updates message, and saves to cache
+ */
+async function processDeepModeJob(
+  jobId: string,
+  responseId: string,
+  question: string,
+  mode: "concise" | "balanced" | "deep",
+  domainResolution: any,
+  refreshCache?: boolean
+): Promise<void> {
+  try {
+    const job = await jobStore.getJob(jobId);
+    if (!job) {
+      throw new Error(`Job ${jobId} not found`);
+    }
+
+    // Step 1: Poll until completed
+    await jobStore.updateJobStatus(jobId, { status: 'polling' });
+    await storage.updateMessage(job.messageId, {
+      content: "🔄 Working in the background. You can continue with other tasks. I'll notify you when the analysis is ready.",
+      metadata: JSON.stringify({
+        status: 'polling',
+        jobId,
+        responseId,
+      }),
+    });
+
+    const pollResult = await pollUntilComplete(responseId, {
+      onPoll: ({ pollCount, elapsedMs }) => {
+        // Touch the job to prevent false stuck detection during long polls
+        jobStore.updateJobStatus(jobId, { status: 'polling' }).catch(err => {
+          console.error(`[Deep Mode] Heartbeat update failed for job ${jobId}:`, err);
+        });
+        if (pollCount % 5 === 0) {
+          console.log(`[Deep Mode] Heartbeat for job ${jobId} after ${Math.round(elapsedMs / 1000)}s`);
+        }
+      }
+    });
+
+    if (pollResult.status !== "completed" || !pollResult.response) {
+      const errorMsg = pollResult.error || `Polling failed with status: ${pollResult.status}`;
+      console.error(`[Deep Mode] Job ${jobId} polling failed: ${errorMsg}`);
+      throw new Error(errorMsg);
+    }
+
+    // Step 2: Extract raw response
+    const rawResponse = extractAnswerText(pollResult.response);
+    await jobStore.updateJobStatus(jobId, { 
+      status: 'retrieving',
+      rawResponse,
+    });
+    
+    await storage.updateMessage(job.messageId, {
+      content: "📥 Almost done! Formatting your response...",
+      metadata: JSON.stringify({
+        status: 'formatting',
+        jobId,
+        responseId,
+      }),
+    });
+
+    // Step 3: Format with ChatGPT 5.1 (best-effort; fallback to raw)
+    await jobStore.updateJobStatus(jobId, { status: 'formatting' });
+    const formattedAnswer = await formatWithModel51(rawResponse, question, domainResolution).catch(error => {
+      console.error(`[Deep Mode] Formatting failed for job ${jobId}:`, error);
+      return rawResponse;
+    });
+
+    // Step 4: Update message with final answer
+    const metadataPayload = {
+      polled: true,
+      poll_status: pollResult.status,
+      domainResolution,
+      jobId,
+      status: 'completed',
+      responseId: responseId, // Include responseId in metadata for redundancy
+    };
+    const metadata = JSON.stringify(metadataPayload);
+
+    await storage.updateMessage(job.messageId, {
+      content: formattedAnswer,
+      responseId: responseId,
+      metadata,
+    });
+    await storage.updateThreadTimestamp(job.threadId);
+
+    await jobStore.updateJobStatus(jobId, {
+      status: 'completed',
+      formattedResult: formattedAnswer,
+      metadata: metadataPayload,
+    });
+
+    // Step 5: Save to cache
+    let originalCacheId: number | undefined;
+    if (refreshCache) {
+      const originalCached = await findSimilarCachedResponse(question, mode);
+      if (originalCached) {
+        originalCacheId = originalCached.id;
+      }
+    }
+
+    await saveCachedResponse(
+      question,
+      mode,
+      formattedAnswer,
+      rawResponse,
+      metadataPayload,
+      responseId,
+      originalCacheId
+    );
+
+    console.log(`[Deep Mode] Job ${jobId} completed successfully`);
+  } catch (error) {
+    console.error(`[Deep Mode] Job ${jobId} failed:`, error);
+    const job = await jobStore.getJob(jobId);
+    if (job) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      await jobStore.updateJobStatus(jobId, {
+        status: 'failed',
+        error: errorMessage,
+      });
+      
+      await storage.updateMessage(job.messageId, {
+        content: `❌ Error: ${errorMessage}`,
+        metadata: JSON.stringify({
+          status: 'failed',
+          jobId,
+          error: errorMessage,
+        }),
+      });
+    }
+    throw error;
+  }
+}
 
 // Initialize OpenAI client for quiz generation using Replit AI Integrations
 // Fallback to regular OpenAI API key if Replit integrations are not available
@@ -20,6 +163,34 @@ const openai = (process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 }) : null;
+
+async function formatWithModel51(rawResponse: string, question: string, domainResolution: any): Promise<string> {
+  if (!openai) {
+    return rawResponse;
+  }
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: process.env.OPENAI_FORMATTER_MODEL || "gpt-5.1",
+      temperature: 0.3,
+      messages: [
+        {
+          role: "system",
+          content: "You are ChatGPT 5.1 acting as a formatter. Rewrite the assistant's raw answer to be clear, well-structured, and concise. Preserve substance, fix markdown, and avoid hallucinating new facts. If sources or domains are relevant, keep the references.",
+        },
+        {
+          role: "user",
+          content: `Question:\n${question}\n\nResolved Domain: ${domainResolution?.domainId || 'unknown'}\n\nRaw Answer:\n${rawResponse}`,
+        },
+      ],
+    });
+
+    return completion.choices?.[0]?.message?.content?.trim() || rawResponse;
+  } catch (error) {
+    console.error("Formatting with 5.1-style model failed, returning raw response:", error);
+    return rawResponse;
+  }
+}
 
 // Configure multer for audio file uploads (memory storage)
 const upload = multer({ 
@@ -30,9 +201,11 @@ const upload = multer({
 });
 
 // Configure multer for document uploads (disk storage)
+// Note: In Cloud Run, this is ephemeral - files will be lost on container restart
+// For production, consider using Cloud Storage instead
 const documentStorage = multer.diskStorage({
   destination: async (req, file, cb) => {
-    const uploadDir = 'uploads/documents';
+    const uploadDir = getUploadDir();
     await fs.mkdir(uploadDir, { recursive: true });
     cb(null, uploadDir);
   },
@@ -120,6 +293,11 @@ function extractDomainFromMetadata(metadata?: string | null): string | undefined
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Health check endpoint for Cloud Run/App Engine
+  app.get("/api/health", (_req, res) => {
+    res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
   app.use("/api/auth", authRouter);
 
   app.get("/api/domains", (_req, res) => {
@@ -208,6 +386,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/query", async (req, res) => {
     try {
       const validatedData = querySchema.parse(req.body);
+      const { question, mode, refreshCache } = validatedData;
+      
+      // Step 1: Check cache first (unless user explicitly wants to refresh)
+      if (!refreshCache) {
+        const cached = await findSimilarCachedResponse(question, mode);
+        
+        if (cached) {
+          console.log(`[Cache HIT] Returning cached response for mode: ${mode}`);
+          
+          // Get or create thread
+          let threadId = validatedData.threadId;
+          if (!threadId) {
+            const title = question.length > 60 
+              ? question.substring(0, 60) + "..."
+              : question;
+            const thread = await storage.createThread({ title });
+            threadId = thread.id;
+          }
+          
+          // Save user message
+          await storage.createMessage({
+            threadId: threadId!,
+            role: "user",
+            content: question,
+            responseId: null,
+            sources: null,
+            metadata: null,
+          });
+          
+          // Save assistant message with cached response
+          await storage.createMessage({
+            threadId: threadId!,
+            role: "assistant",
+            content: cached.response,
+            responseId: cached.responseId || null,
+            sources: null,
+            metadata: cached.metadata ? JSON.stringify(cached.metadata) : null,
+          });
+          
+          await storage.updateThreadTimestamp(threadId!);
+          
+          return res.json({
+            threadId,
+            data: cached.response,
+            metadata: cached.metadata ? JSON.stringify(cached.metadata) : undefined,
+            citations: undefined,
+            responseId: cached.responseId,
+            isCached: true,
+            cacheId: cached.id,
+            resolvedDomain: cached.metadata?.domainResolution?.domainId,
+            domainStrategy: cached.metadata?.domainResolution?.strategy,
+          });
+        }
+      } else {
+        console.log(`[Cache BYPASS] User requested fresh answer, bypassing cache`);
+      }
+      
+      // Step 2: Process query normally (cache miss or refresh requested)
       let threadId = validatedData.threadId;
       let previousResponseId: string | undefined;
       let existingConversationId: string | undefined;
@@ -227,7 +463,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           previousResponseId = lastMessage.responseId;
         }
         if (lastMessage?.metadata) {
-          persistedDomain = extractDomainFromMetadata(lastMessage.metadata);
+          const extractedDomain = extractDomainFromMetadata(lastMessage.metadata);
+          // Only use persisted domain if it's a valid domain (exists in registry)
+          if (extractedDomain && domainExists(extractedDomain)) {
+            persistedDomain = extractedDomain;
+          } else if (extractedDomain) {
+            console.warn(`[Domain Validation] Ignoring invalid persisted domain: ${extractedDomain}. Valid domains: ${listDomains().map(d => d.id).join(', ')}`);
+          }
         }
         
         // Get last 3 Q&A pairs for focused context window
@@ -302,8 +544,22 @@ User's Question: ${validatedData.question}`;
         metadataDomain: persistedDomain,
       });
       const resolvedDomain = domainResolution.domainId;
+      
+      // Final validation: ensure resolved domain is valid before sending to EKG API
+      // If invalid, fall back to default domain
+      let finalDomain = resolvedDomain;
+      if (!domainExists(resolvedDomain)) {
+        console.warn(`[Domain Validation] Invalid resolved domain: ${resolvedDomain}. Falling back to default: ${DEFAULT_DOMAIN_ID}`);
+        finalDomain = DEFAULT_DOMAIN_ID;
+        // Update domainResolution to reflect the fallback
+        domainResolution.domainId = DEFAULT_DOMAIN_ID;
+        domainResolution.strategy = "fallback";
+        domainResolution.confidence = 0;
+      }
+      
       console.log("Domain resolved", {
-        resolvedDomain,
+        resolvedDomain: finalDomain,
+        originalResolvedDomain: resolvedDomain,
         strategy: domainResolution.strategy,
         confidence: domainResolution.confidence,
         persistedDomain,
@@ -313,7 +569,7 @@ User's Question: ${validatedData.question}`;
       // Prepare API request payload with correct structure
       const apiPayload: any = {
         question: questionToSend,
-        domain: resolvedDomain,
+        domain: finalDomain,
         params: {
           _mode: validatedData.mode || "balanced"  // Send mode in params object
         }
@@ -351,8 +607,87 @@ User's Question: ${validatedData.question}`;
         throw new Error(`EKG API error: ${response.status} - ${errorText}`);
       }
 
-      const result = await response.json();
+      let result = await response.json();
       console.log("EKG API response:", JSON.stringify(result, null, 2));
+
+      // Track raw response for deep mode (before formatting)
+      let rawResponseForCache: string | undefined;
+      
+      // Check if this is a deep mode async response that requires polling
+      const isDeepMode = validatedData.mode === "deep";
+      if (isDeepMode && isAsyncDeepModeResponse(result)) {
+        // Use background_task_id if available, otherwise use response_id
+        const taskId = result.meta?.background_task_id || result.background_task_id || result.response_id;
+        console.log(`[Deep Mode] Async response detected, creating job for task_id: ${taskId}`);
+        
+        // Save user message immediately
+        await storage.createMessage({
+          threadId: threadId!,
+          role: "user",
+          content: validatedData.question,
+          responseId: null,
+          sources: null,
+          metadata: null,
+        });
+        
+        // Save assistant message with placeholder status
+        const assistantMessage = await storage.createMessage({
+          threadId: threadId!,
+          role: "assistant",
+          content: "🔄 Working in the background. You can continue with other tasks. I'll notify you when the analysis is ready.",
+          responseId: taskId || null,
+          sources: null,
+          metadata: JSON.stringify({
+            ...(result.meta || {}),
+            domainResolution,
+            status: 'polling',
+            jobId: null, // Will be set after job creation
+          }),
+        });
+        
+        // Create job for background processing
+        const jobId = await jobStore.createJob(
+          threadId!,
+          assistantMessage.id,
+          validatedData.question,
+          taskId
+        );
+        
+        // Update message metadata with jobId
+        await storage.updateMessage(assistantMessage.id, {
+          metadata: JSON.stringify({
+            ...(result.meta || {}),
+            domainResolution,
+            status: 'polling',
+            jobId,
+            responseId: taskId,
+          }),
+        });
+        
+        // Start background polling (don't await)
+        processDeepModeJob(jobId, taskId, validatedData.question, mode, domainResolution, refreshCache).catch(async error => {
+          console.error(`[Deep Mode] Background job failed for ${jobId}:`, error);
+          await jobStore.updateJobStatus(jobId, {
+            status: 'failed',
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        });
+        
+        // Return immediately with job info
+        await storage.updateThreadTimestamp(threadId!);
+        
+        return res.json({
+          threadId: threadId,
+          jobId,
+          status: 'polling',
+          data: "🔄 Working in the background. You can continue with other tasks. I'll notify you when the analysis is ready.",
+          messageId: assistantMessage.id,
+          responseId: taskId,
+          isAsync: true,
+          resolvedDomain,
+          domainStrategy: domainResolution.strategy,
+        });
+      }
 
       // Handle both 'answer' and 'markdown' fields (API documentation shows 'markdown', but actual API returns 'answer')
       const responseText = result.markdown || result.answer;
@@ -401,6 +736,27 @@ User's Question: ${validatedData.question}`;
         // Update thread timestamp
         await storage.updateThreadTimestamp(threadId!);
         
+        // Step 3: Save to cache (for all modes)
+        // Check if this was a refresh - if so, find the original cache entry
+        let originalCacheId: number | undefined;
+        if (refreshCache) {
+          const originalCached = await findSimilarCachedResponse(question, mode);
+          if (originalCached) {
+            originalCacheId = originalCached.id;
+          }
+        }
+        
+        // Save to cache
+        await saveCachedResponse(
+          question,
+          mode,
+          responseText,
+          rawResponseForCache, // Raw response for deep mode
+          metadataPayload,
+          result.response_id,
+          originalCacheId // Link to original if this was a refresh
+        );
+        
         res.json({
           threadId: threadId,
           data: responseText,
@@ -410,6 +766,7 @@ User's Question: ${validatedData.question}`;
           isConversational: result.meta?.is_conversational || false,
           resolvedDomain,
           domainStrategy: domainResolution.strategy,
+          isCached: false,
         });
       } else {
         res.status(500).json({
@@ -422,6 +779,188 @@ User's Question: ${validatedData.question}`;
       res.status(500).json({
         data: "",
         error: error instanceof Error ? error.message : "Failed to process query",
+      });
+    }
+  });
+
+  // Deep mode job status polling endpoints
+  app.get("/api/jobs/:jobId/status", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const job = await jobStore.getJob(req.params.jobId);
+      if (!job) {
+        // Job might not exist if server was restarted - try to get status from message metadata
+        const messageId = parseInt(req.query.messageId as string);
+        const threadId = parseInt(req.query.threadId as string);
+        
+        if (messageId && threadId) {
+          const messages = await storage.getMessages(threadId);
+          const message = messages.find(m => m.id === messageId);
+          
+          if (message && message.metadata) {
+            try {
+              const metadata = JSON.parse(message.metadata);
+              const status = metadata.status || 'unknown';
+              
+              return res.json({
+                jobId: req.params.jobId,
+                status: status,
+                messageId: messageId,
+                threadId: threadId,
+                currentContent: message.content,
+                error: null,
+                completed: status === 'completed',
+                failed: status === 'failed',
+              });
+            } catch (e) {
+              // Metadata parse error
+            }
+          }
+        }
+        
+        return res.status(404).json({ error: "Job not found" });
+      }
+
+      // Get the current message to show latest status
+      const message = await storage.getMessages(job.threadId).then(msgs => 
+        msgs.find(m => m.id === job.messageId)
+      );
+
+      res.json({
+        jobId: job.id,
+        status: job.status,
+        messageId: job.messageId,
+        threadId: job.threadId,
+        currentContent: message?.content || "Processing...",
+        error: job.error,
+        completed: job.status === 'completed',
+        failed: job.status === 'failed',
+      });
+    } catch (error) {
+      console.error("Job status error:", error);
+      res.status(500).json({
+        error: error instanceof Error ? error.message : "Failed to get job status",
+      });
+    }
+  });
+
+  // Check for stuck jobs and recover them
+  app.post("/api/jobs/recover-stuck", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const stuckJobs = await jobStore.getStuckJobs(40); // Align with 30m poll window to avoid false positives
+      const recovered: string[] = [];
+      
+      for (const job of stuckJobs) {
+        // Mark as failed with timeout error
+        await jobStore.updateJobStatus(job.id, {
+          status: 'failed',
+          error: 'Job was stuck in polling state and has been marked as failed. The original request may have timed out on the server.',
+        });
+        
+        // Update message
+        try {
+          await storage.updateMessage(job.messageId, {
+            content: `⏱️ Timeout: This query timed out after extended processing. The server may have encountered an issue. Please try your query again.`,
+            metadata: JSON.stringify({
+              status: 'failed',
+              jobId: job.id,
+              error: 'Job recovery: stuck in polling state',
+              recoveredAt: new Date().toISOString(),
+            }),
+          });
+        } catch (error) {
+          console.error(`Failed to update message ${job.messageId} for stuck job ${job.id}:`, error);
+        }
+        
+        recovered.push(job.id);
+      }
+      
+      res.json({
+        recovered: recovered.length,
+        jobIds: recovered,
+        message: recovered.length > 0 
+          ? `Recovered ${recovered.length} stuck job(s)` 
+          : 'No stuck jobs found',
+      });
+    } catch (error) {
+      console.error("Recover stuck jobs error:", error);
+      res.status(500).json({
+        error: error instanceof Error ? error.message : "Failed to recover stuck jobs",
+      });
+    }
+  });
+
+  // Get all jobs (for debugging)
+  app.get("/api/jobs", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const allJobs = await jobStore.getAllJobs();
+      const stuckJobs = await jobStore.getStuckJobs(40);
+      
+      res.json({
+        total: allJobs.length,
+        stuck: stuckJobs.length,
+        jobs: allJobs.map(job => ({
+          id: job.id,
+          status: job.status,
+          createdAt: job.createdAt,
+          updatedAt: job.updatedAt,
+          ageMinutes: Math.round((Date.now() - job.updatedAt.getTime()) / 60000),
+          error: job.error,
+        })),
+        stuckJobs: stuckJobs.map(job => ({
+          id: job.id,
+          status: job.status,
+          createdAt: job.createdAt,
+          updatedAt: job.updatedAt,
+          ageMinutes: Math.round((Date.now() - job.updatedAt.getTime()) / 60000),
+        })),
+      });
+    } catch (error) {
+      console.error("Get all jobs error:", error);
+      res.status(500).json({
+        error: error instanceof Error ? error.message : "Failed to get jobs",
+      });
+    }
+  });
+
+  // Get completed job result
+  app.get("/api/jobs/:jobId/result", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const job = await jobStore.getJob(req.params.jobId);
+      if (!job) {
+        return res.status(404).json({ error: "Job not found" });
+      }
+
+      if (job.status !== 'completed') {
+        return res.status(400).json({
+          error: "Job not completed yet",
+          status: job.status,
+        });
+      }
+
+      // Get the updated message
+      const message = await storage.getMessages(job.threadId).then(msgs => 
+        msgs.find(m => m.id === job.messageId)
+      );
+
+      if (!message) {
+        return res.status(404).json({ error: "Message not found" });
+      }
+
+      const metadata = message.metadata ? JSON.parse(message.metadata) : {};
+
+      res.json({
+        threadId: job.threadId,
+        messageId: job.messageId,
+        data: message.content,
+        metadata: message.metadata,
+        responseId: message.responseId,
+        resolvedDomain: metadata.domainResolution?.domainId,
+        domainStrategy: metadata.domainResolution?.strategy,
+      });
+    } catch (error) {
+      console.error("Job result error:", error);
+      res.status(500).json({
+        error: error instanceof Error ? error.message : "Failed to get job result",
       });
     }
   });
@@ -626,6 +1165,39 @@ Generate quiz questions that:
     }
   });
 
+  // Get thread statuses (latest message status for each thread)
+  // IMPORTANT: This must come BEFORE /api/threads/:id to avoid route conflict
+  app.get("/api/threads/statuses", async (req, res) => {
+    try {
+      const threads = await storage.getThreads();
+      const statuses: Record<number, { status: string; jobId?: string; messageId?: number }> = {};
+      
+      // Get latest assistant message for each thread
+      for (const thread of threads) {
+        const lastMessage = await storage.getLastAssistantMessage(thread.id);
+        if (lastMessage && lastMessage.metadata) {
+          try {
+            const metadata = JSON.parse(lastMessage.metadata);
+            if (metadata.status && metadata.status !== 'completed' && metadata.status !== 'failed') {
+              statuses[thread.id] = {
+                status: metadata.status,
+                jobId: metadata.jobId,
+                messageId: lastMessage.id,
+              };
+            }
+          } catch (e) {
+            // Ignore parse errors
+          }
+        }
+      }
+      
+      res.json(statuses);
+    } catch (error) {
+      console.error("Error fetching thread statuses:", error);
+      res.status(500).json({ error: "Failed to fetch thread statuses" });
+    }
+  });
+
   // Get single thread
   app.get("/api/threads/:id", async (req, res) => {
     try {
@@ -651,6 +1223,61 @@ Generate quiz questions that:
     } catch (error) {
       console.error("Error fetching messages:", error);
       res.status(500).json({ error: "Failed to fetch messages" });
+    }
+  });
+
+  // Search for messages by content and return response IDs
+  app.get("/api/messages/search", async (req, res) => {
+    try {
+      const { query } = req.query;
+      if (!query || typeof query !== "string") {
+        return res.status(400).json({ error: "Query parameter is required" });
+      }
+
+      // Search for user messages matching the query (case-insensitive)
+      const searchPattern = `%${query}%`;
+      const userMessages = await db
+        .select()
+        .from(messages)
+        .where(
+          and(
+            eq(messages.role, "user"),
+            sql`LOWER(${messages.content}) LIKE LOWER(${searchPattern})`
+          )
+        )
+        .orderBy(desc(messages.createdAt))
+        .limit(10);
+
+      const results = await Promise.all(
+        userMessages.map(async (userMsg) => {
+          // Find the corresponding assistant message
+          const threadMessages = await storage.getMessages(userMsg.threadId);
+          const assistantMsg = threadMessages.find(
+            (m) =>
+              m.role === "assistant" &&
+              new Date(m.createdAt) > new Date(userMsg.createdAt)
+          );
+
+          const timeAgo = Math.round(
+            (Date.now() - new Date(userMsg.createdAt).getTime()) / 60000
+          );
+
+          return {
+            userMessageId: userMsg.id,
+            userContent: userMsg.content,
+            threadId: userMsg.threadId,
+            createdAt: userMsg.createdAt,
+            timeAgoMinutes: timeAgo,
+            responseId: assistantMsg?.responseId || null,
+            assistantMessageId: assistantMsg?.id || null,
+          };
+        })
+      );
+
+      res.json({ results });
+    } catch (error) {
+      console.error("Error searching messages:", error);
+      res.status(500).json({ error: "Failed to search messages" });
     }
   });
 
@@ -1132,7 +1759,7 @@ Write the response now:`;
 
           const filePath = 'path' in file && typeof file.path === 'string'
             ? file.path
-            : path.join('uploads', 'documents', file.filename);
+            : path.join(getUploadDir(), file.filename);
 
           const documentData: any = {
             fileName: file.filename,

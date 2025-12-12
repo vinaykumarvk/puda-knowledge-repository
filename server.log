@@ -1,0 +1,108 @@
+
+> rest-express@1.0.0 dev
+> NODE_ENV=development tsx server/index.ts
+
+6:05:58 PM [express] serving on port 5000
+6:06:13 PM [express] GET /api/threads 200 in 1471ms :: [{"id":31,"title":"Write a comprehensive BRD …
+Browserslist: browsers data (caniuse-lite) is 14 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+6:07:13 PM [express] GET /api/auth/me 401 in 1ms :: {"message":"Not authenticated"}
+6:07:14 PM [express] GET /api/threads 304 in 1491ms :: [{"id":31,"title":"Write a comprehensive BRD …
+6:07:14 PM [express] GET /api/mastery 304 in 1503ms :: {"id":1,"overallScore":35,"totalCumulativePoi…
+6:07:15 PM [express] GET /api/threads/statuses 304 in 2315ms :: {}
+6:07:19 PM [express] GET /api/threads/31/messages 304 in 251ms :: [{"id":75,"threadId":31,"role":"us…
+6:07:19 PM [express] GET /api/threads/31 304 in 260ms :: {"id":31,"title":"Write a comprehensive BRD…
+6:07:42 PM [express] GET /api/threads/30 304 in 980ms :: {"id":30,"title":"How to perform risk profi…
+6:07:42 PM [express] GET /api/threads/30/messages 304 in 994ms :: [{"id":73,"threadId":30,"role":"us…
+6:07:44 PM [express] GET /api/threads/28 304 in 243ms :: {"id":28,"title":"I want to know the steps …
+6:07:44 PM [express] GET /api/threads/28/messages 304 in 525ms :: [{"id":71,"threadId":28,"role":"us…
+6:07:46 PM [express] GET /api/threads/statuses 304 in 1514ms :: {}
+6:07:47 PM [express] GET /api/threads/27/messages 304 in 471ms :: [{"id":69,"threadId":27,"role":"us…
+6:07:47 PM [express] GET /api/threads/27 304 in 963ms :: {"id":27,"title":"What are the validation n…
+6:13:33 PM [express] GET /api/auth/me 401 in 1ms :: {"message":"Not authenticated"}
+6:13:34 PM [express] GET /api/threads 304 in 1349ms :: [{"id":31,"title":"Write a comprehensive BRD …
+6:13:34 PM [express] GET /api/mastery 304 in 1532ms :: {"id":1,"overallScore":35,"totalCumulativePoi…
+6:13:35 PM [express] GET /api/threads/statuses 304 in 2552ms :: {}
+6:17:05 PM [express] GET /api/auth/me 401 in 3ms :: {"message":"Not authenticated"}
+6:17:06 PM [express] GET /api/mastery 304 in 1322ms :: {"id":1,"overallScore":35,"totalCumulativePoi…
+6:17:08 PM [express] GET /api/threads 304 in 3066ms :: [{"id":31,"title":"Write a comprehensive BRD …
+6:17:09 PM [express] GET /api/threads/statuses 304 in 4263ms :: {}
+6:21:12 PM [express] GET /api/threads/statuses 304 in 2931ms :: {}
+6:21:13 PM [express] GET /api/auth/me 401 in 1ms :: {"message":"Not authenticated"}
+6:21:13 PM [express] GET /api/mastery 200 in 246ms :: {"id":1,"overallScore":35,"totalCumulativePoin…
+6:21:16 PM [express] GET /api/threads 200 in 2967ms :: [{"id":31,"title":"Write a comprehensive BRD …
+6:21:18 PM [express] GET /api/threads/statuses 200 in 5235ms :: {}
+6:21:20 PM [express] GET /api/threads/31 200 in 242ms :: {"id":31,"title":"Write a comprehensive BRD…
+6:21:21 PM [express] GET /api/threads/31/messages 200 in 725ms :: [{"id":75,"threadId":31,"role":"us…
+6:21:40 PM [express] GET /api/threads/30 200 in 968ms :: {"id":30,"title":"How to perform risk profi…
+6:21:40 PM [express] GET /api/threads/30/messages 200 in 1250ms :: [{"id":73,"threadId":30,"role":"u…
+6:21:50 PM [express] GET /api/threads/statuses 304 in 1767ms :: {}
+6:23:33 PM [vite] hmr update /src/pages/chatbot.tsx, /src/index.css?v=G-pLdMyn16RGU1bQN2Any
+6:23:33 PM [vite] Internal server error: /Users/n15318/EKGproduct/client/src/pages/chatbot.tsx: Identifier 'formatted' has already been declared. (99:6)
+
+   97 |   let formatted = answerSection;
+   98 |   
+>  99 |   let formatted = text;
+      |       ^
+  100 |   
+  101 |   // Remove the KG + VectorStore header and context ID
+  102 |   formatted = formatted.replace(/^#\s*\*\*KG \+ VectorStore Answer[\s\S]*?\*\*\n*/im, '');
+  Plugin: vite:react-babel
+  File: /Users/n15318/EKGproduct/client/src/pages/chatbot.tsx:99:6
+  97 |    let formatted = answerSection;
+  98 |    
+  99 |    let formatted = text;
+     |        ^
+  100|    
+  101|    // Remove the KG + VectorStore header and context ID
+      at toParseError (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/parse-error.ts:95:45)
+      at raise (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/tokenizer/index.ts:1503:19)
+      at checkRedeclarationInScope (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/util/scope.ts:164:19)
+      at declareName (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/util/scope.ts:118:12)
+      at declareName (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/plugins/typescript/scope.ts:89:11)
+      at declareNameFromIdentifier (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/parser/lval.ts:818:16)
+      at checkIdentifier (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/parser/lval.ts:813:12)
+      at checkLVal (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/parser/lval.ts:713:12)
+      at parseVarId (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/parser/statement.ts:1628:10)
+      at parseVarId (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/plugins/typescript/index.ts:3663:13)
+      at parseVar (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/parser/statement.ts:1577:12)
+      at parseVarStatement (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/parser/statement.ts:1246:10)
+      at parseVarStatement (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/plugins/typescript/index.ts:3126:33)
+      at parseStatementContent (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/parser/statement.ts:607:21)
+      at parseStatementContent (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/plugins/typescript/index.ts:3185:20)
+      at parseStatementLike (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/parser/statement.ts:477:17)
+      at parseStatementListItem (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/parser/statement.ts:426:17)
+      at parseBlockOrModuleBlockBody (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/parser/statement.ts:1439:16)
+      at parseBlockBody (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/parser/statement.ts:1412:10)
+      at parseBlock (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/parser/statement.ts:1380:10)
+      at parseFunctionBody (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/parser/expression.ts:2616:24)
+      at parseFunctionBodyAndFinish (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/parser/expression.ts:2585:10)
+      at parseFunctionBodyAndFinish (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/plugins/typescript/index.ts:2646:20)
+      at callback (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/parser/statement.ts:1690:12)
+      at withSmartMixTopicForbiddingContext (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/parser/expression.ts:3166:14)
+      at parseFunction (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/parser/statement.ts:1688:10)
+      at parseFunctionStatement (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/parser/statement.ts:1075:17)
+      at parseStatementContent (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/parser/statement.ts:520:21)
+      at parseStatementContent (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/plugins/typescript/index.ts:3185:20)
+      at parseStatementLike (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/parser/statement.ts:477:17)
+      at parseModuleItem (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/parser/statement.ts:414:17)
+      at parseBlockOrModuleBlockBody (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/parser/statement.ts:1438:16)
+      at parseBlockBody (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/parser/statement.ts:1412:10)
+      at parseProgram (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/parser/statement.ts:229:10)
+      at parseTopLevel (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/parser/statement.ts:203:25)
+      at parse (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/parser/index.ts:93:10)
+      at parse (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/plugins/typescript/index.ts:4309:20)
+      at parse (/Users/n15318/EKGproduct/node_modules/@babel/parser/src/index.ts:92:38)
+      at parser (/Users/n15318/EKGproduct/node_modules/@babel/core/src/parser/index.ts:28:19)
+      at parser.next (<anonymous>)
+      at normalizeFile (/Users/n15318/EKGproduct/node_modules/@babel/core/src/transformation/normalize-file.ts:49:24)
+      at normalizeFile.next (<anonymous>)
+      at run (/Users/n15318/EKGproduct/node_modules/@babel/core/src/transformation/index.ts:40:36)
+      at run.next (<anonymous>)
+      at transform (/Users/n15318/EKGproduct/node_modules/@babel/core/src/transform.ts:29:20)
+      at transform.next (<anonymous>)
+      at step (/Users/n15318/EKGproduct/node_modules/gensync/index.js:261:32)
+      at /Users/n15318/EKGproduct/node_modules/gensync/index.js:273:13
+      at async.call.result.err.err (/Users/n15318/EKGproduct/node_modules/gensync/index.js:223:11)
+      at /Users/n15318/EKGproduct/node_modules/gensync/index.js:189:28

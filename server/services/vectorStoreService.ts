@@ -191,7 +191,8 @@ export class VectorStoreService {
             throw new Error(`Document ${documentId} not found`);
           }
           
-          const filePath = path.join(process.cwd(), 'uploads', document.fileName);
+          const { getUploadFilePath } = await import('../utils/uploadPaths');
+          const filePath = getUploadFilePath(document.fileName);
           return await this.uploadDocumentToVectorStore(documentId, filePath, vectorStore.id);
         } catch (error) {
           console.error(`Failed to upload document ${documentId}:`, error);

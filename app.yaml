@@ -1,0 +1,51 @@
+# Google Cloud App Engine configuration
+runtime: nodejs20
+
+env_variables:
+  NODE_ENV: production
+  PORT: 8080
+
+# Health check configuration
+readiness_check:
+  path: "/api/health"
+  check_interval_sec: 5
+  timeout_sec: 4
+  failure_threshold: 2
+  success_threshold: 2
+  app_start_timeout_sec: 300
+
+liveness_check:
+  path: "/api/health"
+  check_interval_sec: 30
+  timeout_sec: 4
+  failure_threshold: 4
+  success_threshold: 2
+
+# Instance configuration
+automatic_scaling:
+  min_instances: 1
+  max_instances: 10
+  target_cpu_utilization: 0.6
+  target_throughput_utilization: 0.6
+
+# Resources
+resources:
+  cpu: 2
+  memory_gb: 4
+  disk_size_gb: 10
+
+# Skip files that shouldn't be deployed
+skip_files:
+  - ^(.*/)?#.*#$
+  - ^(.*/)?.*~$
+  - ^(.*/)?.*\.py[co]$
+  - ^(.*/)?.*/RCS/.*$
+  - ^(.*/)?\..*$
+  - ^(.*/)?node_modules/.*$
+  - ^(.*/)?\.git/.*$
+  - ^(.*/)?\.env.*$
+  - ^(.*/)?dist/.*$
+  - ^(.*/)?uploads/.*$
+  - ^(.*/)?test.*$
+  - ^(.*/)?.*\.md$
+

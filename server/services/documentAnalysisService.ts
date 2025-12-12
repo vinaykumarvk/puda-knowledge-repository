@@ -640,7 +640,8 @@ To properly analyze this document, please ensure it contains readable text conte
       try {
         const document = await storage.getDocument(documentId);
         if (document) {
-          const filePath = path.join(process.cwd(), 'uploads', document.fileName);
+          const { getUploadFilePath } = await import('../utils/uploadPaths');
+          const filePath = getUploadFilePath(document.fileName);
           const analysis = await this.analyzeDocument(documentId, filePath);
           results.push(analysis);
         }

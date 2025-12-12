@@ -160,7 +160,8 @@ export class BackgroundJobService {
     await this.updateJobProgress(job.id, 'preparing', 1, 25);
     
     // Construct file path and verify it exists
-    let filePath = path.join(process.cwd(), 'uploads', document.fileName);
+    const { getUploadFilePath, getUploadsBaseDir } = await import('../utils/uploadPaths');
+    let filePath = getUploadFilePath(document.fileName);
     
     // Check if file exists, if not, try to find it with different patterns
     if (!fs.existsSync(filePath)) {
@@ -168,7 +169,7 @@ export class BackgroundJobService {
       
       // Try to find the file in uploads directory with similar name
       try {
-        const uploadsDir = path.join(process.cwd(), 'uploads');
+        const uploadsDir = getUploadsBaseDir();
         const files = fs.readdirSync(uploadsDir);
         
         // Look for files that contain the original filename part
@@ -180,7 +181,7 @@ export class BackgroundJobService {
         );
         
         if (possibleFiles.length > 0) {
-          filePath = path.join(uploadsDir, possibleFiles[0]);
+          filePath = path.join(getUploadsBaseDir(), possibleFiles[0]);
           console.log(`Found file at alternative path: ${filePath}`);
         } else {
           console.log(`Available files in uploads: ${files.join(', ')}`);
@@ -603,11 +604,12 @@ Structure your response with clear headings and specific evidence from the docum
   private async generateFallbackAnalysis(document: any, job: BackgroundJob): Promise<{ summary: string; insights: string }> {
     try {
       // Read document content with robust file path resolution
-      let filePath = path.join(process.cwd(), 'uploads', document.fileName);
+      const { getUploadFilePath, getUploadsBaseDir } = await import('../utils/uploadPaths');
+      let filePath = getUploadFilePath(document.fileName);
       
       // Check if file exists, if not, try to find it with different patterns
       if (!fs.existsSync(filePath)) {
-        const uploadsDir = path.join(process.cwd(), 'uploads');
+        const uploadsDir = getUploadsBaseDir();
         const files = fs.readdirSync(uploadsDir);
         const originalName = document.originalName || document.fileName;
         const possibleFiles = files.filter(file => 
@@ -617,7 +619,7 @@ Structure your response with clear headings and specific evidence from the docum
         );
         
         if (possibleFiles.length > 0) {
-          filePath = path.join(uploadsDir, possibleFiles[0]);
+          filePath = path.join(getUploadsBaseDir(), possibleFiles[0]);
         } else {
           throw new Error(`File not found: ${document.fileName}`);
         }

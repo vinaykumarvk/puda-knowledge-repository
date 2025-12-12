@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -21,7 +21,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -35,8 +34,6 @@ import {
   RefreshCw,
   FileText,
   FileType,
-  Zap,
-  Star,
   ThumbsUp,
   ThumbsDown,
   MoreHorizontal,
@@ -46,12 +43,8 @@ import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
 import { WorkspacePanel } from "@/components/workspace-panel";
-import { type AIConfig } from "@/components/ai-config-sidebar";
-import { QuizMessage } from "@/components/quiz-message";
-import { VoiceInputButton } from "@/components/voice-input-button";
-import { conversationStarterCategories } from "@/constants/conversation-starters";
 import type { Thread, Message } from "@shared/schema";
-import type { QuizData } from "@/types/quiz";
+
 
 // Helper function to decode HTML entities
 function decodeHTMLEntities(text: string): string {
@@ -79,12 +72,6 @@ function cleanupCitations(text: string): string {
   return cleaned;
 }
 
-const responseProgressSteps = [
-  { id: "retrieving", label: "Retrieving context" },
-  { id: "reasoning", label: "Synthesizing answer" },
-  { id: "drafting", label: "Polishing response" },
-] as const;
-
 const responseModeOptions = [
   {
     value: "concise" as const,
@@ -103,15 +90,11 @@ const responseModeOptions = [
   },
 ];
 
-const quickPromptTemplates = [
-  "Summarize this conversation",
-  "Compare the last two responses",
-  "Explain this for a first-time investor",
-] as const;
-
 // Helper function to format API responses professionally
 function formatProfessionally(text: string): string {
-  let formatted = text;
+  // Try to isolate the answer section if the model returned headings
+  const answerSection = extractAnswerSection(text);
+  let formatted = answerSection;
   
   // Remove the KG + VectorStore header and context ID
   formatted = formatted.replace(/^#\s*\*\*KG \+ VectorStore Answer[\s\S]*?\*\*\n*/im, '');
@@ -154,6 +137,94 @@ function formatProfessionally(text: string): string {
   }
   
   return formatted;
+}
+
+// Helper to extract only the answer portion from verbose outputs
+function extractAnswerSection(text: string): string {
+  // First, try to parse as JSON and extract the "answer" field
+  try {
+    // Try to find JSON object in the text (might be partial or complete)
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const jsonStr = jsonMatch[0];
+      // Try to parse as complete JSON first
+      try {
+        const parsed = JSON.parse(jsonStr);
+        if (parsed && typeof parsed === 'object' && parsed.answer) {
+          return parsed.answer;
+        }
+      } catch (e) {
+        // JSON might be incomplete, try regex extraction of answer field
+        const answerMatch = jsonStr.match(/"answer"\s*:\s*"([\s\S]*?)"(?=\s*[,}])/);
+        if (answerMatch && answerMatch[1]) {
+          // Unescape JSON string
+          return answerMatch[1]
+            .replace(/\\n/g, '\n')
+            .replace(/\\"/g, '"')
+            .replace(/\\'/g, "'")
+            .replace(/\\t/g, '\t')
+            .replace(/\\\\/g, '\\');
+        }
+      }
+    }
+  } catch (e) {
+    // Not valid JSON, continue with regex extraction
+  }
+
+  // Try to extract JSON "answer" field using regex (handles multi-line and escaped strings)
+  // Pattern: "answer": "..." or "answer": `...` or "answer": ... (until next field or end)
+  const jsonAnswerPatterns = [
+    // Multi-line JSON string: "answer": "..." (handles escaped quotes and newlines)
+    /"answer"\s*:\s*"((?:[^"\\]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*)"/,
+    // Template literal style: "answer": `...`
+    /"answer"\s*:\s*`([\s\S]*?)`/,
+    // Fallback: extract everything after "answer": " until we find a closing quote followed by comma or brace
+    /"answer"\s*:\s*"([\s\S]*?)"\s*[,}]/,
+    // Simple single-line: "answer": "..."
+    /"answer"\s*:\s*"([^"]*)"/,
+    // Last resort: if JSON is incomplete/truncated, extract everything after "answer": "
+    /"answer"\s*:\s*"([\s\S]*?)(?:"\s*[,}]|$)/,
+  ];
+
+  for (const pattern of jsonAnswerPatterns) {
+    const match = pattern.exec(text);
+    if (match && match[1]) {
+      const extracted = match[1].trim();
+      if (extracted.length > 0) {
+        // Unescape JSON strings
+        return extracted
+          .replace(/\\n/g, '\n')
+          .replace(/\\"/g, '"')
+          .replace(/\\'/g, "'")
+          .replace(/\\t/g, '\t')
+          .replace(/\\\\/g, '\\');
+      }
+    }
+  }
+
+  // Try to find answer markers in markdown format
+  const markdownMarkers = [
+    /##?\s*\*?\*?Answer:?\*?\*?/im,
+    /##?\s*\*?\*?Direct Answer:?\*?\*?/im,
+    /\n\s*##?\s*\*?\*?Answer:?\*?\*?/im,
+    /\n\s*##?\s*\*?\*?Direct Answer:?\*?\*?/im,
+    /^\s*Answer:?\s*/im,
+    /^\s*Direct Answer:?\s*/im,
+    /\n\s*Answer:?\s*/im,
+    /\n\s*Direct Answer:?\s*/im,
+  ];
+
+  for (const marker of markdownMarkers) {
+    const match = marker.exec(text);
+    if (match && match.index !== undefined) {
+      const extracted = text.slice(match.index + match[0].length).trim();
+      if (extracted.length > 0) {
+        return extracted;
+      }
+    }
+  }
+  
+  return text;
 }
 
 // Helper function to download a single message exchange as Markdown
@@ -386,25 +457,210 @@ export default function ChatbotPage() {
   const [question, setQuestion] = useState("");
   const [currentThreadId, setCurrentThreadId] = useState<number | undefined>();
   const [messages, setMessages] = useState<Message[]>([]);
-  const [quizzes, setQuizzes] = useState<QuizData[]>([]);
-  const [mode, setMode] = useState<"concise" | "balanced" | "deep">("concise"); // Short is default
+  const [mode, setMode] = useState<"concise" | "balanced" | "deep">("balanced");
   const [showDownloadDialog, setShowDownloadDialog] = useState(false);
-  const [aiConfig, setAIConfig] = useState<AIConfig>({
-    model: "GPT-4o",
-    temperature: 0.7,
-    hops: 3,
-    tokenLimit: 2048,
-    systemPrompt: "You are a helpful wealth management AI assistant.",
-  });
-  const [pinnedPrompts, setPinnedPrompts] = useState<string[]>([]);
-  const [activeStarterCategory, setActiveStarterCategory] = useState(
-    conversationStarterCategories[0]?.category ?? "",
-  );
   const [isWorkspaceSheetOpen, setWorkspaceSheetOpen] = useState(false);
-  const [activeProgressStep, setActiveProgressStep] = useState(responseProgressSteps.length - 1);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const lastAssistantMessageRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+
+  // Store active polling intervals to allow cleanup
+  const pollingIntervalsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+
+  // Poll job status for async deep mode responses
+  const pollJobStatus = useCallback(async (jobId: string, messageId: number, threadId: number) => {
+    const maxAttempts = 15; // ~30 minutes at 2 minute intervals (matching backend timeout)
+    const startTime = Date.now();
+    let attempts = 0;
+
+    // Clear any existing polling for this job
+    const existingInterval = pollingIntervalsRef.current.get(jobId);
+    if (existingInterval) {
+      clearInterval(existingInterval);
+    }
+
+    const poll = async () => {
+      attempts++;
+      const elapsed = Date.now() - startTime;
+      
+      // Log progress every attempt (every 2 minutes) for debugging
+      if (attempts % 1 === 0) {
+        console.log(`[Polling] Job ${jobId}: attempt ${attempts}/${maxAttempts}, elapsed: ${Math.round(elapsed / 1000)}s`);
+      }
+      
+      try {
+        const statusResponse = await apiRequest("GET", `/api/jobs/${jobId}/status?messageId=${messageId}&threadId=${threadId}`);
+        const status = await statusResponse.json();
+        
+        // Update the message content with current status
+        setMessages((prev) => prev.map((msg) => {
+          if (msg.id === messageId && msg.role === "assistant") {
+            return {
+              ...msg,
+              content: status.currentContent || msg.content,
+              metadata: JSON.stringify({
+                ...(msg.metadata ? JSON.parse(msg.metadata) : {}),
+                status: status.status,
+                jobId,
+              }),
+            };
+          }
+          return msg;
+        }));
+        
+        if (status.completed) {
+          // Clear polling interval
+          const interval = pollingIntervalsRef.current.get(jobId);
+          if (interval) {
+            clearInterval(interval);
+            pollingIntervalsRef.current.delete(jobId);
+          }
+          
+          // Fetch the final result
+          const resultResponse = await apiRequest("GET", `/api/jobs/${jobId}/result`);
+          const result = await resultResponse.json();
+          
+          // Update message with final answer
+          setMessages((prev) => prev.map((msg) => {
+            if (msg.id === messageId && msg.role === "assistant") {
+              return {
+                ...msg,
+                content: result.data,
+                responseId: result.responseId || null,
+                sources: null,
+                metadata: result.metadata || null,
+                isPolling: false,
+              };
+            }
+            return msg;
+          }));
+          
+          // Invalidate queries to refresh thread list and statuses
+          queryClient.invalidateQueries({ queryKey: ["/api/threads"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/threads/statuses"] });
+        } else if (status.failed) {
+          const interval = pollingIntervalsRef.current.get(jobId);
+          if (interval) {
+            clearInterval(interval);
+            pollingIntervalsRef.current.delete(jobId);
+          }
+          // Invalidate statuses query to remove polling indicator
+          queryClient.invalidateQueries({ queryKey: ["/api/threads/statuses"] });
+          toast({
+            title: "Processing Failed",
+            description: status.error || "Deep mode processing failed",
+            variant: "destructive",
+          });
+        } else if (attempts >= maxAttempts) {
+          const interval = pollingIntervalsRef.current.get(jobId);
+          if (interval) {
+            clearInterval(interval);
+            pollingIntervalsRef.current.delete(jobId);
+          }
+          
+          // Update message to show timeout
+          setMessages((prev) => prev.map((msg) => {
+            if (msg.id === messageId && msg.role === "assistant") {
+              return {
+                ...msg,
+                content: "⏱️ Processing timeout: The query is taking longer than expected. The server may still be processing your request. Please check back later or try refreshing.",
+                isPolling: false,
+                metadata: JSON.stringify({
+                  ...(msg.metadata ? JSON.parse(msg.metadata) : {}),
+                  status: 'timeout',
+                  error: 'Frontend polling timeout',
+                }),
+              };
+            }
+            return msg;
+          }));
+          
+          // Invalidate statuses query to remove polling indicator
+          queryClient.invalidateQueries({ queryKey: ["/api/threads/statuses"] });
+          toast({
+            title: "Timeout",
+            description: `Deep mode processing timed out after ${Math.round(elapsed / 1000)} seconds. The server may still be processing your request.`,
+            variant: "destructive",
+          });
+        }
+      } catch (error: any) {
+        console.error("Polling error:", error);
+        const errorMessage = error?.message || String(error);
+        
+        // If it's a 404, the job might not exist (server restart) - check message directly
+        if (errorMessage.includes('404')) {
+          // Try to get status from message metadata instead
+          setMessages((prev) => {
+            const msg = prev.find(m => m.id === messageId && m.role === "assistant");
+            if (msg && msg.metadata) {
+              try {
+                const metadata = JSON.parse(msg.metadata);
+                if (metadata.status === 'completed' || metadata.status === 'failed') {
+                  // Job is done, stop polling
+                  const interval = pollingIntervalsRef.current.get(jobId);
+                  if (interval) {
+                    clearInterval(interval);
+                    pollingIntervalsRef.current.delete(jobId);
+                  }
+                }
+              } catch (e) {
+                // Ignore parse errors
+              }
+            }
+            return prev;
+          });
+          
+          // Don't show error for 404s - might just be server restart
+          // Stop polling after a few 404 attempts
+          if (attempts >= 3) {
+            const interval = pollingIntervalsRef.current.get(jobId);
+            if (interval) {
+              clearInterval(interval);
+              pollingIntervalsRef.current.delete(jobId);
+            }
+          }
+          return;
+        }
+        
+        // For network errors (server down), stop polling and show error
+        if (errorMessage.includes('Failed to fetch') || 
+            errorMessage.includes('NetworkError') ||
+            errorMessage.includes('network') ||
+            error instanceof TypeError) {
+          const interval = pollingIntervalsRef.current.get(jobId);
+          if (interval) {
+            clearInterval(interval);
+            pollingIntervalsRef.current.delete(jobId);
+          }
+          
+          // Only show error toast once
+          if (attempts === 1) {
+            toast({
+              title: "Connection Error",
+              description: "Unable to connect to server. Please refresh the page.",
+              variant: "destructive",
+            });
+          }
+          return;
+        }
+        
+        // For other errors, log but continue polling (might be temporary)
+        // Only stop after many failures
+        if (attempts >= 10) {
+          const interval = pollingIntervalsRef.current.get(jobId);
+          if (interval) {
+            clearInterval(interval);
+            pollingIntervalsRef.current.delete(jobId);
+          }
+        }
+      }
+    };
+
+    // Start polling immediately, then every 2 minutes
+    poll();
+    const interval = setInterval(poll, 2 * 60 * 1000);
+    pollingIntervalsRef.current.set(jobId, interval);
+  }, [toast, setMessages, queryClient]);
 
   // Fetch current thread details
   const { data: currentThread } = useQuery<Thread>({
@@ -413,7 +669,7 @@ export default function ChatbotPage() {
   });
 
   // Fetch messages when thread is selected
-  const { data: fetchedMessages, refetch: refetchMessages } = useQuery<Message[]>({
+  const { data: fetchedMessages } = useQuery<Message[]>({
     queryKey: [`/api/threads/${currentThreadId}/messages`],
     enabled: !!currentThreadId,
   });
@@ -422,12 +678,33 @@ export default function ChatbotPage() {
   useEffect(() => {
     if (fetchedMessages) {
       setMessages(fetchedMessages);
+      
+      // Check for any messages that are still polling and resume polling
+      fetchedMessages.forEach((msg) => {
+        if (msg.role === "assistant" && msg.metadata) {
+          try {
+            const metadata = JSON.parse(msg.metadata);
+            if (metadata.jobId && metadata.status && metadata.status !== 'completed' && metadata.status !== 'failed') {
+              // Resume polling for this job
+              pollJobStatus(metadata.jobId, msg.id, msg.threadId);
+            }
+          } catch (e) {
+            // Ignore parse errors
+          }
+        }
+      });
     } else {
       setMessages([]);
     }
-    // Clear quizzes when thread changes
-    setQuizzes([]);
-  }, [fetchedMessages]);
+  }, [fetchedMessages, pollJobStatus]);
+
+  // Cleanup polling intervals on unmount to prevent orphaned timers
+  useEffect(() => {
+    return () => {
+      pollingIntervalsRef.current.forEach(clearInterval);
+      pollingIntervalsRef.current.clear();
+    };
+  }, []);
 
   // Auto-scroll to show top of new assistant messages
   useEffect(() => {
@@ -445,17 +722,18 @@ export default function ChatbotPage() {
   }, [messages]);
 
   const queryMutation = useMutation({
-    mutationFn: async (payload: { question: string; threadId?: number }) => {
+    mutationFn: async (payload: { question: string; threadId?: number; refreshCache?: boolean }) => {
       const response = await apiRequest("POST", "/api/query", {
         question: payload.question,
         mode: mode,
         refresh: false,
+        refreshCache: payload.refreshCache || false,
         threadId: payload.threadId,
       });
       const result = await response.json();
       return result;
     },
-    onSuccess: (data, variables) => {
+    onSuccess: async (data, variables) => {
       if (data.error) {
         toast({
           title: "Error",
@@ -480,20 +758,51 @@ export default function ChatbotPage() {
           createdAt: new Date(),
         };
         
-        // Add assistant message
-        const assistantMessage: Message = {
-          id: Date.now() + 1,
-          threadId: data.threadId,
-          role: "assistant",
-          content: data.data,
-          responseId: data.responseId || null,
-          sources: data.citations || null,
-          metadata: data.metadata || null,
-          createdAt: new Date(),
-        };
-        
-        setMessages((prev) => [...prev, userMessage, assistantMessage]);
-        setQuestion("");
+        // Check if this is an async deep mode response
+        if (data.isAsync && data.jobId && data.messageId) {
+          // Add assistant message with initial status
+          const assistantMessage: Message & { isCached?: boolean; cacheId?: number; jobId?: string; isPolling?: boolean } = {
+            id: data.messageId,
+            threadId: data.threadId,
+            role: "assistant",
+            content: data.data || "🔄 Deep analysis in progress...",
+            responseId: data.responseId || null,
+            sources: null,
+            metadata: JSON.stringify({
+              status: data.status || 'polling',
+              jobId: data.jobId,
+            }),
+            createdAt: new Date(),
+            jobId: data.jobId,
+            isPolling: true,
+          };
+          
+          setMessages((prev) => [...prev, userMessage, assistantMessage]);
+          setQuestion("");
+          
+          // Invalidate thread statuses query to immediately show polling status in sidebar
+          queryClient.invalidateQueries({ queryKey: ["/api/threads/statuses"] });
+          
+          // Start polling for status updates
+          pollJobStatus(data.jobId, data.messageId, data.threadId);
+        } else {
+          // Normal synchronous response
+          const assistantMessage: Message & { isCached?: boolean; cacheId?: number } = {
+            id: Date.now() + 1,
+            threadId: data.threadId,
+            role: "assistant",
+            content: data.data,
+            responseId: data.responseId || null,
+            sources: data.citations || null,
+            metadata: data.metadata || null,
+            createdAt: new Date(),
+            isCached: data.isCached || false,
+            cacheId: data.cacheId,
+          };
+          
+          setMessages((prev) => [...prev, userMessage, assistantMessage]);
+          setQuestion("");
+        }
         
         // Invalidate queries to refresh thread list
         queryClient.invalidateQueries({ queryKey: ["/api/threads"] });
@@ -529,66 +838,6 @@ export default function ChatbotPage() {
     if (!promptText) {
       setQuestion("");
     }
-  };
-
-  const quizMutation = useMutation({
-    mutationFn: async (threadId: number) => {
-      const response = await apiRequest("POST", "/api/generate-quiz", {
-        threadId,
-      });
-      const result = await response.json();
-      return result;
-    },
-    onSuccess: (data) => {
-      if (data.error) {
-        toast({
-          title: "Error",
-          description: data.error,
-          variant: "destructive",
-        });
-      } else if (data.questions && data.questions.length > 0) {
-        // Add quiz to the list
-        const newQuiz: QuizData = {
-          id: Date.now(),
-          questions: data.questions,
-        };
-        setQuizzes(prev => [...prev, newQuiz]);
-        
-        toast({
-          title: "Quiz Generated!",
-          description: `${data.questions.length} questions ready to test your knowledge.`,
-        });
-      }
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to generate quiz",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const handleGenerateQuiz = () => {
-    if (!currentThreadId) {
-      toast({
-        title: "No Conversation",
-        description: "Start a conversation before generating a quiz",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (messages.length < 4) {
-      toast({
-        title: "Not Enough Content",
-        description: "Have at least 2 Q&A exchanges before generating a quiz",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    quizMutation.mutate(currentThreadId);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -634,42 +883,6 @@ export default function ChatbotPage() {
   const isLoading = queryMutation.isPending;
   const hasMessages = messages.length > 0;
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const timers: number[] = [];
-
-    if (isLoading) {
-      setActiveProgressStep(0);
-      responseProgressSteps.slice(1).forEach((_, index) => {
-        const timer = window.setTimeout(() => setActiveProgressStep(index + 1), (index + 1) * 1100);
-        timers.push(timer);
-      });
-    } else {
-      setActiveProgressStep(responseProgressSteps.length - 1);
-    }
-
-    return () => {
-      timers.forEach((timer) => window.clearTimeout(timer));
-    };
-  }, [isLoading]);
-
-  const handleConfigChange = (config: AIConfig) => {
-    setAIConfig(config);
-    // Future: Send config to backend or use in API calls
-  };
-
-  const handlePromptSelection = (prompt: string) => {
-    setQuestion(prompt);
-    handleSubmit(prompt);
-  };
-
-  const togglePinnedPrompt = (prompt: string) => {
-    setPinnedPrompts((prev) =>
-      prev.includes(prompt) ? prev.filter((item) => item !== prompt) : [...prev, prompt],
-    );
-  };
-
   const handleReaction = (type: "positive" | "negative") => {
     toast({
       title: type === "positive" ? "Glad that helped!" : "Thanks for the feedback",
@@ -680,10 +893,6 @@ export default function ChatbotPage() {
     });
   };
 
-  const selectedStarterCategory =
-    conversationStarterCategories.find((category) => category.category === activeStarterCategory) ??
-    conversationStarterCategories[0];
-
   return (
     <div className="flex flex-1 bg-background">
       <WorkspacePanel
@@ -692,7 +901,6 @@ export default function ChatbotPage() {
         onNewChat={handleNewChat}
         onDeleteThread={handleDeleteThread}
         selectedThreadId={currentThreadId}
-        onConfigChange={handleConfigChange}
       />
 
       <div className="flex flex-1 flex-col">
@@ -715,7 +923,7 @@ export default function ChatbotPage() {
               <Sheet open={isWorkspaceSheetOpen} onOpenChange={setWorkspaceSheetOpen}>
                 <SheetTrigger asChild>
                   <Button variant="outline" size="sm" className="md:hidden">
-                    Workspace
+                    Threads
                   </Button>
                 </SheetTrigger>
                 <SheetContent side="left" className="w-full sm:max-w-sm p-0">
@@ -725,7 +933,6 @@ export default function ChatbotPage() {
                     onNewChat={handleNewChat}
                     onDeleteThread={handleDeleteThread}
                     selectedThreadId={currentThreadId}
-                    onConfigChange={handleConfigChange}
                   />
                 </SheetContent>
               </Sheet>
@@ -739,7 +946,7 @@ export default function ChatbotPage() {
                   className="gap-2"
                 >
                   <Download className="h-4 w-4" />
-                  Download Thread
+                  Download
                 </Button>
               )}
             </div>
@@ -750,116 +957,16 @@ export default function ChatbotPage() {
         <ScrollArea ref={scrollAreaRef} className="flex-1">
           <div className="max-w-4xl mx-auto px-6 py-8">
             {!hasMessages && !isLoading && (
-              <div className="flex flex-col items-center justify-center gap-6 py-6">
-                <div className="space-y-2 text-center">
-                  <Sparkles className="mx-auto h-12 w-12 text-primary/50" />
-                  <h2 className="text-xl font-semibold text-foreground">
-                    Start a New Conversation
+              <div className="flex flex-col items-center justify-center py-16">
+                <div className="space-y-3 text-center">
+                  <Sparkles className="mx-auto h-16 w-16 text-primary/40" />
+                  <h2 className="text-2xl font-semibold text-foreground">
+                    How can I help you today?
                   </h2>
                   <p className="mx-auto max-w-md text-sm text-muted-foreground">
-                    Choose a curated prompt, pin your favorites, or ask your own question.
+                    Ask any question about wealth management, customer processes, or system workflows.
                   </p>
                 </div>
-
-                {pinnedPrompts.length > 0 && (
-                  <div className="w-full max-w-3xl text-left">
-                    <h3 className="text-sm font-semibold text-foreground">Pinned prompts</h3>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {pinnedPrompts.map((prompt) => (
-                        <Button
-                          key={`pinned-${prompt}`}
-                          variant="secondary"
-                          size="sm"
-                          className="gap-2 rounded-full"
-                          onClick={() => handlePromptSelection(prompt)}
-                        >
-                          <Sparkles className="h-4 w-4 text-primary" />
-                          {prompt}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <Tabs value={activeStarterCategory} onValueChange={setActiveStarterCategory} className="w-full">
-                  <TabsList className="grid w-full grid-cols-1 gap-2 bg-transparent p-0 sm:grid-cols-2 lg:grid-cols-3">
-                    {conversationStarterCategories.map((starter) => {
-                      const Icon = starter.icon;
-                      return (
-                        <TabsTrigger
-                          key={starter.category}
-                          value={starter.category}
-                          className="flex items-center justify-start gap-3 rounded-lg border border-border/60 bg-background/80 px-4 py-3 text-left text-sm font-medium shadow-sm transition data-[state=active]:border-primary/50 data-[state=active]:text-foreground"
-                        >
-                          <Icon className={`h-4 w-4 ${starter.iconColor}`} />
-                          {starter.category}
-                        </TabsTrigger>
-                      );
-                    })}
-                  </TabsList>
-
-                  <p className="mt-3 text-center text-xs text-muted-foreground">
-                    Showing curated prompts for {selectedStarterCategory?.category}.
-                  </p>
-
-                  {conversationStarterCategories.map((starter) => (
-                    <TabsContent key={starter.category} value={starter.category} forceMount className="mt-4">
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        {starter.prompts.map((prompt) => {
-                          const isPinned = pinnedPrompts.includes(prompt);
-                          return (
-                            <button
-                              key={prompt}
-                              onClick={() => handlePromptSelection(prompt)}
-                              className={`group relative flex w-full items-start justify-between gap-3 rounded-xl border bg-gradient-to-br p-4 text-left transition-all hover:shadow-lg ${starter.color}`}
-                              data-testid={`starter-card-${starter.category}-${prompt}`}
-                            >
-                              <div className="flex flex-1 flex-col gap-1.5">
-                                <span className="text-sm font-semibold text-foreground">{prompt}</span>
-                                <span className="text-xs text-muted-foreground">Click to ask instantly</span>
-                              </div>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    className={`h-8 w-8 rounded-full border border-transparent bg-background/80 transition ${
-                                      isPinned
-                                        ? "border-yellow-500/50 text-yellow-500"
-                                        : "text-muted-foreground hover:text-foreground"
-                                    }`}
-                                    onClick={(event) => {
-                                      event.preventDefault();
-                                      event.stopPropagation();
-                                      togglePinnedPrompt(prompt);
-                                    }}
-                                  >
-                                    <Star
-                                      className={`h-4 w-4 ${
-                                        isPinned ? "fill-yellow-400 text-yellow-500" : ""
-                                      }`}
-                                    />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent side="top">
-                                  {isPinned ? "Remove from favorites" : "Pin for quick access"}
-                                </TooltipContent>
-                              </Tooltip>
-                              <div className="absolute bottom-2 right-2 opacity-0 transition-opacity group-hover:opacity-100">
-                                <Send className="h-3.5 w-3.5 text-muted-foreground" />
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </TabsContent>
-                  ))}
-                </Tabs>
-
-                <p className="text-center text-xs text-muted-foreground/70">
-                  💡 Click any prompt to jump-start the conversation or craft your own below.
-                </p>
               </div>
             )}
 
@@ -910,6 +1017,24 @@ export default function ChatbotPage() {
                     {/* Action buttons for assistant messages */}
                     {message.role === "assistant" && userMessage && (
                       <div className="mt-2 flex items-center gap-2">
+                        {(message as any).isCached && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 gap-2 text-xs"
+                            onClick={() => {
+                              queryMutation.mutate({
+                                question: userMessage.content,
+                                threadId: currentThreadId,
+                                refreshCache: true,
+                              });
+                            }}
+                            disabled={isLoading}
+                          >
+                            <RefreshCw className="h-3 w-3" />
+                            Refresh Answer
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon"
@@ -975,6 +1100,7 @@ export default function ChatbotPage() {
                                 queryMutation.mutate({
                                   question: userMessage.content,
                                   threadId: currentThreadId,
+                                  refreshCache: true,
                                 })
                               }
                             >
@@ -996,44 +1122,26 @@ export default function ChatbotPage() {
               );
             })}
 
-            {/* Render quizzes inline */}
-            {quizzes.map((quiz) => (
-              <div key={quiz.id} className="mb-6" data-testid={`quiz-${quiz.id}`}>
-                <QuizMessage questions={quiz.questions} threadId={currentThreadId!} shouldSaveResults={false} />
-              </div>
-            ))}
-
             {isLoading && (
-              <div className="mb-6 space-y-3" data-testid="loading-indicator">
+              <div className="mb-6" data-testid="loading-indicator">
                 <div className="flex gap-4">
                   <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
                     <Sparkles className="h-4 w-4 text-primary" />
                   </div>
                   <div className="flex-1 rounded-lg bg-muted px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span className="text-sm text-muted-foreground">Crafting your answer…</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="rounded-lg border border-dashed border-border/60 bg-muted/40 p-3 text-xs text-muted-foreground">
-                  <div className="flex flex-col gap-2">
-                    {responseProgressSteps.map((step, index) => (
-                      <div key={step.id} className="flex items-center gap-2">
-                        <div
-                          className={`h-2 w-2 rounded-full ${
-                            index <= activeProgressStep ? "bg-primary" : "bg-muted-foreground/40"
-                          }`}
-                        />
-                        <span
-                          className={`${
-                            index <= activeProgressStep ? "text-foreground font-medium" : "text-muted-foreground"
-                          }`}
-                        >
-                          {step.label}
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span className="text-sm text-muted-foreground">
+                          {mode === "deep" ? "Deep analysis in progress…" : "Thinking…"}
                         </span>
                       </div>
-                    ))}
+                      {mode === "deep" && (
+                        <span className="text-xs text-muted-foreground/70">
+                          Deep mode provides comprehensive analysis and may take a few minutes.
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1043,111 +1151,58 @@ export default function ChatbotPage() {
 
         {/* Input Area - Fixed at bottom */}
         <div className="border-t border-border bg-card/30 backdrop-blur-sm p-4">
-          <div className="mx-auto flex max-w-4xl flex-col gap-4">
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Response style
-                </Label>
-                <ToggleGroup
-                  type="single"
-                  value={mode}
-                  onValueChange={(value) => value && setMode(value as "concise" | "balanced" | "deep")}
-                  className="flex gap-1"
-                >
-                  {responseModeOptions.map((option) => (
-                    <Tooltip key={option.value}>
-                      <TooltipTrigger asChild>
+          <div className="mx-auto flex max-w-4xl flex-col gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Response style
+              </Label>
+              <ToggleGroup
+                type="single"
+                value={mode}
+                onValueChange={(value) => value && setMode(value as "concise" | "balanced" | "deep")}
+                className="flex gap-1"
+              >
+                {responseModeOptions.map((option) => (
+                  <Tooltip key={option.value}>
+                    <TooltipTrigger asChild>
+                      <span>
                         <ToggleGroupItem
                           value={option.value}
                           className="rounded-full px-3 py-1.5 text-xs data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
                         >
                           {option.label}
                         </ToggleGroupItem>
-                      </TooltipTrigger>
-                      <TooltipContent side="top">{option.description}</TooltipContent>
-                    </Tooltip>
-                  ))}
-                </ToggleGroup>
-              </div>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">{option.description}</TooltipContent>
+                  </Tooltip>
+                ))}
+              </ToggleGroup>
+            </div>
 
+            <div className="flex gap-3">
               <Textarea
                 data-testid="input-question"
-                placeholder="Ask a follow-up question or use voice input..."
+                placeholder="Ask a question..."
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
                 onKeyDown={handleKeyDown}
-                className="min-h-[80px] max-h-[220px] resize-none rounded-xl border border-border/60 bg-background/90"
+                className="min-h-[60px] max-h-[160px] flex-1 resize-none rounded-xl border border-border/60 bg-background/90"
                 disabled={isLoading}
               />
-
-              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">Quick templates:</span>
-                {quickPromptTemplates.map((template) => (
-                  <Button
-                    key={template}
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 rounded-full border border-dashed border-border/60"
-                    onClick={() => handlePromptSelection(template)}
-                  >
-                    {template}
-                  </Button>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              <div className="flex items-center gap-3">
-                <VoiceInputButton
-                  onTranscriptionComplete={(text) => {
-                    setQuestion(text);
-                  }}
-                  disabled={isLoading}
-                />
-                <span className="hidden text-xs text-muted-foreground sm:inline">
-                  Hold to talk or tap once for quick dictation.
-                </span>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                {hasMessages && messages.length >= 2 && (
-                  <Button
-                    data-testid="button-quiz-me"
-                    onClick={handleGenerateQuiz}
-                    disabled={quizMutation.isPending}
-                    size="lg"
-                    variant="outline"
-                    className="h-11 gap-2 sm:h-12"
-                  >
-                    {quizMutation.isPending ? (
-                      <>
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                        <span className="hidden sm:inline">Generating...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Zap className="h-5 w-5" />
-                        <span className="hidden sm:inline">Quiz Me</span>
-                      </>
-                    )}
-                  </Button>
+              <Button
+                data-testid="button-submit"
+                onClick={() => handleSubmit()}
+                disabled={!question.trim() || isLoading}
+                size="lg"
+                className="h-[60px] w-[60px] rounded-xl p-0 self-end"
+              >
+                {isLoading ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Send className="h-5 w-5" />
                 )}
-
-                <Button
-                  data-testid="button-submit"
-                  onClick={() => handleSubmit()}
-                  disabled={!question.trim() || isLoading}
-                  size="lg"
-                  className="h-11 w-11 rounded-full p-0 sm:h-12 sm:w-12"
-                >
-                  {isLoading ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                  ) : (
-                    <Send className="h-5 w-5" />
-                  )}
-                </Button>
-              </div>
+              </Button>
             </div>
           </div>
         </div>
