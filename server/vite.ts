@@ -17,11 +17,22 @@ export function log(message: string, source = "express") {
 
 // setupVite - ONLY called in development mode
 // Uses dynamic imports to avoid loading vite in production
+// This function should NEVER be called in production (NODE_ENV=production)
 export async function setupVite(app: Express, server: Server) {
+  // Guard: This should never run in production
+  if (process.env.NODE_ENV === 'production') {
+    console.error('ERROR: setupVite called in production mode. This should not happen.');
+    throw new Error('setupVite cannot be called in production');
+  }
+  
   // Dynamic imports - only load vite packages when this function is called (development only)
   const { createServer: createViteServer, createLogger } = await import("vite");
-  const { default: viteConfig } = await import("../vite.config");
   const { nanoid } = await import("nanoid");
+  
+  // Import vite config dynamically
+  // This path is relative to the source file location (server/vite.ts -> ../vite.config.ts)
+  const viteConfigModule = await import("../vite.config");
+  const viteConfig = viteConfigModule.default;
   
   const viteLogger = createLogger();
   
@@ -75,16 +86,41 @@ export async function setupVite(app: Express, server: Server) {
 // serveStatic - used in production mode
 // No vite dependencies - safe for production
 export function serveStatic(app: Express) {
-  // In production, built files are in dist/public (relative to server directory)
-  // Try dist/public first (production build), then fallback to public (legacy)
-  const distPath = path.resolve(import.meta.dirname, "..", "dist", "public");
-  const fallbackPath = path.resolve(import.meta.dirname, "public");
+  // In production, built files are in dist/public (relative to dist/index.js)
+  // The current directory is /app and dist/index.js is at /app/dist/index.js
+  // So relative to dist/index.js, public is at ./public (same directory)
+  const distPublicPath = path.resolve(import.meta.dirname, "public");
+  // Also check the dist/public path relative to the app root
+  const altPath = path.resolve(import.meta.dirname, "..", "dist", "public");
+  // And check for a public folder in the current directory
+  const fallbackPath = path.resolve(process.cwd(), "dist", "public");
 
-  const staticPath = fs.existsSync(distPath) ? distPath : fallbackPath;
+  let staticPath: string | null = null;
+  
+  if (fs.existsSync(distPublicPath)) {
+    staticPath = distPublicPath;
+  } else if (fs.existsSync(altPath)) {
+    staticPath = altPath;
+  } else if (fs.existsSync(fallbackPath)) {
+    staticPath = fallbackPath;
+  }
 
-  if (!fs.existsSync(staticPath)) {
+  if (!staticPath) {
+    console.error('Could not find static files directory. Checked:');
+    console.error(`  - ${distPublicPath}`);
+    console.error(`  - ${altPath}`);
+    console.error(`  - ${fallbackPath}`);
+    console.error(`Current directory: ${process.cwd()}`);
+    console.error(`import.meta.dirname: ${import.meta.dirname}`);
+    
+    // List what's in the dist directory
+    const distDir = path.resolve(import.meta.dirname);
+    if (fs.existsSync(distDir)) {
+      console.error(`Contents of ${distDir}:`, fs.readdirSync(distDir));
+    }
+    
     throw new Error(
-      `Could not find the build directory. Tried: ${distPath} and ${fallbackPath}. Make sure to build the client first with 'npm run build'`,
+      `Could not find the build directory. Make sure to build the client first with 'npm run build'`,
     );
   }
 
@@ -93,6 +129,6 @@ export function serveStatic(app: Express) {
 
   // fall through to index.html if the file doesn't exist
   app.use("*", (_req, res) => {
-    res.sendFile(path.resolve(staticPath, "index.html"));
+    res.sendFile(path.resolve(staticPath!, "index.html"));
   });
 }
