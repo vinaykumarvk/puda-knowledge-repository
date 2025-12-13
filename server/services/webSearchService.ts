@@ -18,11 +18,11 @@ export class WebSearchService {
     try {
       console.log('Sending web search query to OpenAI Responses API:', userQuery);
       
-      // Use OpenAI Responses API with web_search_preview tool
+      // Use OpenAI Responses API with web_search tool
       const startTime = Date.now();
       const requestPayload: any = {
         model: "gpt-4o",
-        tools: [{"type": "web_search_preview"}],
+        tools: [{"type": "web_search"}],
         input: userQuery
       };
 

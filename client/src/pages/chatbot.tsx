@@ -37,6 +37,7 @@ import {
   ThumbsUp,
   ThumbsDown,
   MoreHorizontal,
+  AlertTriangle,
 } from "lucide-react";
 import jsPDF from "jspdf";
 import ReactMarkdown from "react-markdown";
@@ -89,6 +90,28 @@ const responseModeOptions = [
     description: "Exhaustive analysis with supporting detail.",
   },
 ];
+
+const processingStages = [
+  "Understanding the question...",
+  "Performing step-back thinking...",
+  "Extracting key entities...",
+  "Finding related entities from knowledge graph...",
+  "Breaking down the query into sub-queries...",
+  "Answering sub-queries...",
+  "Synthesizing subquery responses...",
+  "Finalizing the response...",
+];
+
+const generalStatusMessages = [
+  "Still working on it...",
+  "Getting there soon...",
+  "Processing query...",
+  "Nearly done...",
+  "Just a moment longer...",
+  "Query in progress...",
+];
+
+const GENERAL_STATUS_DURATION = 10000;
 
 // Helper function to format API responses professionally
 function formatProfessionally(text: string): string {
@@ -460,12 +483,96 @@ export default function ChatbotPage() {
   const [mode, setMode] = useState<"concise" | "balanced" | "deep">("balanced");
   const [showDownloadDialog, setShowDownloadDialog] = useState(false);
   const [isWorkspaceSheetOpen, setWorkspaceSheetOpen] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [statusType, setStatusType] = useState<"progress" | "error" | null>(null);
+  const [statusHistory, setStatusHistory] = useState<
+    { id: number; text: string; color: string; isGeneral?: boolean }[]
+  >([]);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const lastAssistantMessageRef = useRef<HTMLDivElement>(null);
+  const statusRunIdRef = useRef<number>(0);
+  const statusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { toast } = useToast();
 
   // Store active polling intervals to allow cleanup
   const pollingIntervalsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+
+  const clearStatusTimer = useCallback(() => {
+    if (statusTimeoutRef.current) {
+      clearTimeout(statusTimeoutRef.current);
+      statusTimeoutRef.current = null;
+    }
+  }, []);
+
+  const stopStatusSequence = useCallback(() => {
+    statusRunIdRef.current += 1;
+    clearStatusTimer();
+    setStatusMessage(null);
+    setStatusType(null);
+    setStatusHistory([]);
+  }, [clearStatusTimer]);
+
+  const showStatusError = useCallback((message: string) => {
+    statusRunIdRef.current += 1;
+    clearStatusTimer();
+    setStatusMessage(message);
+    setStatusType("error");
+  }, [clearStatusTimer]);
+
+  const startStatusSequence = useCallback((selectedMode: "concise" | "balanced" | "deep") => {
+    stopStatusSequence();
+    const runId = Date.now();
+    statusRunIdRef.current = runId;
+    setStatusType("progress");
+    const palette = [
+      "bg-primary/10 text-primary",
+      "bg-blue-500/10 text-blue-400",
+      "bg-amber-500/10 text-amber-500",
+      "bg-emerald-500/10 text-emerald-500",
+      "bg-purple-500/10 text-purple-400",
+      "bg-rose-500/10 text-rose-400",
+      "bg-cyan-500/10 text-cyan-400",
+      "bg-lime-500/10 text-lime-500",
+    ];
+    const appendStage = (text: string, stageIndex: number) => {
+      setStatusHistory((prev) => [
+        ...prev,
+        { id: Date.now(), text, color: palette[stageIndex % palette.length] },
+      ]);
+    };
+    const setGeneral = (text: string) => {
+      setStatusHistory([{ id: Date.now(), text, color: "bg-card/70 text-muted-foreground", isGeneral: true }]);
+    };
+
+    const stageDuration = selectedMode === "concise" ? 8000 : 12000;
+    const generalDuration = GENERAL_STATUS_DURATION;
+    let previousGeneral: string | null = null;
+
+    const runGeneralStatuses = () => {
+      if (statusRunIdRef.current !== runId) return;
+      const available = generalStatusMessages.filter((msg) => msg !== previousGeneral);
+      const nextMessage = available[Math.floor(Math.random() * available.length)];
+      previousGeneral = nextMessage;
+      setStatusMessage(nextMessage);
+      setGeneral(nextMessage);
+      clearStatusTimer();
+      statusTimeoutRef.current = setTimeout(runGeneralStatuses, generalDuration);
+    };
+
+    const runStages = (index: number) => {
+      if (statusRunIdRef.current !== runId) return;
+      if (index < processingStages.length) {
+        setStatusMessage(processingStages[index]);
+        appendStage(processingStages[index], index);
+        clearStatusTimer();
+        statusTimeoutRef.current = setTimeout(() => runStages(index + 1), stageDuration);
+      } else {
+        runGeneralStatuses();
+      }
+    };
+
+    runStages(0);
+  }, [clearStatusTimer, stopStatusSequence]);
 
   // Poll job status for async deep mode responses
   const pollJobStatus = useCallback(async (jobId: string, messageId: number, threadId: number) => {
@@ -480,8 +587,8 @@ export default function ChatbotPage() {
     }
 
     const poll = async () => {
-      attempts++;
-      const elapsed = Date.now() - startTime;
+        attempts++;
+        const elapsed = Date.now() - startTime;
       
       // Log progress every attempt (every 2 minutes) for debugging
       if (attempts % 1 === 0) {
@@ -527,13 +634,17 @@ export default function ChatbotPage() {
                 ...msg,
                 content: result.data,
                 responseId: result.responseId || null,
-                sources: null,
-                metadata: result.metadata || null,
+                sources: result.sources || null,
+                metadata: JSON.stringify({
+                  ...(result.metadata ? JSON.parse(result.metadata) : {}),
+                  status: "completed",
+                }),
                 isPolling: false,
               };
             }
             return msg;
           }));
+          stopStatusSequence();
           
           // Invalidate queries to refresh thread list and statuses
           queryClient.invalidateQueries({ queryKey: ["/api/threads"] });
@@ -546,6 +657,21 @@ export default function ChatbotPage() {
           }
           // Invalidate statuses query to remove polling indicator
           queryClient.invalidateQueries({ queryKey: ["/api/threads/statuses"] });
+          setMessages((prev) => prev.map((msg) => {
+            if (msg.id === messageId && msg.role === "assistant") {
+              return {
+                ...msg,
+                metadata: JSON.stringify({
+                  ...(msg.metadata ? JSON.parse(msg.metadata) : {}),
+                  status: "failed",
+                  error: status.error,
+                }),
+                isPolling: false,
+              };
+            }
+            return msg;
+          }));
+          showStatusError(status.error || "An error occurred. Please try again.");
           toast({
             title: "Processing Failed",
             description: status.error || "Deep mode processing failed",
@@ -574,6 +700,7 @@ export default function ChatbotPage() {
             }
             return msg;
           }));
+          showStatusError("Processing timed out. Please try again.");
           
           // Invalidate statuses query to remove polling indicator
           queryClient.invalidateQueries({ queryKey: ["/api/threads/statuses"] });
@@ -632,6 +759,7 @@ export default function ChatbotPage() {
             clearInterval(interval);
             pollingIntervalsRef.current.delete(jobId);
           }
+          showStatusError("An error occurred. Please try again.");
           
           // Only show error toast once
           if (attempts === 1) {
@@ -660,7 +788,7 @@ export default function ChatbotPage() {
     poll();
     const interval = setInterval(poll, 2 * 60 * 1000);
     pollingIntervalsRef.current.set(jobId, interval);
-  }, [toast, setMessages, queryClient]);
+  }, [mode, showStatusError, stopStatusSequence, toast, queryClient]);
 
   // Fetch current thread details
   const { data: currentThread } = useQuery<Thread>({
@@ -703,8 +831,9 @@ export default function ChatbotPage() {
     return () => {
       pollingIntervalsRef.current.forEach(clearInterval);
       pollingIntervalsRef.current.clear();
+      clearStatusTimer();
     };
-  }, []);
+  }, [clearStatusTimer]);
 
   // Auto-scroll to show top of new assistant messages
   useEffect(() => {
@@ -721,6 +850,17 @@ export default function ChatbotPage() {
     }
   }, [messages]);
 
+  useEffect(() => {
+    if (statusMessage && scrollAreaRef.current) {
+      const viewport = scrollAreaRef.current.querySelector<HTMLElement>('[data-radix-scroll-area-viewport]');
+      const target = viewport || scrollAreaRef.current;
+      target.scrollTo({
+        top: target.scrollHeight,
+        behavior: "smooth",
+      });
+    }
+  }, [statusMessage]);
+
   const queryMutation = useMutation({
     mutationFn: async (payload: { question: string; threadId?: number; refreshCache?: boolean }) => {
       const response = await apiRequest("POST", "/api/query", {
@@ -732,19 +872,21 @@ export default function ChatbotPage() {
       });
       const result = await response.json();
       return result;
-    },
-    onSuccess: async (data, variables) => {
-      if (data.error) {
-        toast({
-          title: "Error",
-          description: data.error,
-          variant: "destructive",
-        });
-      } else {
-        // Set the thread ID if this was a new conversation
-        if (!currentThreadId && data.threadId) {
-          setCurrentThreadId(data.threadId);
-        }
+  },
+  onSuccess: async (data, variables) => {
+    if (data.error) {
+      showStatusError("An error occurred. Please try again.");
+      toast({
+        title: "Error",
+        description: data.error,
+        variant: "destructive",
+      });
+      return;
+    } else {
+      // Set the thread ID if this was a new conversation
+      if (!currentThreadId && data.threadId) {
+        setCurrentThreadId(data.threadId);
+      }
         
         // Add user message - use the question from variables instead of state
         const userMessage: Message = {
@@ -764,21 +906,23 @@ export default function ChatbotPage() {
           const assistantMessage: Message & { isCached?: boolean; cacheId?: number; jobId?: string; isPolling?: boolean } = {
             id: data.messageId,
             threadId: data.threadId,
-            role: "assistant",
-            content: data.data || "🔄 Deep analysis in progress...",
-            responseId: data.responseId || null,
-            sources: null,
-            metadata: JSON.stringify({
-              status: data.status || 'polling',
-              jobId: data.jobId,
-            }),
-            createdAt: new Date(),
+          role: "assistant",
+          content: data.data || "Working...",
+          responseId: data.responseId || null,
+          sources: null,
+          metadata: JSON.stringify({
+            status: data.status || "working",
             jobId: data.jobId,
-            isPolling: true,
+          }),
+          createdAt: new Date(),
+          jobId: data.jobId,
+          isPolling: true,
           };
           
           setMessages((prev) => [...prev, userMessage, assistantMessage]);
           setQuestion("");
+          stopStatusSequence();
+          setStatusHistory([]);
           
           // Invalidate thread statuses query to immediately show polling status in sidebar
           queryClient.invalidateQueries({ queryKey: ["/api/threads/statuses"] });
@@ -787,35 +931,54 @@ export default function ChatbotPage() {
           pollJobStatus(data.jobId, data.messageId, data.threadId);
         } else {
           // Normal synchronous response
-          const assistantMessage: Message & { isCached?: boolean; cacheId?: number } = {
-            id: Date.now() + 1,
-            threadId: data.threadId,
-            role: "assistant",
-            content: data.data,
+        const assistantMessage: Message & { isCached?: boolean; cacheId?: number } = {
+          id: Date.now() + 1,
+          threadId: data.threadId,
+          role: "assistant",
+          content: data.data,
             responseId: data.responseId || null,
             sources: data.citations || null,
             metadata: data.metadata || null,
             createdAt: new Date(),
             isCached: data.isCached || false,
             cacheId: data.cacheId,
-          };
-          
-          setMessages((prev) => [...prev, userMessage, assistantMessage]);
-          setQuestion("");
-        }
+        };
         
-        // Invalidate queries to refresh thread list
-        queryClient.invalidateQueries({ queryKey: ["/api/threads"] });
+        setMessages((prev) => [...prev, userMessage, assistantMessage]);
+        setQuestion("");
+        stopStatusSequence();
       }
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to send message",
-        variant: "destructive",
-      });
-    },
-  });
+      
+      // Invalidate queries to refresh thread list
+      queryClient.invalidateQueries({ queryKey: ["/api/threads"] });
+    }
+  },
+  onError: (error: Error) => {
+    showStatusError("An error occurred. Please try again.");
+    toast({
+      title: "Error",
+      description: error.message || "Failed to send message",
+      variant: "destructive",
+    });
+  },
+});
+
+  const triggerQuery = useCallback((payload: { question: string; threadId?: number; refreshCache?: boolean }) => {
+    startStatusSequence(mode);
+    queryMutation.mutate(payload);
+  }, [mode, queryMutation, startStatusSequence]);
+
+  const getMessageStatus = (message: Message) => {
+    if (message.metadata) {
+      try {
+        const meta = JSON.parse(message.metadata);
+        return meta.status as string | undefined;
+      } catch {
+        return undefined;
+      }
+    }
+    return undefined;
+  };
 
   const handleSubmit = (promptText?: string) => {
     const questionToSubmit = promptText || question;
@@ -829,7 +992,7 @@ export default function ChatbotPage() {
       return;
     }
 
-    queryMutation.mutate({
+    triggerQuery({
       question: questionToSubmit,
       threadId: currentThreadId,
     });
@@ -856,6 +1019,7 @@ export default function ChatbotPage() {
     setCurrentThreadId(undefined);
     setMessages([]);
     setQuestion("");
+    stopStatusSequence();
   };
 
   const handleDeleteThread = async (id: number) => {
@@ -1003,14 +1167,16 @@ export default function ChatbotPage() {
                       {message.role === "user" ? (
                         <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                       ) : (
-                        <div className="prose prose-sm max-w-none dark:prose-invert prose-a:text-primary prose-a:no-underline hover:prose-a:underline">
-                          <ReactMarkdown 
-                            rehypePlugins={[rehypeRaw]}
-                            remarkPlugins={[remarkGfm]}
-                          >
-                            {formatProfessionally(cleanupCitations(removeKGTags(decodeHTMLEntities(message.content))))}
-                          </ReactMarkdown>
-                        </div>
+                        <>
+                          <div className="prose prose-sm max-w-none dark:prose-invert prose-a:text-primary prose-a:no-underline hover:prose-a:underline">
+                            <ReactMarkdown 
+                              rehypePlugins={[rehypeRaw]}
+                              remarkPlugins={[remarkGfm]}
+                            >
+                              {formatProfessionally(cleanupCitations(removeKGTags(decodeHTMLEntities(message.content))))}
+                            </ReactMarkdown>
+                          </div>
+                        </>
                       )}
                     </div>
                     
@@ -1023,7 +1189,7 @@ export default function ChatbotPage() {
                             size="sm"
                             className="h-8 gap-2 text-xs"
                             onClick={() => {
-                              queryMutation.mutate({
+                              triggerQuery({
                                 question: userMessage.content,
                                 threadId: currentThreadId,
                                 refreshCache: true,
@@ -1097,7 +1263,7 @@ export default function ChatbotPage() {
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               onClick={() =>
-                                queryMutation.mutate({
+                                triggerQuery({
                                   question: userMessage.content,
                                   threadId: currentThreadId,
                                   refreshCache: true,
@@ -1122,30 +1288,34 @@ export default function ChatbotPage() {
               );
             })}
 
-            {isLoading && (
-              <div className="mb-6" data-testid="loading-indicator">
-                <div className="flex gap-4">
-                  <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
-                    <Sparkles className="h-4 w-4 text-primary" />
+            {statusHistory.length > 0 && (
+              <div className="mb-6" data-testid="status-indicator">
+                <div className="rounded-xl border border-border/60 bg-card/60 p-3 shadow-sm">
+                  <div className="flex items-center gap-2 mb-2">
+                    {statusType === "error" ? (
+                      <AlertTriangle className="h-4 w-4 text-destructive" />
+                    ) : (
+                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                    )}
+                    <span className="text-sm font-medium text-foreground">Status updates</span>
                   </div>
-                  <div className="flex-1 rounded-lg bg-muted px-4 py-3">
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        <span className="text-sm text-muted-foreground">
-                          {mode === "deep" ? "Deep analysis in progress…" : "Thinking…"}
-                        </span>
+                  <div className="flex flex-col gap-2">
+                    {statusHistory.map((item, idx) => (
+                      <div
+                        key={item.id}
+                        className={`rounded-lg px-3 py-2 text-sm transition-all ${item.color} ${idx === statusHistory.length - 1 ? "shadow-md ring-1 ring-border/60" : "opacity-90"}`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex h-2 w-2 rounded-full bg-current" />
+                          <span className="text-foreground/90">{item.text}</span>
+                        </div>
                       </div>
-                      {mode === "deep" && (
-                        <span className="text-xs text-muted-foreground/70">
-                          Deep mode provides comprehensive analysis and may take a few minutes.
-                        </span>
-                      )}
-                    </div>
+                    ))}
                   </div>
                 </div>
               </div>
             )}
+
           </div>
         </ScrollArea>
 

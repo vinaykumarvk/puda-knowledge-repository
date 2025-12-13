@@ -15,7 +15,7 @@ export default function WorkshopPage() {
       name: "RFP Generator",
       description: "Develop detailed responses to Request for Proposals efficiently",
       icon: Clipboard,
-      route: "/rfp",
+      externalUrl: "http://rfp.intellectwealthforcedemo.com",
     },
     {
       name: "Solution Document Workplace",
@@ -60,14 +60,17 @@ export default function WorkshopPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {templates.map((template) => {
               const Icon = template.icon;
-              const hasRoute = 'route' in template;
+              const hasRoute = "route" in template;
+              const hasExternal = "externalUrl" in template;
               return (
                 <Card
                   key={template.name}
-                  className={`hover:shadow-lg hover:border-primary/50 transition-all ${hasRoute ? 'cursor-pointer' : 'cursor-default opacity-60'} bg-card`}
+                  className={`hover:shadow-lg hover:border-primary/50 transition-all ${(hasRoute || hasExternal) ? "cursor-pointer" : "cursor-default opacity-60"} bg-card`}
                   onClick={() => {
                     if (hasRoute && template.route) {
                       setLocation(template.route);
+                    } else if (hasExternal && template.externalUrl) {
+                      window.open(template.externalUrl, "_blank", "noopener,noreferrer");
                     }
                   }}
                   data-testid={`card-template-${template.name.toLowerCase().replace(/\s+/g, '-')}`}

@@ -13,12 +13,34 @@ import { requireAuth, type AuthenticatedRequest } from "./middleware/requireAuth
 import { DomainRouter } from "./services/domainRouter";
 import { getDomainSyncInfo, listDomains, refreshDomainRegistry, domainExists, DEFAULT_DOMAIN_ID, getDomainConfig } from "./services/domainRegistry";
 import { pollUntilComplete, extractAnswerText, isAsyncDeepModeResponse } from "./services/deepModePoller";
+import { generateStructuredReport } from "./services/reportGeneration";
 import { findSimilarCachedResponse, saveCachedResponse } from "./services/responseCache";
 import { jobStore } from "./services/jobStore";
 import { getUploadDir } from "./utils/uploadPaths";
 
 const EKG_API_URL = "https://ekg-service-47249889063.europe-west6.run.app";
 const domainRouter = new DomainRouter();
+
+function extractCitationsFromResponse(resp: any): any[] | null {
+  try {
+    if (!resp) return null;
+    if (resp.metadata?.citations) return resp.metadata.citations;
+    if (resp.citations) return resp.citations;
+    if (resp.output && Array.isArray(resp.output)) {
+      for (const item of resp.output) {
+        if (item.citations) return item.citations;
+        if (item.content) {
+          const blockWithCitations = (item.content as any[]).find((b) => b.citations || b.references);
+          if (blockWithCitations?.citations) return blockWithCitations.citations;
+          if (blockWithCitations?.references) return blockWithCitations.references;
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Failed to extract citations from response:", err);
+  }
+  return null;
+}
 
 /**
  * Background job processor for deep mode async responses
@@ -73,6 +95,8 @@ async function processDeepModeJob(
       status: 'retrieving',
       rawResponse,
     });
+
+    const extractedSources = extractCitationsFromResponse(pollResult.response);
     
     await storage.updateMessage(job.messageId, {
       content: "📥 Almost done! Formatting your response...",
@@ -90,6 +114,15 @@ async function processDeepModeJob(
       return rawResponse;
     });
 
+    // Step 3b: Enrich into a formal report with templates (best-effort)
+    const reportResult = await generateStructuredReport({
+      baseContent: formattedAnswer,
+      question,
+      sources: extractedSources || undefined,
+      responseId,
+    });
+    const finalAnswer = reportResult.content || formattedAnswer;
+
     // Step 4: Update message with final answer
     const metadataPayload = {
       polled: true,
@@ -98,13 +131,15 @@ async function processDeepModeJob(
       jobId,
       status: 'completed',
       responseId: responseId, // Include responseId in metadata for redundancy
+      reportFormat: reportResult.formatKey,
     };
     const metadata = JSON.stringify(metadataPayload);
 
     await storage.updateMessage(job.messageId, {
-      content: formattedAnswer,
+      content: finalAnswer,
       responseId: responseId,
       metadata,
+      sources: extractedSources ? JSON.stringify(extractedSources) : null,
     });
     await storage.updateThreadTimestamp(job.threadId);
 
@@ -952,6 +987,7 @@ User's Question: ${validatedData.question}`;
         threadId: job.threadId,
         messageId: job.messageId,
         data: message.content,
+        sources: message.sources,
         metadata: message.metadata,
         responseId: message.responseId,
         resolvedDomain: metadata.domainResolution?.domainId,

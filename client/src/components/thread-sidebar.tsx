@@ -60,10 +60,10 @@ export function ThreadSidebar({
     if (!status) return null;
 
     const statusLabels: Record<string, string> = {
-      polling: "Polling...",
-      retrieving: "Retrieving...",
-      formatting: "Formatting...",
-      queued: "Queued...",
+      polling: "Working...",
+      retrieving: "Working...",
+      formatting: "Working...",
+      queued: "Working...",
     };
 
     return {
