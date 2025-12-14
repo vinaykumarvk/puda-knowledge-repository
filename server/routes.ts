@@ -20,6 +20,7 @@ import { getUploadDir } from "./utils/uploadPaths";
 
 const EKG_API_URL = "https://ekg-service-47249889063.europe-west6.run.app";
 const domainRouter = new DomainRouter();
+const ACTIVE_POLL_INTERVAL_MS = 10 * 60 * 1000;
 
 function extractCitationsFromResponse(resp: any): any[] | null {
   try {
@@ -198,6 +199,31 @@ const openai = (process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 }) : null;
+
+// Backend sweep to poll active deep-mode jobs every 10 minutes (best-effort)
+setInterval(async () => {
+  try {
+    const activeJobs = await jobStore.getActiveJobs();
+    for (const job of activeJobs) {
+      try {
+        // Skip if already terminal (defensive)
+        if (job.status === 'completed' || job.status === 'failed') continue;
+        await processDeepModeJob(
+          job.id,
+          job.responseId,
+          job.question,
+          "deep",
+          job.metadata?.domainResolution,
+          false
+        );
+      } catch (err) {
+        console.error(`[Background Poll] Failed to process job ${job.id}:`, err);
+      }
+    }
+  } catch (err) {
+    console.error("[Background Poll] Sweep failed:", err);
+  }
+}, ACTIVE_POLL_INTERVAL_MS);
 
 async function formatWithModel51(rawResponse: string, question: string, domainResolution: any): Promise<string> {
   if (!openai) {
@@ -818,8 +844,8 @@ User's Question: ${validatedData.question}`;
     }
   });
 
-  // Deep mode job status polling endpoints
-  app.get("/api/jobs/:jobId/status", requireAuth, async (req: AuthenticatedRequest, res) => {
+  // Deep mode job status polling endpoints (no auth to allow post-restart checks)
+  app.get("/api/jobs/:jobId/status", async (req, res) => {
     try {
       const job = await jobStore.getJob(req.params.jobId);
       if (!job) {
@@ -879,7 +905,7 @@ User's Question: ${validatedData.question}`;
   });
 
   // Check for stuck jobs and recover them
-  app.post("/api/jobs/recover-stuck", requireAuth, async (req: AuthenticatedRequest, res) => {
+  app.post("/api/jobs/recover-stuck", requireAuth, async (req, res) => {
     try {
       const stuckJobs = await jobStore.getStuckJobs(40); // Align with 30m poll window to avoid false positives
       const recovered: string[] = [];
@@ -925,7 +951,7 @@ User's Question: ${validatedData.question}`;
   });
 
   // Get all jobs (for debugging)
-  app.get("/api/jobs", requireAuth, async (req: AuthenticatedRequest, res) => {
+  app.get("/api/jobs", requireAuth, async (req, res) => {
     try {
       const allJobs = await jobStore.getAllJobs();
       const stuckJobs = await jobStore.getStuckJobs(40);
@@ -958,7 +984,7 @@ User's Question: ${validatedData.question}`;
   });
 
   // Get completed job result
-  app.get("/api/jobs/:jobId/result", requireAuth, async (req: AuthenticatedRequest, res) => {
+  app.get("/api/jobs/:jobId/result", async (req, res) => {
     try {
       const job = await jobStore.getJob(req.params.jobId);
       if (!job) {
@@ -998,6 +1024,138 @@ User's Question: ${validatedData.question}`;
       res.status(500).json({
         error: error instanceof Error ? error.message : "Failed to get job result",
       });
+    }
+  });
+
+  // Manual check endpoint: single status fetch from OpenAI, finalize if done, and return current message snapshot
+  app.get("/api/jobs/:jobId/check", async (req, res) => {
+    try {
+      const job = await jobStore.getJob(req.params.jobId);
+      if (!job) {
+        return res.status(404).json({ error: "Job not found" });
+      }
+
+      const message = await storage.getMessages(job.threadId).then((msgs) =>
+        msgs.find((m) => m.id === job.messageId)
+      );
+
+      // Helper to return current snapshot
+      const returnSnapshot = async (status: string, errorMsg?: string) => {
+        const refreshed = await storage.getMessages(job.threadId).then((msgs) =>
+          msgs.find((m) => m.id === job.messageId)
+        );
+        return res.json({
+          status,
+          error: errorMsg || null,
+          messageId: job.messageId,
+          threadId: job.threadId,
+          messageContent: refreshed?.content,
+          metadata: refreshed?.metadata,
+          sources: refreshed?.sources,
+        });
+      };
+
+      // If already terminal, return snapshot
+      if (job.status === "completed" || job.status === "failed") {
+        return returnSnapshot(job.status, job.error || undefined);
+      }
+
+      // Need OpenAI client for status
+      const client = (process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY)
+        ? new OpenAI({
+            apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+            baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+          })
+        : null;
+
+      if (!client) {
+        return res.status(500).json({ error: "OpenAI client not configured" });
+      }
+
+      // Fetch current status from OpenAI
+      const resp = await (client as any).responses.retrieve(job.responseId);
+      const status = resp?.status || "unknown";
+
+      // If still in progress, just return latest snapshot with updated status
+      if (status !== "completed") {
+        await jobStore.updateJobStatus(job.id, { status: status as any });
+        if (message) {
+          const metadata = message.metadata ? JSON.parse(message.metadata) : {};
+          metadata.status = status;
+          await storage.updateMessage(message.id, { metadata: JSON.stringify(metadata) });
+        }
+        return returnSnapshot(status);
+      }
+
+      // Completed: extract, format, save
+      const rawResponse = extractAnswerText(resp);
+      const extractedSources = extractCitationsFromResponse(resp);
+
+      await jobStore.updateJobStatus(job.id, { status: "retrieving", rawResponse });
+      if (message) {
+        await storage.updateMessage(message.id, {
+          content: "📥 Almost done! Formatting your response...",
+          metadata: JSON.stringify({
+            ...(message.metadata ? JSON.parse(message.metadata) : {}),
+            status: "formatting",
+            jobId: job.id,
+            responseId: job.responseId,
+          }),
+        });
+      }
+
+      const formattedAnswer = await formatWithModel51(rawResponse, job.question, job.metadata?.domainResolution).catch(
+        (err) => {
+          console.error(`[Deep Mode] Formatting failed for job ${job.id} (check):`, err);
+          return rawResponse;
+        }
+      );
+      const reportResult = await generateStructuredReport({
+        baseContent: formattedAnswer,
+        question: job.question,
+        sources: extractedSources || undefined,
+        responseId: job.responseId,
+      });
+      const finalAnswer = reportResult.content || formattedAnswer;
+
+      const metadataPayload = {
+        ...(message?.metadata ? JSON.parse(message.metadata) : {}),
+        polled: true,
+        poll_status: status,
+        domainResolution: job.metadata?.domainResolution,
+        jobId: job.id,
+        status: "completed",
+        responseId: job.responseId,
+        reportFormat: reportResult.formatKey,
+      };
+      await storage.updateMessage(job.messageId, {
+        content: finalAnswer,
+        responseId: job.responseId,
+        metadata: JSON.stringify(metadataPayload),
+        sources: extractedSources ? JSON.stringify(extractedSources) : null,
+      });
+
+      await storage.updateThreadTimestamp(job.threadId);
+
+      await jobStore.updateJobStatus(job.id, {
+        status: "completed",
+        formattedResult: finalAnswer,
+        metadata: metadataPayload,
+      });
+
+      await saveCachedResponse(
+        job.question,
+        "deep",
+        finalAnswer,
+        rawResponse,
+        metadataPayload,
+        job.responseId
+      );
+
+      return returnSnapshot("completed");
+    } catch (error) {
+      console.error("Job check error:", error);
+      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to check job" });
     }
   });
 

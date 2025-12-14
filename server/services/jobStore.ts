@@ -3,6 +3,7 @@ import { deepModeJobs, DeepModeJob as DbDeepModeJob } from '@shared/schema';
 import { and, eq, inArray, lt, desc } from 'drizzle-orm';
 
 type JobStatus = 'queued' | 'polling' | 'retrieving' | 'formatting' | 'completed' | 'failed';
+const NON_TERMINAL: JobStatus[] = ['queued', 'polling', 'retrieving', 'formatting'];
 
 export interface DeepModeJob extends Omit<DbDeepModeJob, 'metadata'> {
   metadata?: any;
@@ -85,6 +86,14 @@ class JobStore {
           lt(deepModeJobs.updatedAt, cutoff)
         )
       );
+    return rows.map((row) => this.hydrate(row)!).filter(Boolean);
+  }
+
+  async getActiveJobs(): Promise<DeepModeJob[]> {
+    const rows = await db
+      .select()
+      .from(deepModeJobs)
+      .where(inArray(deepModeJobs.status, NON_TERMINAL));
     return rows.map((row) => this.hydrate(row)!).filter(Boolean);
   }
 

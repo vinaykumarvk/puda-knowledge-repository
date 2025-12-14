@@ -488,6 +488,7 @@ export default function ChatbotPage() {
   const [statusHistory, setStatusHistory] = useState<
     { id: number; text: string; color: string; isGeneral?: boolean }[]
   >([]);
+  const [checkingJobId, setCheckingJobId] = useState<string | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const lastAssistantMessageRef = useRef<HTMLDivElement>(null);
   const statusRunIdRef = useRef<number>(0);
@@ -784,10 +785,8 @@ export default function ChatbotPage() {
       }
     };
 
-    // Start polling immediately, then every 2 minutes
+    // Run a single poll (manual / on-demand)
     poll();
-    const interval = setInterval(poll, 2 * 60 * 1000);
-    pollingIntervalsRef.current.set(jobId, interval);
   }, [mode, showStatusError, stopStatusSequence, toast, queryClient]);
 
   // Fetch current thread details
@@ -802,29 +801,57 @@ export default function ChatbotPage() {
     enabled: !!currentThreadId,
   });
 
+  // Fetch thread statuses to allow resuming polling after reload
+  const { data: threadStatuses } = useQuery<Record<string, { status: string; jobId?: string; messageId?: number }>>({
+    queryKey: ["/api/threads/statuses"],
+  });
+
   // Update messages when thread changes
   useEffect(() => {
     if (fetchedMessages) {
       setMessages(fetchedMessages);
       
-      // Check for any messages that are still polling and resume polling
-      fetchedMessages.forEach((msg) => {
-        if (msg.role === "assistant" && msg.metadata) {
-          try {
-            const metadata = JSON.parse(msg.metadata);
-            if (metadata.jobId && metadata.status && metadata.status !== 'completed' && metadata.status !== 'failed') {
-              // Resume polling for this job
-              pollJobStatus(metadata.jobId, msg.id, msg.threadId);
-            }
-          } catch (e) {
-            // Ignore parse errors
+    // Check for any messages that are still polling and attach manual check
+    // (no continuous timers)
+    fetchedMessages.forEach((msg) => {
+      if (msg.role === "assistant" && msg.metadata) {
+        try {
+          const metadata = JSON.parse(msg.metadata);
+          if (metadata.jobId && metadata.status && metadata.status !== 'completed' && metadata.status !== 'failed') {
+            // Single poll to refresh status
+            pollJobStatus(metadata.jobId, msg.id, msg.threadId);
           }
+        } catch (e) {
+          // Ignore parse errors
         }
-      });
+      }
+    });
     } else {
       setMessages([]);
     }
   }, [fetchedMessages, pollJobStatus]);
+
+  // Resume polling based on thread status snapshot (helps after reloads)
+  useEffect(() => {
+    if (!currentThreadId || !threadStatuses) return;
+    const statusEntry = threadStatuses[String(currentThreadId)];
+    if (!statusEntry || !statusEntry.jobId || !statusEntry.messageId) return;
+    if (statusEntry.status === "completed" || statusEntry.status === "failed") return;
+
+    // If we already have a message with terminal status, skip
+    const existing = messages.find((m) => m.id === statusEntry.messageId);
+    if (existing && existing.metadata) {
+      try {
+        const meta = JSON.parse(existing.metadata);
+        if (meta.status === "completed" || meta.status === "failed") {
+          return;
+        }
+      } catch {
+        // continue to resume polling
+      }
+    }
+    pollJobStatus(statusEntry.jobId, statusEntry.messageId, currentThreadId);
+  }, [currentThreadId, messages, pollJobStatus, threadStatuses]);
 
   // Cleanup polling intervals on unmount to prevent orphaned timers
   useEffect(() => {
@@ -978,6 +1005,55 @@ export default function ChatbotPage() {
       }
     }
     return undefined;
+  };
+
+  const getMessageJobInfo = (message: Message) => {
+    if (!message.metadata) return { jobId: undefined, status: undefined };
+    try {
+      const meta = JSON.parse(message.metadata);
+      return { jobId: meta.jobId as string | undefined, status: meta.status as string | undefined };
+    } catch {
+      return { jobId: undefined, status: undefined };
+    }
+  };
+
+  const handleCheckStatus = async (jobId: string, messageId: number, threadId: number) => {
+    setCheckingJobId(jobId);
+    try {
+      toast({ title: "Checking status…", description: "Fetching latest progress from server." });
+      const res = await apiRequest("GET", `/api/jobs/${jobId}/check?messageId=${messageId}&threadId=${threadId}`);
+      const data = await res.json();
+
+      // If server returned updated message content/metadata, sync immediately
+      if (data.messageId) {
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (m.id === data.messageId) {
+              return {
+                ...m,
+                content: data.messageContent ?? m.content,
+                metadata: data.metadata ?? m.metadata,
+                sources: data.sources ?? m.sources,
+              };
+            }
+            return m;
+          }),
+        );
+      }
+
+      // Refresh messages and statuses
+      queryClient.invalidateQueries({ queryKey: [`/api/threads/${threadId}/messages`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/threads/statuses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/threads"] });
+    } catch (error: any) {
+      toast({
+        title: "Status check failed",
+        description: error?.message || "Unable to fetch status",
+        variant: "destructive",
+      });
+    } finally {
+      setCheckingJobId(null);
+    }
   };
 
   const handleSubmit = (promptText?: string) => {
@@ -1176,6 +1252,32 @@ export default function ChatbotPage() {
                               {formatProfessionally(cleanupCitations(removeKGTags(decodeHTMLEntities(message.content))))}
                             </ReactMarkdown>
                           </div>
+                          {(() => {
+                            const { jobId, status } = getMessageJobInfo(message);
+                            if (jobId && status && status !== "completed" && status !== "failed") {
+                              return (
+                                <div className="mt-2">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 px-2 text-xs"
+                                    onClick={() => handleCheckStatus(jobId, message.id, message.threadId)}
+                                    disabled={checkingJobId === jobId}
+                                  >
+                                    {checkingJobId === jobId ? (
+                                      <span className="inline-flex items-center gap-2">
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                        Checking…
+                                      </span>
+                                    ) : (
+                                      "Check status"
+                                    )}
+                                  </Button>
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()}
                         </>
                       )}
                     </div>

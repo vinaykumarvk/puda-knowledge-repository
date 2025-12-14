@@ -147,7 +147,7 @@ export async function saveCachedResponse(
     
     const isDeepMode = mode === "deep";
 
-    const cacheEntry: InsertResponseCache = {
+    const cacheEntry: any = {
       question,
       questionEmbedding: questionEmbedding as any, // Type casting for vector
       mode,
@@ -191,4 +191,3 @@ export async function cleanupOldCacheEntries(daysOld: number = 30): Promise<numb
     return 0;
   }
 }
-
