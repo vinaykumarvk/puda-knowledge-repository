@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -28,7 +28,6 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
   Loader2,
   Send,
-  Sparkles,
   User,
   Download,
   RefreshCw,
@@ -38,7 +37,17 @@ import {
   ThumbsDown,
   MoreHorizontal,
   AlertTriangle,
+  Sparkles,
+  BookOpen,
+  Zap,
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import jsPDF from "jspdf";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
@@ -489,6 +498,8 @@ export default function ChatbotPage() {
     { id: number; text: string; color: string; isGeneral?: boolean }[]
   >([]);
   const [checkingJobId, setCheckingJobId] = useState<string | null>(null);
+  const [expandedPairs, setExpandedPairs] = useState<Set<number>>(new Set());
+  const [inputHeight, setInputHeight] = useState<number>(40);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const lastAssistantMessageRef = useRef<HTMLDivElement>(null);
   const statusRunIdRef = useRef<number>(0);
@@ -810,6 +821,14 @@ export default function ChatbotPage() {
   useEffect(() => {
     if (fetchedMessages) {
       setMessages(fetchedMessages);
+      // Expand the last pair by default
+      const pairIds = fetchedMessages
+        .map((m, idx) => ({ m, idx }))
+        .filter(({ m }) => m.role === "assistant")
+        .map(({ m }) => m.id);
+      if (pairIds.length > 0) {
+        setExpandedPairs(new Set([pairIds[pairIds.length - 1]]));
+      }
       
     // Check for any messages that are still polling and attach manual check
     // (no continuous timers)
@@ -1056,6 +1075,39 @@ export default function ChatbotPage() {
     }
   };
 
+  const messagePairs = useMemo(() => {
+    const pairs: { question: Message | null; answer: Message | null }[] = [];
+    let i = 0;
+    while (i < messages.length) {
+      const current = messages[i];
+      const next = messages[i + 1];
+      if (current.role === "user" && next && next.role === "assistant") {
+        pairs.push({ question: current, answer: next });
+        i += 2;
+      } else if (current.role === "user") {
+        pairs.push({ question: current, answer: null });
+        i += 1;
+      } else {
+        pairs.push({ question: null, answer: current });
+        i += 1;
+      }
+    }
+    return pairs;
+  }, [messages]);
+
+  const togglePair = (answerId?: number) => {
+    if (!answerId) return;
+    setExpandedPairs((prev) => {
+      const next = new Set(prev);
+      if (next.has(answerId)) {
+        next.delete(answerId);
+      } else {
+        next.add(answerId);
+      }
+      return next;
+    });
+  };
+
   const handleSubmit = (promptText?: string) => {
     const questionToSubmit = promptText || question;
     
@@ -1077,6 +1129,7 @@ export default function ChatbotPage() {
     if (!promptText) {
       setQuestion("");
     }
+    setInputHeight(40);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1145,15 +1198,14 @@ export default function ChatbotPage() {
 
       <div className="flex flex-1 flex-col">
         {/* Header */}
-        <header className="border-b border-border bg-card/30 backdrop-blur-sm px-4 py-4 sm:px-6">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-start gap-3">
-              <Sparkles className="mt-1 h-6 w-6 text-primary" />
+        <header className="border-b border-border bg-card/30 backdrop-blur-sm px-3 py-3 sm:px-6 sm:py-4">
+            <div className="flex flex-col gap-2 sm:gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-start gap-2 sm:gap-3">
               <div>
-                <h1 className="text-2xl font-bold text-foreground" data-testid="text-title">
+                <h1 className="text-xl sm:text-2xl font-bold text-foreground" data-testid="text-title">
                   WealthForce Knowledge Agent
                 </h1>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs sm:text-sm text-muted-foreground">
                   Conversational Wealth Management Knowledge
                 </p>
               </div>
@@ -1195,11 +1247,10 @@ export default function ChatbotPage() {
 
         {/* Messages Area */}
         <ScrollArea ref={scrollAreaRef} className="flex-1">
-          <div className="max-w-4xl mx-auto px-6 py-8">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
             {!hasMessages && !isLoading && (
               <div className="flex flex-col items-center justify-center py-16">
                 <div className="space-y-3 text-center">
-                  <Sparkles className="mx-auto h-16 w-16 text-primary/40" />
                   <h2 className="text-2xl font-semibold text-foreground">
                     How can I help you today?
                   </h2>
@@ -1210,180 +1261,190 @@ export default function ChatbotPage() {
               </div>
             )}
 
-            {messages.map((message, index) => {
-              // Find the corresponding user message for this assistant message
-              const userMessage = message.role === "assistant" && index > 0 ? messages[index - 1] : null;
-              
-              // Check if this is the last assistant message
-              const isLastAssistantMessage = message.role === "assistant" && index === messages.length - 1;
-              
+            {messagePairs.map((pair, idx) => {
+              const answer = pair.answer;
+              const questionMsg = pair.question;
+              const answerId = answer?.id;
+              const isExpanded = answerId ? expandedPairs.has(answerId) : true;
+              const isLastAssistantMessage = answer && idx === messagePairs.length - 1;
+              const meta = (() => {
+                if (!answer?.metadata) return {};
+                try {
+                  return JSON.parse(answer.metadata);
+                } catch {
+                  return {};
+                }
+              })();
+              const modeLabel = `Mode: ${meta.mode || "Unknown"}`;
+              const answeredAt = meta.answeredAt
+                ? new Date(meta.answeredAt)
+                : answer?.createdAt
+                  ? typeof answer.createdAt === "string"
+                    ? new Date(answer.createdAt)
+                    : answer.createdAt
+                  : null;
+
               return (
-                <div
-                  key={message.id}
-                  ref={isLastAssistantMessage ? lastAssistantMessageRef : null}
-                  className={`mb-6 flex gap-4 ${
-                    message.role === "user" ? "justify-end" : "justify-start"
-                  }`}
-                  data-testid={`message-${message.role}-${message.id}`}
-                >
-                  {message.role === "assistant" && (
-                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                      <Sparkles className="w-4 h-4 text-primary" />
-                    </div>
-                  )}
-                  
-                  <div className="flex-1 max-w-[80%]">
-                    <div
-                      className={`rounded-lg px-4 py-3 ${
-                        message.role === "user"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted"
-                      }`}
-                    >
-                      {message.role === "user" ? (
-                        <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                      ) : (
-                        <>
-                          <div className="prose prose-sm max-w-none dark:prose-invert prose-a:text-primary prose-a:no-underline hover:prose-a:underline">
-                            <ReactMarkdown 
-                              rehypePlugins={[rehypeRaw]}
-                              remarkPlugins={[remarkGfm]}
-                            >
-                              {formatProfessionally(cleanupCitations(removeKGTags(decodeHTMLEntities(message.content))))}
-                            </ReactMarkdown>
-                          </div>
-                          {(() => {
-                            const { jobId, status } = getMessageJobInfo(message);
-                            if (jobId && status && status !== "completed" && status !== "failed") {
-                              return (
-                                <div className="mt-2">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-8 px-2 text-xs"
-                                    onClick={() => handleCheckStatus(jobId, message.id, message.threadId)}
-                                    disabled={checkingJobId === jobId}
-                                  >
-                                    {checkingJobId === jobId ? (
-                                      <span className="inline-flex items-center gap-2">
-                                        <Loader2 className="h-3 w-3 animate-spin" />
-                                        Checking…
-                                      </span>
-                                    ) : (
-                                      "Check status"
-                                    )}
-                                  </Button>
-                                </div>
-                              );
-                            }
-                            return null;
-                          })()}
-                        </>
-                      )}
-                    </div>
-                    
-                    {/* Action buttons for assistant messages */}
-                    {message.role === "assistant" && userMessage && (
-                      <div className="mt-2 flex items-center gap-2">
-                        {(message as any).isCached && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8 gap-2 text-xs"
-                            onClick={() => {
-                              triggerQuery({
-                                question: userMessage.content,
-                                threadId: currentThreadId,
-                                refreshCache: true,
-                              });
-                            }}
-                            disabled={isLoading}
-                          >
-                            <RefreshCw className="h-3 w-3" />
-                            Refresh Answer
+                <div key={answerId || questionMsg?.id || idx} className="mb-4">
+                  <div
+                    className="flex items-start gap-2 sm:gap-3 cursor-pointer select-none"
+                    onClick={() => togglePair(answerId || questionMsg?.id)}
+                  >
+                    <div className="flex-1">
+                      <div className="rounded-lg bg-primary text-primary-foreground px-3 sm:px-4 py-3 shadow-sm border border-border/20">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-semibold">
+                            {questionMsg?.content || "Question"}
+                          </p>
+                          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
+                            {isExpanded ? "Collapse" : "Expand"}
                           </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          data-testid={`button-feedback-positive-${message.id}`}
-                          onClick={() => handleReaction("positive")}
-                        >
-                          <ThumbsUp className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          data-testid={`button-feedback-negative-${message.id}`}
-                          onClick={() => handleReaction("negative")}
-                        >
-                          <ThumbsDown className="h-4 w-4" />
-                        </Button>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              data-testid={`button-message-actions-${message.id}`}
-                            >
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="start" className="w-56">
-                            <DropdownMenuLabel>Response actions</DropdownMenuLabel>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                downloadMessageMarkdown(
-                                  userMessage.content,
-                                  message.content,
-                                  typeof message.createdAt === "string"
-                                    ? message.createdAt
-                                    : message.createdAt.toISOString(),
-                                )
-                              }
-                            >
-                              <FileText className="mr-2 h-4 w-4" />
-                              Download as Markdown (.md)
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                downloadMessagePDF(
-                                  userMessage.content,
-                                  message.content,
-                                  typeof message.createdAt === "string"
-                                    ? message.createdAt
-                                    : message.createdAt.toISOString(),
-                                )
-                              }
-                            >
-                              <FileType className="mr-2 h-4 w-4" />
-                              Download as PDF (.pdf)
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() =>
-                                triggerQuery({
-                                  question: userMessage.content,
-                                  threadId: currentThreadId,
-                                  refreshCache: true,
-                                })
-                              }
-                            >
-                              <RefreshCw className="mr-2 h-4 w-4" />
-                              Regenerate response
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        </div>
+                        <div className="mt-1 text-xs text-primary-foreground/80 flex items-center gap-2 flex-wrap">
+                          <span>{modeLabel}</span>
+                          {answeredAt && <span>• {answeredAt.toLocaleString()}</span>}
+                        </div>
                       </div>
-                    )}
+                    </div>
                   </div>
 
-                  {message.role === "user" && (
-                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                      <User className="w-4 h-4 text-foreground" />
+                  {isExpanded && answer && (
+                    <div
+                      ref={isLastAssistantMessage ? lastAssistantMessageRef : null}
+                      className="mt-2"
+                      data-testid={`message-assistant-${answer.id}`}
+                    >
+                      <div className="rounded-lg bg-muted px-3 sm:px-4 py-3">
+                        <div className="prose prose-sm max-w-none dark:prose-invert prose-a:text-primary prose-a:no-underline hover:prose-a:underline">
+                          <ReactMarkdown rehypePlugins={[rehypeRaw]} remarkPlugins={[remarkGfm]}>
+                            {formatProfessionally(cleanupCitations(removeKGTags(decodeHTMLEntities(answer.content))))}
+                          </ReactMarkdown>
+                        </div>
+                        {(() => {
+                          const { jobId, status } = getMessageJobInfo(answer);
+                          if (jobId && status && status !== "completed" && status !== "failed") {
+                            return (
+                              <div className="mt-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 px-2 text-xs"
+                                  onClick={() => handleCheckStatus(jobId, answer.id, answer.threadId)}
+                                  disabled={checkingJobId === jobId}
+                                >
+                                  {checkingJobId === jobId ? (
+                                    <span className="inline-flex items-center gap-2">
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                      Checking…
+                                    </span>
+                                  ) : (
+                                    "Check status"
+                                  )}
+                                </Button>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </div>
+
+                      {/* Action buttons for assistant messages */}
+                      {questionMsg && (
+                        <div className="mt-2 flex items-center gap-2">
+                          {(answer as any).isCached && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 gap-2 text-xs"
+                              onClick={() => {
+                                triggerQuery({
+                                  question: questionMsg.content,
+                                  threadId: currentThreadId,
+                                  refreshCache: true,
+                                });
+                              }}
+                              disabled={isLoading}
+                            >
+                              <RefreshCw className="h-3 w-3" />
+                              Refresh Answer
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            data-testid={`button-feedback-positive-${answer.id}`}
+                            onClick={() => handleReaction("positive")}
+                          >
+                            <ThumbsUp className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            data-testid={`button-feedback-negative-${answer.id}`}
+                            onClick={() => handleReaction("negative")}
+                          >
+                            <ThumbsDown className="h-4 w-4" />
+                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                data-testid={`button-message-actions-${answer.id}`}
+                              >
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="w-56">
+                              <DropdownMenuLabel>Response actions</DropdownMenuLabel>
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  downloadMessageMarkdown(
+                                    questionMsg.content,
+                                    answer.content,
+                                    typeof answer.createdAt === "string"
+                                      ? answer.createdAt
+                                      : answer.createdAt.toISOString(),
+                                  )
+                                }
+                              >
+                                <FileText className="mr-2 h-4 w-4" />
+                                Download as Markdown (.md)
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  downloadMessagePDF(
+                                    questionMsg.content,
+                                    answer.content,
+                                    typeof answer.createdAt === "string"
+                                      ? answer.createdAt
+                                      : answer.createdAt.toISOString(),
+                                  )
+                                }
+                              >
+                                <FileType className="mr-2 h-4 w-4" />
+                                Download as PDF (.pdf)
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  triggerQuery({
+                                    question: questionMsg.content,
+                                    threadId: currentThreadId,
+                                    refreshCache: true,
+                                  })
+                                }
+                              >
+                                <RefreshCw className="mr-2 h-4 w-4" />
+                                Regenerate response
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1401,7 +1462,7 @@ export default function ChatbotPage() {
                     )}
                     <span className="text-sm font-medium text-foreground">Status updates</span>
                   </div>
-                  <div className="flex flex-col gap-2">
+                    <div className="flex flex-col gap-2">
                     {statusHistory.map((item, idx) => (
                       <div
                         key={item.id}
@@ -1422,57 +1483,59 @@ export default function ChatbotPage() {
         </ScrollArea>
 
         {/* Input Area - Fixed at bottom */}
-        <div className="border-t border-border bg-card/30 backdrop-blur-sm p-4">
-          <div className="mx-auto flex max-w-4xl flex-col gap-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Response style
-              </Label>
-              <ToggleGroup
-                type="single"
+        <div className="border-t border-border bg-card/30 backdrop-blur-sm p-3 sm:p-4">
+          <div className="mx-auto flex max-w-4xl flex-col gap-1 sm:gap-2">
+            <Textarea
+              data-testid="input-question"
+              placeholder="Ask a question..."
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              onKeyDown={handleKeyDown}
+              rows={1}
+              style={{ height: `${inputHeight}px` }}
+              className="min-h-[40px] max-h-[240px] flex-1 resize-none rounded-xl border border-border/60 bg-background/90"
+              disabled={isLoading}
+              onInput={(e) => {
+                const target = e.target as HTMLTextAreaElement;
+                target.style.height = "auto";
+                const nextHeight = Math.min(target.scrollHeight, 240);
+                target.style.height = `${nextHeight}px`;
+                setInputHeight(nextHeight);
+              }}
+            />
+            <div className="flex items-center gap-2 justify-between">
+              <Select
                 value={mode}
                 onValueChange={(value) => value && setMode(value as "concise" | "balanced" | "deep")}
-                className="flex gap-1"
               >
-                {responseModeOptions.map((option) => (
-                  <Tooltip key={option.value}>
-                    <TooltipTrigger asChild>
-                      <span>
-                        <ToggleGroupItem
-                          value={option.value}
-                          className="rounded-full px-3 py-1.5 text-xs data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-                        >
+                <SelectTrigger className="w-[130px] h-[36px] text-xs">
+                  <SelectValue placeholder="Mode" />
+                </SelectTrigger>
+                <SelectContent align="start" className="text-xs">
+                  {responseModeOptions.map((option) => {
+                    const Icon = option.value === "concise" ? Sparkles : option.value === "balanced" ? Zap : BookOpen;
+                    return (
+                      <SelectItem key={option.value} value={option.value}>
+                        <span className="inline-flex items-center gap-2">
+                          <Icon className="h-4 w-4" />
                           {option.label}
-                        </ToggleGroupItem>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">{option.description}</TooltipContent>
-                  </Tooltip>
-                ))}
-              </ToggleGroup>
-            </div>
-
-            <div className="flex gap-3">
-              <Textarea
-                data-testid="input-question"
-                placeholder="Ask a question..."
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                onKeyDown={handleKeyDown}
-                className="min-h-[60px] max-h-[160px] flex-1 resize-none rounded-xl border border-border/60 bg-background/90"
-                disabled={isLoading}
-              />
+                        </span>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
               <Button
                 data-testid="button-submit"
                 onClick={() => handleSubmit()}
                 disabled={!question.trim() || isLoading}
-                size="lg"
-                className="h-[60px] w-[60px] rounded-xl p-0 self-end"
+                size="sm"
+                className="h-[36px] w-[40px] rounded-lg p-0"
               >
                 {isLoading ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <Send className="h-5 w-5" />
+                  <Send className="h-4 w-4" />
                 )}
               </Button>
             </div>

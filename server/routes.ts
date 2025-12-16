@@ -133,6 +133,8 @@ async function processDeepModeJob(
       status: 'completed',
       responseId: responseId, // Include responseId in metadata for redundancy
       reportFormat: reportResult.formatKey,
+      mode,
+      answeredAt: new Date().toISOString(),
     };
     const metadata = JSON.stringify(metadataPayload);
 
@@ -702,6 +704,7 @@ User's Question: ${validatedData.question}`;
             ...(result.meta || {}),
             domainResolution,
             status: 'polling',
+            mode: validatedData.mode,
             jobId: null, // Will be set after job creation
           }),
         });
@@ -736,6 +739,15 @@ User's Question: ${validatedData.question}`;
         
         // Return immediately with job info
         await storage.updateThreadTimestamp(threadId!);
+
+        // Persist mode/domain info on job metadata for later
+        await jobStore.updateJobStatus(jobId, {
+          metadata: {
+            ...(result.meta || {}),
+            domainResolution,
+            mode: validatedData.mode,
+          },
+        });
         
         return res.json({
           threadId: threadId,
@@ -785,7 +797,11 @@ User's Question: ${validatedData.question}`;
           content: responseText,
           responseId: result.response_id || null,
           sources: sources || null,
-          metadata,
+          metadata: JSON.stringify({
+            ...(metadata ? JSON.parse(metadata) : {}),
+            mode: validatedData.mode,
+            answeredAt: new Date().toISOString(),
+          }),
         });
         
         // Capture and store conversation_id from API response for long-running context
@@ -1100,6 +1116,7 @@ User's Question: ${validatedData.question}`;
             status: "formatting",
             jobId: job.id,
             responseId: job.responseId,
+            mode: job.metadata?.mode,
           }),
         });
       }
@@ -1127,6 +1144,8 @@ User's Question: ${validatedData.question}`;
         status: "completed",
         responseId: job.responseId,
         reportFormat: reportResult.formatKey,
+        mode: job.metadata?.mode,
+        answeredAt: new Date().toISOString(),
       };
       await storage.updateMessage(job.messageId, {
         content: finalAnswer,
