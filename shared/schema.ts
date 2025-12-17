@@ -85,6 +85,23 @@ export const insertConversationSchema = createInsertSchema(conversations).omit({
 export type InsertConversation = z.infer<typeof insertConversationSchema>;
 export type Conversation = typeof conversations.$inferSelect;
 
+// BA Knowledge Questions - curated prompts for product understanding
+export const baKnowledgeQuestions = pgTable("ba_knowledge_questions", {
+  id: serial("id").primaryKey(),
+  category: text("category").notNull(),
+  question: text("question").notNull().unique(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertBaKnowledgeQuestionSchema = createInsertSchema(baKnowledgeQuestions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertBaKnowledgeQuestion = z.infer<typeof insertBaKnowledgeQuestionSchema>;
+export type BaKnowledgeQuestion = typeof baKnowledgeQuestions.$inferSelect;
+
 // Query schema for graph database chatbot
 export const querySchema = z.object({
   question: z.string().min(1, "Question is required"),

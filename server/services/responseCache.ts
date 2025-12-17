@@ -50,7 +50,7 @@ async function generateEmbedding(question: string): Promise<number[] | null> {
  */
 export async function findSimilarCachedResponse(
   question: string,
-  mode: "concise" | "balanced" | "deep"
+  _mode?: "concise" | "balanced" | "deep" // Mode parameter kept for API compatibility but not used for filtering
 ): Promise<{
   id: number;
   question: string;
@@ -58,6 +58,7 @@ export async function findSimilarCachedResponse(
   similarity: number;
   metadata?: any;
   responseId?: string;
+  cachedMode?: string;
 } | null> {
   try {
     // Generate embedding for the question
@@ -65,35 +66,45 @@ export async function findSimilarCachedResponse(
     
     // If embedding generation failed (OpenAI not configured), skip cache lookup
     if (!questionEmbedding) {
-      console.log(`[Cache SKIP] OpenAI not configured - skipping cache lookup for mode: ${mode}`);
+      console.log(`[Cache SKIP] OpenAI not configured - skipping cache lookup`);
       return null;
     }
 
-    // Search for similar questions in the same mode using cosine similarity
+    // Search for similar questions using cosine similarity (across all modes)
     // Cosine similarity: 1 - (distance), where distance is <=> operator in pgvector
-    const results = await db
-      .select({
-        id: responseCache.id,
-        question: responseCache.question,
-        response: responseCache.response,
-        metadata: responseCache.metadata,
-        responseId: responseCache.responseId,
-        similarity: sql<number>`
-          1 - (${responseCache.questionEmbedding} <=> ${questionEmbedding}::vector)
-        `.as('similarity')
-      })
-      .from(responseCache)
-      .where(
-        and(
-          eq(responseCache.mode, mode),
-          sql`1 - (${responseCache.questionEmbedding} <=> ${questionEmbedding}::vector) >= ${SIMILARITY_THRESHOLD}`
-        )
+    // Using CTE approach to compute similarity once (avoids issues with duplicate vector references)
+    const embeddingLiteral = `[${questionEmbedding.join(",")}]`;
+    
+    const results = await db.execute(sql`
+      WITH similarities AS (
+        SELECT 
+          id,
+          question,
+          response,
+          metadata,
+          response_id as "responseId",
+          mode as "cachedMode",
+          last_accessed_at,
+          1 - (question_embedding <=> ${embeddingLiteral}::vector) as similarity
+        FROM response_cache
       )
-      .orderBy(sql`similarity DESC`)
-      .limit(1);
+      SELECT id, question, response, metadata, "responseId", "cachedMode", similarity
+      FROM similarities
+      WHERE similarity >= ${SIMILARITY_THRESHOLD}
+      ORDER BY similarity DESC, last_accessed_at DESC
+      LIMIT 1
+    `) as { rows: Array<{
+      id: number;
+      question: string;
+      response: string;
+      metadata: string | null;
+      responseId: string | null;
+      cachedMode: string;
+      similarity: number;
+    }> };
 
-    if (results.length > 0 && results[0].similarity >= SIMILARITY_THRESHOLD) {
-      const cached = results[0];
+    if (results.rows.length > 0 && results.rows[0].similarity >= SIMILARITY_THRESHOLD) {
+      const cached = results.rows[0];
       
       // Update access statistics
       await db.update(responseCache)
@@ -103,19 +114,20 @@ export async function findSimilarCachedResponse(
         })
         .where(eq(responseCache.id, cached.id));
 
-      console.log(`[Cache HIT] Found similar response (${(cached.similarity * 100).toFixed(1)}% similarity) for mode: ${mode}`);
+      console.log(`[Cache HIT] Found similar response (${(Number(cached.similarity) * 100).toFixed(1)}% similarity, cached mode: ${cached.cachedMode})`);
 
       return {
         id: cached.id,
         question: cached.question,
         response: cached.response,
-        similarity: cached.similarity,
+        similarity: Number(cached.similarity),
         metadata: cached.metadata ? JSON.parse(cached.metadata) : undefined,
-        responseId: cached.responseId || undefined
+        responseId: cached.responseId || undefined,
+        cachedMode: cached.cachedMode
       };
     }
 
-    console.log(`[Cache MISS] No similar response found (threshold: ${SIMILARITY_THRESHOLD * 100}%) for mode: ${mode}`);
+    console.log(`[Cache MISS] No similar response found (threshold: ${SIMILARITY_THRESHOLD * 100}%)`);
     return null;
   } catch (error) {
     console.error("Error finding cached response:", error);

@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,14 +22,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Label } from "@/components/ui/label";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
   Loader2,
   Send,
-  User,
   Download,
   RefreshCw,
   FileText,
@@ -40,6 +38,12 @@ import {
   Sparkles,
   BookOpen,
   Zap,
+  Shield,
+  TrendingUp,
+  Database,
+  Users,
+  Settings,
+  Lock,
 } from "lucide-react";
 import {
   Select,
@@ -55,6 +59,11 @@ import remarkGfm from "remark-gfm";
 import { WorkspacePanel } from "@/components/workspace-panel";
 import type { Thread, Message } from "@shared/schema";
 
+type BaKnowledgeQuestion = {
+  id: number;
+  category: string;
+  question: string;
+};
 
 // Helper function to decode HTML entities
 function decodeHTMLEntities(text: string): string {
@@ -80,6 +89,22 @@ function cleanupCitations(text: string): string {
   cleaned = cleaned.replace(/\*\*([^*]+\.(pdf|docx|doc|xlsx)[^*]*)\*\*/gi, '$1');
 
   return cleaned;
+}
+
+function removeFollowupSection(text: string): string {
+  if (!text) return text;
+  return text.replace(/##\s*Follow-?up questions[\s\S]*$/i, "").trim();
+}
+
+function normalizeSourcesSpacing(text: string): string {
+  const sourcesMatch = text.match(/(##\s*Sources[\s\S]*$)|(Sources:\s*[\s\S]*$)/i);
+  if (!sourcesMatch) return text;
+  const section = sourcesMatch[0];
+  const normalized = section
+    .replace(/\n{2,}/g, '\n')
+    .replace(/\n\s*-\s+/g, '\n- ')
+    .replace(/\n\s*\*\s+/g, '\n* ');
+  return text.replace(section, normalized);
 }
 
 const responseModeOptions = [
@@ -168,7 +193,7 @@ function formatProfessionally(text: string): string {
     formatted += generatedTimestamp;
   }
   
-  return formatted;
+  return normalizeSourcesSpacing(formatted);
 }
 
 // Helper to extract only the answer portion from verbose outputs
@@ -486,6 +511,7 @@ function downloadThreadAsPDF(messages: Message[], threadTitle: string) {
 }
 
 export default function ChatbotPage() {
+  const isMobile = useIsMobile();
   const [question, setQuestion] = useState("");
   const [currentThreadId, setCurrentThreadId] = useState<number | undefined>();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -497,9 +523,14 @@ export default function ChatbotPage() {
   const [statusHistory, setStatusHistory] = useState<
     { id: number; text: string; color: string; isGeneral?: boolean }[]
   >([]);
+  const [showStarterCards, setShowStarterCards] = useState(true);
+  const [showAllStarters, setShowAllStarters] = useState(false);
   const [checkingJobId, setCheckingJobId] = useState<string | null>(null);
   const [expandedPairs, setExpandedPairs] = useState<Set<number>>(new Set());
   const [inputHeight, setInputHeight] = useState<number>(40);
+  const [showRegenerateDialog, setShowRegenerateDialog] = useState(false);
+  const [regenerateMode, setRegenerateMode] = useState<"concise" | "balanced" | "deep">("balanced");
+  const [regenerateQuestion, setRegenerateQuestion] = useState<string>("");
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const lastAssistantMessageRef = useRef<HTMLDivElement>(null);
   const statusRunIdRef = useRef<number>(0);
@@ -817,6 +848,10 @@ export default function ChatbotPage() {
     queryKey: ["/api/threads/statuses"],
   });
 
+  const { data: baQuestions } = useQuery<BaKnowledgeQuestion[]>({
+    queryKey: ["/api/ba-questions?limit=12"],
+  });
+
   // Update messages when thread changes
   useEffect(() => {
     if (fetchedMessages) {
@@ -908,10 +943,10 @@ export default function ChatbotPage() {
   }, [statusMessage]);
 
   const queryMutation = useMutation({
-    mutationFn: async (payload: { question: string; threadId?: number; refreshCache?: boolean }) => {
+    mutationFn: async (payload: { question: string; threadId?: number; refreshCache?: boolean; overrideMode?: "concise" | "balanced" | "deep" }) => {
       const response = await apiRequest("POST", "/api/query", {
         question: payload.question,
-        mode: mode,
+        mode: payload.overrideMode || mode,
         refresh: false,
         refreshCache: payload.refreshCache || false,
         threadId: payload.threadId,
@@ -1009,10 +1044,30 @@ export default function ChatbotPage() {
   },
 });
 
-  const triggerQuery = useCallback((payload: { question: string; threadId?: number; refreshCache?: boolean }) => {
-    startStatusSequence(mode);
+  const triggerQuery = useCallback((payload: { question: string; threadId?: number; refreshCache?: boolean; overrideMode?: "concise" | "balanced" | "deep" }) => {
+    setShowStarterCards(false);
+    setShowAllStarters(false);
+    startStatusSequence(payload.overrideMode || mode);
     queryMutation.mutate(payload);
   }, [mode, queryMutation, startStatusSequence]);
+
+  // Open regenerate dialog with question pre-filled
+  const openRegenerateDialog = useCallback((questionText: string) => {
+    setRegenerateQuestion(questionText);
+    setRegenerateMode(mode); // Default to current mode
+    setShowRegenerateDialog(true);
+  }, [mode]);
+
+  // Execute regeneration with selected mode
+  const executeRegenerate = useCallback(() => {
+    setShowRegenerateDialog(false);
+    triggerQuery({
+      question: regenerateQuestion,
+      threadId: currentThreadId,
+      refreshCache: true,
+      overrideMode: regenerateMode,
+    });
+  }, [regenerateQuestion, regenerateMode, currentThreadId, triggerQuery]);
 
   const getMessageStatus = (message: Message) => {
     if (message.metadata) {
@@ -1132,6 +1187,15 @@ export default function ChatbotPage() {
     setInputHeight(40);
   };
 
+  const handleQuickQuestion = (promptText: string) => {
+    if (!promptText.trim()) return;
+    triggerQuery({
+      question: promptText,
+      threadId: currentThreadId,
+      overrideMode: "concise",
+    });
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -1148,6 +1212,8 @@ export default function ChatbotPage() {
     setCurrentThreadId(undefined);
     setMessages([]);
     setQuestion("");
+    setShowStarterCards(true);
+    setShowAllStarters(false);
     stopStatusSequence();
   };
 
@@ -1184,6 +1250,33 @@ export default function ChatbotPage() {
           ? "We'll keep responses focused on what resonated."
           : "We're refining future answers based on your signal.",
     });
+  };
+
+  const handleFollowupClick = (questionText: string, threadId?: number) => {
+    if (!questionText.trim()) return;
+    triggerQuery({
+      question: questionText,
+      threadId: threadId ?? currentThreadId,
+    });
+  };
+
+  const starterLimit = 4;
+  const visibleStarters = useMemo(() => {
+    if (!baQuestions) return [];
+    return showAllStarters ? baQuestions : baQuestions.slice(0, starterLimit);
+  }, [baQuestions, showAllStarters, starterLimit]);
+  const shouldExpandScrollArea = hasMessages || isLoading;
+
+  const getCategoryIcon = (category: string) => {
+    const normalized = category.toLowerCase();
+    if (normalized.includes("risk") || normalized.includes("compliance")) return Shield;
+    if (normalized.includes("portfolio") || normalized.includes("investment")) return TrendingUp;
+    if (normalized.includes("data") || normalized.includes("integration")) return Database;
+    if (normalized.includes("customer") || normalized.includes("client")) return Users;
+    if (normalized.includes("security") || normalized.includes("access")) return Lock;
+    if (normalized.includes("report") || normalized.includes("analytics")) return FileText;
+    if (normalized.includes("operations") || normalized.includes("support")) return Settings;
+    return Sparkles;
   };
 
   return (
@@ -1246,22 +1339,11 @@ export default function ChatbotPage() {
         </header>
 
         {/* Messages Area */}
-        <ScrollArea ref={scrollAreaRef} className="flex-1">
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-            {!hasMessages && !isLoading && (
-              <div className="flex flex-col items-center justify-center py-16">
-                <div className="space-y-3 text-center">
-                  <h2 className="text-2xl font-semibold text-foreground">
-                    How can I help you today?
-                  </h2>
-                  <p className="mx-auto max-w-md text-sm text-muted-foreground">
-                    Ask any question about wealth management, customer processes, or system workflows.
-                  </p>
-                </div>
-              </div>
-            )}
+        {shouldExpandScrollArea && (
+          <ScrollArea ref={scrollAreaRef} className="flex-1">
+            <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
 
-            {messagePairs.map((pair, idx) => {
+              {messagePairs.map((pair, idx) => {
               const answer = pair.answer;
               const questionMsg = pair.question;
               const answerId = answer?.id;
@@ -1275,7 +1357,20 @@ export default function ChatbotPage() {
                   return {};
                 }
               })();
+              const followupQuestions = (() => {
+                const metaFollowups =
+                  meta.followupQuestions ||
+                  meta.followup_questions ||
+                  meta.followups ||
+                  meta.next_questions ||
+                  meta.suggested_questions;
+                if (Array.isArray(metaFollowups)) {
+                  return metaFollowups.filter((item) => typeof item === "string" && item.trim().length > 0);
+                }
+                return [];
+              })();
               const modeLabel = `Mode: ${meta.mode || "Unknown"}`;
+              const isCachedAnswer = Boolean((answer as any)?.isCached || meta.isCached);
               const answeredAt = meta.answeredAt
                 ? new Date(meta.answeredAt)
                 : answer?.createdAt
@@ -1284,11 +1379,10 @@ export default function ChatbotPage() {
                     : answer.createdAt
                   : null;
 
-              return (
+                return (
                 <div key={answerId || questionMsg?.id || idx} className="mb-4">
                   <div
-                    className="flex items-start gap-2 sm:gap-3 cursor-pointer select-none"
-                    onClick={() => togglePair(answerId || questionMsg?.id)}
+                    className="flex items-start gap-2 sm:gap-3"
                   >
                     <div className="flex-1">
                       <div className="rounded-lg bg-primary text-primary-foreground px-3 sm:px-4 py-3 shadow-sm border border-border/20">
@@ -1296,13 +1390,19 @@ export default function ChatbotPage() {
                           <p className="text-sm font-semibold">
                             {questionMsg?.content || "Question"}
                           </p>
-                          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => togglePair(answerId || questionMsg?.id)}
+                          >
                             {isExpanded ? "Collapse" : "Expand"}
                           </Button>
                         </div>
                         <div className="mt-1 text-xs text-primary-foreground/80 flex items-center gap-2 flex-wrap">
                           <span>{modeLabel}</span>
                           {answeredAt && <span>• {answeredAt.toLocaleString()}</span>}
+                          {isCachedAnswer && <span>• Cached</span>}
                         </div>
                       </div>
                     </div>
@@ -1317,9 +1417,34 @@ export default function ChatbotPage() {
                       <div className="rounded-lg bg-muted px-3 sm:px-4 py-3">
                         <div className="prose prose-sm max-w-none dark:prose-invert prose-a:text-primary prose-a:no-underline hover:prose-a:underline">
                           <ReactMarkdown rehypePlugins={[rehypeRaw]} remarkPlugins={[remarkGfm]}>
-                            {formatProfessionally(cleanupCitations(removeKGTags(decodeHTMLEntities(answer.content))))}
+                            {formatProfessionally(
+                              removeFollowupSection(
+                                cleanupCitations(removeKGTags(decodeHTMLEntities(answer.content)))
+                              )
+                            )}
                           </ReactMarkdown>
                         </div>
+                        {followupQuestions.length > 0 && (
+                          <div className="mt-4 rounded-lg border border-border/70 bg-card/60 p-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                              Follow-up questions
+                            </p>
+                            <div className="mt-2 space-y-2">
+                              {followupQuestions.map((item, index) => (
+                                <button
+                                  key={`${answer.id}-followup-${index}`}
+                                  type="button"
+                                  className="flex w-full items-start gap-2 rounded-md border border-transparent px-2 py-1 text-left text-sm text-foreground/90 transition hover:border-primary/40 hover:bg-primary/5"
+                                  onClick={() => handleFollowupClick(item, answer.threadId)}
+                                  disabled={isLoading}
+                                >
+                                  <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-muted-foreground/70" />
+                                  <span>{item}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         {(() => {
                           const { jobId, status } = getMessageJobInfo(answer);
                           if (jobId && status && status !== "completed" && status !== "failed") {
@@ -1351,18 +1476,12 @@ export default function ChatbotPage() {
                       {/* Action buttons for assistant messages */}
                       {questionMsg && (
                         <div className="mt-2 flex items-center gap-2">
-                          {(answer as any).isCached && (
+                          {isCachedAnswer && (
                             <Button
                               variant="outline"
                               size="sm"
                               className="h-8 gap-2 text-xs"
-                              onClick={() => {
-                                triggerQuery({
-                                  question: questionMsg.content,
-                                  threadId: currentThreadId,
-                                  refreshCache: true,
-                                });
-                              }}
+                              onClick={() => openRegenerateDialog(questionMsg.content)}
                               disabled={isLoading}
                             >
                               <RefreshCw className="h-3 w-3" />
@@ -1430,13 +1549,7 @@ export default function ChatbotPage() {
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
-                                onClick={() =>
-                                  triggerQuery({
-                                    question: questionMsg.content,
-                                    threadId: currentThreadId,
-                                    refreshCache: true,
-                                  })
-                                }
+                                onClick={() => openRegenerateDialog(questionMsg.content)}
                               >
                                 <RefreshCw className="mr-2 h-4 w-4" />
                                 Regenerate response
@@ -1448,10 +1561,10 @@ export default function ChatbotPage() {
                     </div>
                   )}
                 </div>
-              );
-            })}
+                );
+              })}
 
-            {statusHistory.length > 0 && (
+              {statusHistory.length > 0 && (
               <div className="mb-6" data-testid="status-indicator">
                 <div className="rounded-xl border border-border/60 bg-card/60 p-3 shadow-sm">
                   <div className="flex items-center gap-2 mb-2">
@@ -1477,14 +1590,79 @@ export default function ChatbotPage() {
                   </div>
                 </div>
               </div>
-            )}
+              )}
 
-          </div>
-        </ScrollArea>
+            </div>
+          </ScrollArea>
+        )}
 
         {/* Input Area - Fixed at bottom */}
         <div className="border-t border-border bg-card/30 backdrop-blur-sm p-3 sm:p-4">
           <div className="mx-auto flex max-w-4xl flex-col gap-1 sm:gap-2">
+            {!hasMessages && !isLoading && (
+              <div className="mb-2 text-center">
+                <div className="flex items-center justify-center gap-2">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  <h2 className="text-lg font-semibold text-foreground">
+                    How can I help you today?
+                  </h2>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Ask any question about wealth management, customer processes, or system workflows.
+                </p>
+              </div>
+            )}
+            {!hasMessages && !isLoading && showStarterCards && baQuestions && baQuestions.length > 0 && (
+              <div className="mb-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Questions Worth Exploring
+                  </p>
+                  {baQuestions.length > starterLimit && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-[11px]"
+                      onClick={() => setShowAllStarters((prev) => !prev)}
+                    >
+                      {showAllStarters ? "Show fewer" : "Show more"}
+                    </Button>
+                  )}
+                </div>
+                <div
+                  className={
+                    `${showAllStarters ? "max-h-[240px] overflow-y-auto pr-1" : ""} ${
+                      isMobile && !showAllStarters
+                        ? "mt-0 flex gap-3 overflow-x-auto pb-1 pr-2 snap-x snap-mandatory"
+                        : "mt-0 grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+                    }`
+                  }
+                >
+                  {visibleStarters.map((item) => {
+                    const Icon = getCategoryIcon(item.category);
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`group relative w-full rounded-xl border border-border/60 bg-card/80 p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md ${isMobile && !showAllStarters ? "min-w-[220px] snap-start" : ""}`}
+                        onClick={() => handleQuickQuestion(item.question)}
+                        disabled={isLoading}
+                      >
+                        <p className="text-[13px] font-normal text-foreground">{item.question}</p>
+                        <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                          <Icon className="h-3 w-3" />
+                          <span>{item.category}</span>
+                        </div>
+                        <span className="mt-3 inline-flex text-[11px] font-medium text-primary/80 opacity-0 transition group-hover:opacity-100">
+                          Explore →
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <Textarea
               data-testid="input-question"
               placeholder="Ask a question..."
@@ -1593,6 +1771,73 @@ export default function ChatbotPage() {
                 <div className="font-semibold">PDF Document (.pdf)</div>
                 <div className="text-xs text-muted-foreground">Professional format, ready to share</div>
               </div>
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Regenerate Response Dialog with Mode Selection */}
+      <Dialog open={showRegenerateDialog} onOpenChange={setShowRegenerateDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5" />
+              Regenerate Response
+            </DialogTitle>
+            <DialogDescription>
+              Choose the response mode for regeneration. This will bypass the cache and generate a fresh answer.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Response Mode</Label>
+              <div className="grid grid-cols-3 gap-2">
+                <Button
+                  variant={regenerateMode === "concise" ? "default" : "outline"}
+                  size="sm"
+                  className="flex flex-col items-center gap-1 h-auto py-3"
+                  onClick={() => setRegenerateMode("concise")}
+                >
+                  <Zap className="h-4 w-4" />
+                  <span className="text-xs font-medium">Concise</span>
+                  <span className="text-[10px] text-muted-foreground">Quick answer</span>
+                </Button>
+                <Button
+                  variant={regenerateMode === "balanced" ? "default" : "outline"}
+                  size="sm"
+                  className="flex flex-col items-center gap-1 h-auto py-3"
+                  onClick={() => setRegenerateMode("balanced")}
+                >
+                  <Sparkles className="h-4 w-4" />
+                  <span className="text-xs font-medium">Balanced</span>
+                  <span className="text-[10px] text-muted-foreground">Standard</span>
+                </Button>
+                <Button
+                  variant={regenerateMode === "deep" ? "default" : "outline"}
+                  size="sm"
+                  className="flex flex-col items-center gap-1 h-auto py-3"
+                  onClick={() => setRegenerateMode("deep")}
+                >
+                  <BookOpen className="h-4 w-4" />
+                  <span className="text-xs font-medium">Deep</span>
+                  <span className="text-[10px] text-muted-foreground">Detailed report</span>
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-muted-foreground">Question</Label>
+              <div className="text-sm p-3 bg-muted rounded-md max-h-24 overflow-y-auto">
+                {regenerateQuestion}
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setShowRegenerateDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={executeRegenerate} className="gap-2">
+              <RefreshCw className="h-4 w-4" />
+              Regenerate
             </Button>
           </div>
         </DialogContent>

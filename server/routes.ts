@@ -17,10 +17,13 @@ import { generateStructuredReport } from "./services/reportGeneration";
 import { findSimilarCachedResponse, saveCachedResponse } from "./services/responseCache";
 import { jobStore } from "./services/jobStore";
 import { getUploadDir } from "./utils/uploadPaths";
+import { fixMarkdownFormatting, processMarkdown } from "./services/markdownFormatter";
 
 const EKG_API_URL = "https://ekg-service-47249889063.europe-west6.run.app";
 const domainRouter = new DomainRouter();
 const ACTIVE_POLL_INTERVAL_MS = 10 * 60 * 1000;
+const RESPONSE_FORMAT_DIRECTIVE = `RESPONSE FORMAT:\nReturn a single JSON object with keys \"answer\" and \"followup_questions\".\n- \"answer\": markdown string with the full response.\n- \"followup_questions\": array of 3-5 concise, domain-relevant follow-up questions.\nReturn JSON only.`;
+const EKG_ALLOWED_DOMAINS = new Set(["wealth_management", "apf"]);
 
 function extractCitationsFromResponse(resp: any): any[] | null {
   try {
@@ -92,9 +95,14 @@ async function processDeepModeJob(
 
     // Step 2: Extract raw response
     const rawResponse = extractAnswerText(pollResult.response);
+    const { answer: extractedAnswer, followupQuestions } = extractAnswerPayload(rawResponse);
     await jobStore.updateJobStatus(jobId, { 
       status: 'retrieving',
-      rawResponse,
+      rawResponse: extractedAnswer || rawResponse,
+      metadata: {
+        ...(job.metadata || {}),
+        followupQuestions,
+      },
     });
 
     const extractedSources = extractCitationsFromResponse(pollResult.response);
@@ -105,14 +113,20 @@ async function processDeepModeJob(
         status: 'formatting',
         jobId,
         responseId,
+        followupQuestions,
+        rawAnswer: extractedAnswer || rawResponse,
       }),
     });
 
     // Step 3: Format with ChatGPT 5.1 (best-effort; fallback to raw)
     await jobStore.updateJobStatus(jobId, { status: 'formatting' });
-    const formattedAnswer = await formatWithModel51(rawResponse, question, domainResolution).catch(error => {
+    const formattedAnswer = await formatWithModel51(
+      extractedAnswer || rawResponse,
+      question,
+      domainResolution
+    ).catch(error => {
       console.error(`[Deep Mode] Formatting failed for job ${jobId}:`, error);
-      return rawResponse;
+      return extractedAnswer || rawResponse;
     });
 
     // Step 3b: Enrich into a formal report with templates (best-effort)
@@ -123,6 +137,10 @@ async function processDeepModeJob(
       responseId,
     });
     const finalAnswer = reportResult.content || formattedAnswer;
+    const markdownResult = processMarkdown(finalAnswer);
+    if (markdownResult.issues.length > 0) {
+      console.warn(`[Deep Mode] Markdown issues detected for job ${jobId}:`, markdownResult.issues);
+    }
 
     // Step 4: Update message with final answer
     const metadataPayload = {
@@ -135,11 +153,13 @@ async function processDeepModeJob(
       reportFormat: reportResult.formatKey,
       mode,
       answeredAt: new Date().toISOString(),
+      followupQuestions,
+      markdownIssues: markdownResult.issues,
     };
     const metadata = JSON.stringify(metadataPayload);
 
     await storage.updateMessage(job.messageId, {
-      content: finalAnswer,
+      content: markdownResult.content,
       responseId: responseId,
       metadata,
       sources: extractedSources ? JSON.stringify(extractedSources) : null,
@@ -148,7 +168,7 @@ async function processDeepModeJob(
 
     await jobStore.updateJobStatus(jobId, {
       status: 'completed',
-      formattedResult: formattedAnswer,
+      formattedResult: markdownResult.content,
       metadata: metadataPayload,
     });
 
@@ -164,8 +184,8 @@ async function processDeepModeJob(
     await saveCachedResponse(
       question,
       mode,
-      formattedAnswer,
-      rawResponse,
+      markdownResult.content,
+      extractedAnswer || rawResponse,
       metadataPayload,
       responseId,
       originalCacheId
@@ -340,6 +360,100 @@ function cleanAnswer(markdown: string): string {
     .trim();
 }
 
+function extractJsonObject(text: string): any | null {
+  const cleaned = text
+    .trim()
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/```$/i, "")
+    .trim();
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) {
+    return null;
+  }
+  try {
+    return JSON.parse(cleaned.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+}
+
+function normalizeFollowupQuestions(value: unknown): string[] {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item).trim())
+      .filter(Boolean)
+      .slice(0, 5);
+  }
+  if (typeof value === "string") {
+    const parts = value
+      .split(/\r?\n|•|\d+\.\s+|-\s+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    return parts.slice(0, 5);
+  }
+  return [];
+}
+
+function extractAnswerPayload(text: string): { answer: string; followupQuestions: string[] } {
+  if (!text || typeof text !== "string") {
+    return { answer: "", followupQuestions: [] };
+  }
+  const parsed = extractJsonObject(text);
+  if (parsed && typeof parsed === "object") {
+    const answer =
+      typeof parsed.answer === "string"
+        ? parsed.answer
+        : typeof parsed.markdown === "string"
+          ? parsed.markdown
+          : typeof parsed.response === "string"
+            ? parsed.response
+            : "";
+    const followupValue =
+      parsed.followup_questions ??
+      parsed.followupQuestions ??
+      parsed.followups ??
+      parsed.next_questions ??
+      parsed.suggested_questions;
+    const followupQuestions = normalizeFollowupQuestions(followupValue);
+    if (answer) {
+      return { answer, followupQuestions };
+    }
+  }
+  return { answer: text, followupQuestions: [] };
+}
+
+async function generateFollowupQuestions(answer: string): Promise<string[]> {
+  if (!answer || !openai) return [];
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0.4,
+      messages: [
+        {
+          role: "system",
+          content:
+            "Generate 3-5 concise, domain-relevant follow-up questions based on the provided answer. Return JSON only.",
+        },
+        {
+          role: "user",
+          content: `Answer:\n${answer}\n\nReturn JSON: {"followup_questions":["..."]}`,
+        },
+      ],
+      response_format: { type: "json_object" },
+    });
+    const content = completion.choices?.[0]?.message?.content || "";
+    const parsed = extractJsonObject(content);
+    const followups = normalizeFollowupQuestions(parsed?.followup_questions || parsed?.followupQuestions);
+    return followups;
+  } catch (error) {
+    console.error("Failed to generate follow-up questions:", error);
+    return [];
+  }
+}
+
 function extractDomainFromMetadata(metadata?: string | null): string | undefined {
   if (!metadata) return undefined;
   try {
@@ -456,7 +570,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const cached = await findSimilarCachedResponse(question, mode);
         
         if (cached) {
-          console.log(`[Cache HIT] Returning cached response for mode: ${mode}`);
+          console.log(`[Cache HIT] Returning cached response (original mode: ${cached.cachedMode}, requested mode: ${mode})`);
+          const cachedMetadata = {
+            ...(cached.metadata || {}),
+            isCached: true,
+            cacheId: cached.id,
+            cachedSimilarity: cached.similarity,
+            cachedMode: cached.cachedMode,
+            mode, // requested mode
+            answeredAt: new Date().toISOString(),
+          };
           
           // Get or create thread
           let threadId = validatedData.threadId;
@@ -485,19 +608,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
             content: cached.response,
             responseId: cached.responseId || null,
             sources: null,
-            metadata: cached.metadata ? JSON.stringify(cached.metadata) : null,
+            metadata: JSON.stringify(cachedMetadata),
           });
           
           await storage.updateThreadTimestamp(threadId!);
           
           return res.json({
             threadId,
-            data: cached.response,
-            metadata: cached.metadata ? JSON.stringify(cached.metadata) : undefined,
+            data: fixMarkdownFormatting(cached.response),
+            metadata: JSON.stringify(cachedMetadata),
             citations: undefined,
             responseId: cached.responseId,
             isCached: true,
             cacheId: cached.id,
+            cachedSimilarity: cached.similarity,
+            cachedMode: cached.cachedMode,
             resolvedDomain: cached.metadata?.domainResolution?.domainId,
             domainStrategy: cached.metadata?.domainResolution?.strategy,
           });
@@ -586,7 +711,9 @@ STEP 2 - Focused Response Generation:
 • Be concise while remaining comprehensive on the core topic
 • Prioritize clarity and relevance over exhaustive coverage
 
-User's Question: ${validatedData.question}`;
+User's Question: ${validatedData.question}
+
+${RESPONSE_FORMAT_DIRECTIVE}`;
       } else {
         // Add focus directives for initial questions
         questionToSend = `[Focused Response Directive]
@@ -598,7 +725,9 @@ Please follow these instructions when answering:
 • Be concise while remaining comprehensive on the core topic
 • Prioritize clarity and relevance over exhaustive coverage
 
-User's Question: ${validatedData.question}`;
+User's Question: ${validatedData.question}
+
+${RESPONSE_FORMAT_DIRECTIVE}`;
       }
       
       const domainResolution = domainRouter.resolve({
@@ -615,6 +744,15 @@ User's Question: ${validatedData.question}`;
         console.warn(`[Domain Validation] Invalid resolved domain: ${resolvedDomain}. Falling back to default: ${DEFAULT_DOMAIN_ID}`);
         finalDomain = DEFAULT_DOMAIN_ID;
         // Update domainResolution to reflect the fallback
+        domainResolution.domainId = DEFAULT_DOMAIN_ID;
+        domainResolution.strategy = "fallback";
+        domainResolution.confidence = 0;
+      }
+      if (!EKG_ALLOWED_DOMAINS.has(finalDomain)) {
+        console.warn(
+          `[Domain Validation] Resolved domain ${finalDomain} is not supported by EKG. Falling back to ${DEFAULT_DOMAIN_ID}.`
+        );
+        finalDomain = DEFAULT_DOMAIN_ID;
         domainResolution.domainId = DEFAULT_DOMAIN_ID;
         domainResolution.strategy = "fallback";
         domainResolution.confidence = 0;
@@ -764,8 +902,16 @@ User's Question: ${validatedData.question}`;
 
       // Handle both 'answer' and 'markdown' fields (API documentation shows 'markdown', but actual API returns 'answer')
       const responseText = result.markdown || result.answer;
+      const { answer: extractedAnswer, followupQuestions: initialFollowups } = extractAnswerPayload(
+        typeof responseText === "string" ? responseText : ""
+      );
+      const responseBody = extractedAnswer || (typeof responseText === "string" ? responseText : "");
+      const followupQuestions =
+        initialFollowups.length > 0
+          ? initialFollowups
+          : await generateFollowupQuestions(responseBody);
       
-      if (result && responseText) {
+      if (result && responseBody) {
         
         // Format sources if available
         let sources = "";
@@ -777,6 +923,7 @@ User's Question: ${validatedData.question}`;
         const metadataPayload = {
           ...(result.meta || {}),
           domainResolution,
+          followupQuestions,
         };
         const metadata = JSON.stringify(metadataPayload);
         
@@ -794,7 +941,7 @@ User's Question: ${validatedData.question}`;
         await storage.createMessage({
           threadId: threadId!,
           role: "assistant",
-          content: responseText,
+          content: responseBody,
           responseId: result.response_id || null,
           sources: sources || null,
           metadata: JSON.stringify({
@@ -827,7 +974,7 @@ User's Question: ${validatedData.question}`;
         await saveCachedResponse(
           question,
           mode,
-          responseText,
+          responseBody,
           rawResponseForCache, // Raw response for deep mode
           metadataPayload,
           result.response_id,
@@ -836,7 +983,7 @@ User's Question: ${validatedData.question}`;
         
         res.json({
           threadId: threadId,
-          data: responseText,
+          data: fixMarkdownFormatting(responseBody),
           metadata,
           citations: sources || undefined,
           responseId: result.response_id,
@@ -1028,7 +1175,7 @@ User's Question: ${validatedData.question}`;
       res.json({
         threadId: job.threadId,
         messageId: job.messageId,
-        data: message.content,
+        data: fixMarkdownFormatting(message.content),
         sources: message.sources,
         metadata: message.metadata,
         responseId: message.responseId,
@@ -1065,7 +1212,7 @@ User's Question: ${validatedData.question}`;
           error: errorMsg || null,
           messageId: job.messageId,
           threadId: job.threadId,
-          messageContent: refreshed?.content,
+          messageContent: refreshed?.content ? fixMarkdownFormatting(refreshed.content) : refreshed?.content,
           metadata: refreshed?.metadata,
           sources: refreshed?.sources,
         });
@@ -1105,9 +1252,22 @@ User's Question: ${validatedData.question}`;
 
       // Completed: extract, format, save
       const rawResponse = extractAnswerText(resp);
+      const { answer: extractedAnswer, followupQuestions: initialFollowups } =
+        extractAnswerPayload(rawResponse);
+      const followupQuestions =
+        initialFollowups.length > 0
+          ? initialFollowups
+          : await generateFollowupQuestions(extractedAnswer || rawResponse);
       const extractedSources = extractCitationsFromResponse(resp);
 
-      await jobStore.updateJobStatus(job.id, { status: "retrieving", rawResponse });
+      await jobStore.updateJobStatus(job.id, {
+        status: "retrieving",
+        rawResponse: extractedAnswer || rawResponse,
+        metadata: {
+          ...(job.metadata || {}),
+          followupQuestions,
+        },
+      });
       if (message) {
         await storage.updateMessage(message.id, {
           content: "📥 Almost done! Formatting your response...",
@@ -1117,14 +1277,20 @@ User's Question: ${validatedData.question}`;
             jobId: job.id,
             responseId: job.responseId,
             mode: job.metadata?.mode,
+            followupQuestions,
+            rawAnswer: extractedAnswer || rawResponse,
           }),
         });
       }
 
-      const formattedAnswer = await formatWithModel51(rawResponse, job.question, job.metadata?.domainResolution).catch(
+      const formattedAnswer = await formatWithModel51(
+        extractedAnswer || rawResponse,
+        job.question,
+        job.metadata?.domainResolution
+      ).catch(
         (err) => {
           console.error(`[Deep Mode] Formatting failed for job ${job.id} (check):`, err);
-          return rawResponse;
+          return extractedAnswer || rawResponse;
         }
       );
       const reportResult = await generateStructuredReport({
@@ -1134,6 +1300,10 @@ User's Question: ${validatedData.question}`;
         responseId: job.responseId,
       });
       const finalAnswer = reportResult.content || formattedAnswer;
+      const markdownResult = processMarkdown(finalAnswer);
+      if (markdownResult.issues.length > 0) {
+        console.warn(`[Deep Mode] Markdown issues detected for job ${job.id} (check):`, markdownResult.issues);
+      }
 
       const metadataPayload = {
         ...(message?.metadata ? JSON.parse(message.metadata) : {}),
@@ -1146,9 +1316,11 @@ User's Question: ${validatedData.question}`;
         reportFormat: reportResult.formatKey,
         mode: job.metadata?.mode,
         answeredAt: new Date().toISOString(),
+        followupQuestions,
+        markdownIssues: markdownResult.issues,
       };
       await storage.updateMessage(job.messageId, {
-        content: finalAnswer,
+        content: markdownResult.content,
         responseId: job.responseId,
         metadata: JSON.stringify(metadataPayload),
         sources: extractedSources ? JSON.stringify(extractedSources) : null,
@@ -1158,15 +1330,15 @@ User's Question: ${validatedData.question}`;
 
       await jobStore.updateJobStatus(job.id, {
         status: "completed",
-        formattedResult: finalAnswer,
+        formattedResult: markdownResult.content,
         metadata: metadataPayload,
       });
 
       await saveCachedResponse(
         job.question,
         "deep",
-        finalAnswer,
-        rawResponse,
+        markdownResult.content,
+        extractedAnswer || rawResponse,
         metadataPayload,
         job.responseId
       );
@@ -1313,6 +1485,19 @@ Generate quiz questions that:
     }
   });
 
+  // BA knowledge starter questions
+  app.get("/api/ba-questions", async (req, res) => {
+    try {
+      const limitParam = typeof req.query.limit === "string" ? Number(req.query.limit) : 6;
+      const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, 50) : 6;
+      const questions = await storage.getBaKnowledgeQuestions(limit);
+      res.json(questions);
+    } catch (error) {
+      console.error("Error fetching BA questions:", error);
+      res.status(500).json({ error: "Failed to fetch BA questions" });
+    }
+  });
+
   // Helper function to calculate mastery score
   async function calculateMasteryScore() {
     // Get recent quiz attempts (last 20 for performance calculation)
@@ -1432,7 +1617,12 @@ Generate quiz questions that:
     try {
       const id = parseInt(req.params.id);
       const messages = await storage.getMessages(id);
-      res.json(messages);
+      // Apply markdown formatting to assistant messages
+      const formattedMessages = messages.map(msg => ({
+        ...msg,
+        content: msg.role === 'assistant' ? fixMarkdownFormatting(msg.content) : msg.content
+      }));
+      res.json(formattedMessages);
     } catch (error) {
       console.error("Error fetching messages:", error);
       res.status(500).json({ error: "Failed to fetch messages" });

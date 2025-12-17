@@ -20,7 +20,7 @@ interface BaseDomainMetadata {
   label: string;
   description: string;
   keywords: string[];
-  fallbackVectorStoreId: string;
+  fallbackVectorStoreId?: string; // Optional - only used as fallback if OpenAI sync fails
 }
 
 const BASE_DOMAIN_METADATA: Record<DomainId, BaseDomainMetadata> = {
@@ -43,7 +43,7 @@ const BASE_DOMAIN_METADATA: Record<DomainId, BaseDomainMetadata> = {
       "compliance",
       "ops",
     ],
-    fallbackVectorStoreId: "vs_689b49252a4c8191a12a1528a475fbd8",
+    // No fallback - will use dynamically registered vector stores from OpenAI
   },
   pre_sales: {
     id: "pre_sales",
@@ -68,7 +68,7 @@ const BASE_DOMAIN_METADATA: Record<DomainId, BaseDomainMetadata> = {
       "value proposition",
       "demo",
     ],
-    fallbackVectorStoreId: "vs_dummy_presales_placeholder",
+    // No fallback - will use dynamically registered vector stores from OpenAI
   },
 };
 
@@ -90,7 +90,7 @@ function buildRegistryFromBase(): Record<DomainId, DomainConfig> {
       label: meta.label,
       description: meta.description,
       ekgDomain: meta.id,
-      defaultVectorStoreId: meta.fallbackVectorStoreId,
+      defaultVectorStoreId: meta.fallbackVectorStoreId || "", // Empty if no fallback
       vectorStoreName: meta.id,
       status: "fallback",
       keywords: meta.keywords,
@@ -186,7 +186,7 @@ function buildRegistryFromStores(stores: Awaited<
       label: meta.label,
       description: meta.description,
       ekgDomain: meta.id,
-      defaultVectorStoreId: meta.fallbackVectorStoreId,
+      defaultVectorStoreId: meta.fallbackVectorStoreId || "", // Empty if no fallback
       vectorStoreName: meta.id,
       status: "fallback",
       keywords: meta.keywords,

@@ -63,6 +63,7 @@ import {
   templateSections,
   templateWorkItems,
   templateRevisions,
+  baKnowledgeQuestions,
   type SolutionTemplate,
   type InsertSolutionTemplate,
   type TemplateSection,
@@ -70,7 +71,8 @@ import {
   type TemplateWorkItem,
   type InsertTemplateWorkItem,
   type TemplateRevision,
-  type InsertTemplateRevision
+  type InsertTemplateRevision,
+  type BaKnowledgeQuestion
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, sql, or, ne, isNull } from "drizzle-orm";
@@ -226,6 +228,9 @@ export interface IStorage {
   // Template Revision operations
   createTemplateRevision(revision: InsertTemplateRevision): Promise<TemplateRevision>;
   getTemplateRevisions(templateId: number): Promise<TemplateRevision[]>;
+
+  // BA knowledge questions
+  getBaKnowledgeQuestions(limit: number): Promise<BaKnowledgeQuestion[]>;
   
   // Complete template with sections and work items
   getCompleteTemplate(templateId: number): Promise<{
@@ -1159,6 +1164,15 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(templateRevisions)
       .where(eq(templateRevisions.templateId, templateId))
       .orderBy(desc(templateRevisions.changeDate));
+  }
+
+  async getBaKnowledgeQuestions(limit: number): Promise<BaKnowledgeQuestion[]> {
+    return await db
+      .select()
+      .from(baKnowledgeQuestions)
+      .where(eq(baKnowledgeQuestions.isActive, true))
+      .orderBy(sql`random()`)
+      .limit(limit);
   }
 
   async getCompleteTemplate(templateId: number): Promise<{
