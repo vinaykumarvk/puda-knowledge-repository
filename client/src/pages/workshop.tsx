@@ -36,6 +36,12 @@ export default function WorkshopPage() {
       name: "Gap Finder",
       description: "Identify gaps between existing products and RFP requirements",
       icon: ScanSearch,
+    },
+    {
+      name: "Sentiment Analysis",
+      description: "Analyze sentiment insights from text and documents",
+      icon: TrendingUp,
+      externalUrl: "http://sentiment-analysis.intellectwealthforcedemo.com",
     }
   ];
 
