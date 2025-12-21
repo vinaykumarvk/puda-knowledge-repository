@@ -116,6 +116,7 @@ export function MobileNavDrawer({ isOpen, onClose, aiConfig, onAIConfigChange }:
             onClick={onClose}
             className="w-9 h-9"
             data-testid="button-close-menu"
+            title="Close menu"
           >
             <X className="w-5 h-5" />
           </Button>
@@ -128,31 +129,33 @@ export function MobileNavDrawer({ isOpen, onClose, aiConfig, onAIConfigChange }:
             const isActive = location === item.path;
 
             return (
-              <Link key={item.path} href={item.path}>
-                <div
-                  onClick={onClose}
-                  className={cn(
-                    "flex items-center gap-3 p-3 rounded-lg transition-all cursor-pointer",
-                    isActive
-                      ? "bg-primary text-primary-foreground"
-                      : "text-foreground hover:bg-muted"
-                  )}
-                  data-testid={`mobile-nav-${item.name.toLowerCase()}`}
-                >
-                  <Icon className="w-5 h-5" />
-                  <div className="flex flex-col">
-                    <span className="font-medium">{item.name}</span>
-                    <span className="text-xs opacity-70">{item.description}</span>
-                  </div>
+              <Link
+                key={item.path}
+                href={item.path}
+                onClick={onClose}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg p-3 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                  isActive
+                    ? "bg-primary text-primary-foreground"
+                    : "text-foreground hover:bg-muted"
+                )}
+                data-testid={`mobile-nav-${item.name.toLowerCase()}`}
+                aria-label={item.name}
+              >
+                <Icon className="w-5 h-5" />
+                <div className="flex flex-col">
+                  <span className="font-medium">{item.name}</span>
+                  <span className="text-xs opacity-70">{item.description}</span>
                 </div>
               </Link>
             );
           })}
 
           {/* Settings Button */}
-          <div
+          <button
+            type="button"
             onClick={() => setSettingsOpen(true)}
-            className="flex items-center gap-3 p-3 rounded-lg transition-all cursor-pointer text-foreground hover:bg-muted border-t border-border mt-2 pt-4"
+            className="flex items-center gap-3 rounded-lg border-t border-border p-3 pt-4 text-left text-foreground transition-all hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             data-testid="mobile-nav-settings"
           >
             <Settings className="w-5 h-5" />
@@ -160,7 +163,7 @@ export function MobileNavDrawer({ isOpen, onClose, aiConfig, onAIConfigChange }:
               <span className="font-medium">Settings</span>
               <span className="text-xs opacity-70">AI configuration</span>
             </div>
-          </div>
+          </button>
         </nav>
       </div>
 

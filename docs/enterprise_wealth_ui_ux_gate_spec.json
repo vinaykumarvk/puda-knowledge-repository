@@ -1,0 +1,511 @@
+{
+  "qa_gate_name": "enterprise_wealth_ui_ux_gate",
+  "version": "1.1",
+  "release_blocking": true,
+  "target_application_type": "wealth_management_enterprise",
+  "primary_device": "mobile",
+  "device_coverage": {
+    "mobile": {
+      "min_width_px": 360,
+      "max_width_px": 480,
+      "os_targets": ["iOS", "Android"]
+    },
+    "tablet": {
+      "min_width_px": 768,
+      "max_width_px": 1024,
+      "os_targets": ["iPadOS", "Android"]
+    },
+    "desktop": {
+      "min_width_px": 1280,
+      "max_width_px": 1920,
+      "os_targets": ["Windows", "macOS"]
+    }
+  },
+  "standards": {
+    "accessibility": "WCAG_2_1_AA",
+    "usability": "SUS",
+    "heuristics": "Nielsen_Enterprise",
+    "responsive": "Mobile_First"
+  },
+  "measurement_protocols": {
+    "sus": {
+      "minimum_participants": 12,
+      "task_set_minimum": 5,
+      "task_coverage": ["navigation", "search", "form_submission", "data_review", "export_or_share"],
+      "scoring_method": "standard_sus_0_to_100",
+      "max_study_age_days": 90
+    },
+    "performance": {
+      "rtt_assumption_ms": 150,
+      "device_class": "mid_tier",
+      "measurement_window_days": 30,
+      "blocking_page_types": ["dashboard", "portfolio", "order_entry", "reporting", "client_profile"],
+      "page_type_sources": ["route_metadata", "sitemap_tags"]
+    }
+  },
+
+  "gates": [
+    {
+      "gate_id": "accessibility_wcag",
+      "description": "WCAG 2.1 Level AA accessibility compliance",
+      "blocking": true,
+      "checks": [
+        {
+          "id": "wcag_contrast",
+          "description": "Text and icon contrast meets WCAG minimum",
+          "criteria": {
+            "normal_text_ratio": ">=4.5:1",
+            "large_text_ratio": ">=3:1"
+          },
+          "severity": "high",
+          "required": true
+        },
+        {
+          "id": "keyboard_navigation",
+          "description": "All interactive elements are operable via keyboard",
+          "criteria": {
+            "tab_order_logical": true,
+            "focus_visible": true,
+            "no_keyboard_traps": true
+          },
+          "severity": "high",
+          "required": true
+        },
+        {
+          "id": "screen_reader_support",
+          "description": "All controls are screen-reader accessible",
+          "criteria": {
+            "aria_roles_present": true,
+            "aria_labels_present": true,
+            "landmarks_defined": true,
+            "mobile_screen_reader_swipe_order_logical": true
+          },
+          "severity": "high",
+          "required": true
+        },
+        {
+          "id": "touch_targets",
+          "description": "Touch targets meet minimum mobile size",
+          "criteria": {
+            "min_size_px_ios": 44,
+            "min_size_dp_android": 48
+          },
+          "severity": "medium",
+          "required": true
+        },
+        {
+          "id": "accessible_errors",
+          "description": "Form and system errors are accessible and descriptive",
+          "criteria": {
+            "error_text_present": true,
+            "error_linked_to_field": true,
+            "no_color_only_indicators": true
+          },
+          "severity": "high",
+          "required": true
+        }
+      ]
+    },
+
+    {
+      "gate_id": "usability_sus",
+      "description": "System Usability Scale (SUS) quality gate",
+      "blocking": true,
+      "checks": [
+        {
+          "id": "sus_score",
+          "description": "Estimated SUS score meets enterprise usability bar",
+          "criteria": {
+            "minimum_score": 80,
+            "protocol_required": true
+          },
+          "severity": "high",
+          "required": true
+        },
+        {
+          "id": "task_clarity",
+          "description": "Primary wealth workflows are clear and unambiguous",
+          "criteria": {
+            "primary_cta_visible": true,
+            "task_steps_clear": true,
+            "no_excessive_cognitive_load": true
+          },
+          "severity": "high",
+          "required": true
+        }
+      ]
+    },
+
+    {
+      "gate_id": "mobile_responsive",
+      "description": "Mobile-first and responsive design validation",
+      "blocking": true,
+      "checks": [
+        {
+          "id": "small_screen_support",
+          "description": "UI functions correctly on small mobile devices",
+          "criteria": {
+            "min_width_px": 360,
+            "no_horizontal_scroll": true,
+            "content_reflows": true
+          },
+          "severity": "high",
+          "required": true
+        },
+        {
+          "id": "touch_only_interaction",
+          "description": "No critical actions depend on hover",
+          "criteria": {
+            "hover_independent": true
+          },
+          "severity": "high",
+          "required": true
+        },
+        {
+          "id": "mobile_modals",
+          "description": "Mobile-friendly overlays are used",
+          "criteria": {
+            "bottom_sheets_preferred": true,
+            "no_modal_traps": true,
+            "safe_area_insets_respected": true
+          },
+          "severity": "medium",
+          "required": true
+        }
+      ]
+    },
+
+    {
+      "gate_id": "enterprise_ux_heuristics",
+      "description": "Enterprise UX standards for wealth management",
+      "blocking": true,
+      "checks": [
+        {
+          "id": "trustworthy_visual_language",
+          "description": "UI conveys trust and professionalism",
+          "criteria": {
+            "no_flashy_animations": true,
+            "consistent_typography": true,
+            "calm_color_palette": true,
+            "animation_duration_ms_max": 400
+          },
+          "severity": "medium",
+          "required": true
+        },
+        {
+          "id": "financial_action_safety",
+          "description": "Financial actions are explicit and auditable",
+          "criteria": {
+            "confirmation_for_irreversible_actions": true,
+            "clear_action_labels": true,
+            "undo_or_cancel_available": true
+          },
+          "severity": "high",
+          "required": true
+        },
+        {
+          "id": "system_status_visibility",
+          "description": "System state is always visible to the user",
+          "criteria": {
+            "loading_states_visible": true,
+            "success_failure_feedback_present": true
+          },
+          "severity": "high",
+          "required": true
+        }
+      ]
+    },
+
+    {
+      "gate_id": "performance_perceived",
+      "description": "Perceived performance and UX responsiveness",
+      "blocking": false,
+      "checks": [
+        {
+          "id": "skeleton_loading",
+          "description": "Skeleton loaders used for data-heavy screens",
+          "criteria": {
+            "skeletons_present": true
+          },
+          "severity": "medium",
+          "required": true
+        },
+        {
+          "id": "layout_stability",
+          "description": "No layout shifts during load",
+          "criteria": {
+            "no_cls_detected": true
+          },
+          "severity": "medium",
+          "required": true
+        },
+        {
+          "id": "interaction_feedback",
+          "description": "User actions receive immediate feedback",
+          "criteria": {
+            "feedback_latency_ms": "<=300"
+          },
+          "severity": "medium",
+          "required": true
+        }
+      ],
+      "blocking_overrides": {
+        "page_types": ["dashboard", "portfolio", "order_entry", "reporting", "client_profile"],
+        "reason": "High-impact pages require performance to maintain trust and task flow."
+      }
+    },
+
+    {
+      "gate_id": "desktop_tablet_responsive",
+      "description": "Desktop and tablet usability and data-density validation",
+      "blocking": true,
+      "checks": [
+        {
+          "id": "breakpoint_support",
+          "description": "Layouts render without truncation across tablet and desktop widths",
+          "criteria": {
+            "tablet_min_width_px": 768,
+            "desktop_min_width_px": 1280,
+            "no_horizontal_scroll": true
+          },
+          "severity": "high",
+          "required": true
+        },
+        {
+          "id": "keyboard_efficiency",
+          "description": "Power users can complete key workflows using keyboard",
+          "criteria": {
+            "global_shortcuts_documented": true,
+            "tab_order_logical": true,
+            "focus_visible": true
+          },
+          "severity": "medium",
+          "required": true
+        },
+        {
+          "id": "data_density",
+          "description": "Tables and dashboards scale to desktop data density",
+          "criteria": {
+            "table_columns_min_visible": 6,
+            "no_truncated_primary_fields": true
+          },
+          "severity": "medium",
+          "required": true
+        }
+      ]
+    },
+
+    {
+      "gate_id": "localization_internationalization",
+      "description": "Localization and RTL readiness across all pages",
+      "blocking": true,
+      "checks": [
+        {
+          "id": "text_expansion",
+          "description": "Layouts tolerate text expansion for localization",
+          "criteria": {
+            "expansion_factor_min": 1.3,
+            "no_overflow_or_clipping": true
+          },
+          "severity": "high",
+          "required": true
+        },
+        {
+          "id": "rtl_support",
+          "description": "Right-to-left layouts are usable when enabled",
+          "criteria": {
+            "layout_mirrors": true,
+            "icons_mirror_when_directional": true,
+            "reading_order_correct": true
+          },
+          "severity": "medium",
+          "required": true
+        },
+        {
+          "id": "locale_formats",
+          "description": "Dates, numbers, and currency follow locale conventions",
+          "criteria": {
+            "date_format_localized": true,
+            "number_format_localized": true,
+            "currency_symbol_localized": true
+          },
+          "severity": "high",
+          "required": true
+        }
+      ]
+    },
+
+    {
+      "gate_id": "navigation_consistency",
+      "description": "Navigation patterns are consistent across all pages",
+      "blocking": true,
+      "checks": [
+        {
+          "id": "global_nav_parity",
+          "description": "Primary navigation is consistent across device sizes",
+          "criteria": {
+            "nav_items_consistent": true,
+            "active_state_visible": true
+          },
+          "severity": "high",
+          "required": true
+        },
+        {
+          "id": "back_behavior",
+          "description": "Back actions behave consistently on mobile and desktop",
+          "criteria": {
+            "browser_back_supported": true,
+            "in_app_back_supported": true
+          },
+          "severity": "medium",
+          "required": true
+        },
+        {
+          "id": "breadcrumbs",
+          "description": "Deep workflows provide orientation",
+          "criteria": {
+            "breadcrumbs_present_when_depth_gt": 2
+          },
+          "severity": "medium",
+          "required": true
+        }
+      ]
+    },
+
+    {
+      "gate_id": "form_validation_and_safety",
+      "description": "Enterprise-grade form validation and action safety",
+      "blocking": true,
+      "checks": [
+        {
+          "id": "inline_validation",
+          "description": "Inline validation is timely and helpful",
+          "criteria": {
+            "validate_on_blur_or_submit": true,
+            "error_message_actionable": true
+          },
+          "severity": "high",
+          "required": true
+        },
+        {
+          "id": "error_recovery",
+          "description": "Users can recover from errors without data loss",
+          "criteria": {
+            "fields_preserve_input_on_error": true,
+            "clear_error_summary_present": true
+          },
+          "severity": "high",
+          "required": true
+        },
+        {
+          "id": "irreversible_action_guardrails",
+          "description": "Irreversible or sensitive actions require explicit confirmation",
+          "criteria": {
+            "confirmation_required": true,
+            "double_check_for_financial_actions": true
+          },
+          "severity": "high",
+          "required": true
+        }
+      ]
+    },
+
+    {
+      "gate_id": "state_persistence",
+      "description": "State persistence for long-running workflows",
+      "blocking": false,
+      "checks": [
+        {
+          "id": "draft_saving",
+          "description": "Drafts can be saved and restored",
+          "criteria": {
+            "auto_save_or_manual_save": true,
+            "restore_previous_session": true
+          },
+          "severity": "medium",
+          "required": true
+        },
+        {
+          "id": "filters_and_views",
+          "description": "User filter and view preferences persist",
+          "criteria": {
+            "filters_persist": true,
+            "table_columns_persist": true
+          },
+          "severity": "medium",
+          "required": true
+        }
+      ]
+    },
+
+    {
+      "gate_id": "security_privacy_ux",
+      "description": "Security and privacy UX patterns for enterprise wealth workflows",
+      "blocking": true,
+      "checks": [
+        {
+          "id": "session_visibility",
+          "description": "Session status and timeouts are clearly communicated",
+          "criteria": {
+            "timeout_warning_present": true,
+            "reauth_flow_clear": true
+          },
+          "severity": "high",
+          "required": true
+        },
+        {
+          "id": "sensitive_data_handling",
+          "description": "Sensitive data is masked or protected by default",
+          "criteria": {
+            "masking_for_pii": true,
+            "reveal_requires_user_action": true,
+            "copy_to_clipboard_acknowledged": true
+          },
+          "severity": "high",
+          "required": true
+        },
+        {
+          "id": "permission_clarity",
+          "description": "Access levels and restrictions are explicit",
+          "criteria": {
+            "permission_denied_message_actionable": true,
+            "role_based_visibility_consistent": true
+          },
+          "severity": "medium",
+          "required": true
+        },
+        {
+          "id": "audit_trail_feedback",
+          "description": "User actions that affect client data are auditable and acknowledged",
+          "criteria": {
+            "audit_logging_acknowledged": true,
+            "change_confirmation_visible": true
+          },
+          "severity": "high",
+          "required": true
+        },
+        {
+          "id": "privacy_consent_visibility",
+          "description": "Privacy notices and consent are clear where required",
+          "criteria": {
+            "data_use_disclosure_present": true,
+            "consent_capture_visible": true
+          },
+          "severity": "medium",
+          "required": true
+        }
+      ]
+    }
+  ],
+
+  "final_decision_rules": {
+    "fail_if_any_blocking_gate_fails": true,
+    "warn_if_non_blocking_gate_fails": true,
+    "output": {
+      "wcag_status": ["pass", "partial", "fail"],
+      "sus_score": "number",
+      "mobile_readiness": ["pass", "fail"],
+      "release_decision": ["GO", "NO_GO"]
+    }
+  }
+}

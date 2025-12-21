@@ -315,7 +315,19 @@ const DocumentAnalysisCard: React.FC<DocumentAnalysisCardProps> = ({
 
   return (
     <Card className="w-full">
-      <CardHeader className="cursor-pointer" onClick={() => setIsCollapsed(!isCollapsed)}>
+      <CardHeader
+        className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        onClick={() => setIsCollapsed(!isCollapsed)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            setIsCollapsed(!isCollapsed);
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-expanded={!isCollapsed}
+      >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <FileText className="h-5 w-5 text-blue-600" />

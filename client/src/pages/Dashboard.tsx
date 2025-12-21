@@ -233,15 +233,17 @@ export default function Dashboard() {
                   <h3 className="text-lg font-semibold">Overview</h3>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div
-                    className="hover:bg-accent rounded-sm p-1 cursor-pointer"
+                  <button
+                    type="button"
+                    className="hover:bg-accent rounded-sm p-1"
                     onClick={(e) => {
                       e.stopPropagation();
                       scrollToTop();
                     }}
+                    aria-label="Scroll to top"
                   >
                     <ArrowUp className="h-4 w-4" />
-                  </div>
+                  </button>
                   {sectionsCollapsed.overview ? 
                     <ChevronDown className="h-4 w-4" /> : 
                     <ChevronUp className="h-4 w-4" />
@@ -297,15 +299,17 @@ export default function Dashboard() {
                         <h3 className="text-lg font-semibold">Proposal Summary</h3>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div
-                          className="hover:bg-accent rounded-sm p-1 cursor-pointer"
+                        <button
+                          type="button"
+                          className="hover:bg-accent rounded-sm p-1"
                           onClick={(e) => {
                             e.stopPropagation();
                             scrollToTop();
                           }}
+                          aria-label="Scroll to top"
                         >
                           <ArrowUp className="h-4 w-4" />
-                        </div>
+                        </button>
                         {sectionsCollapsed.proposalSummary ? 
                           <ChevronDown className="h-4 w-4" /> : 
                           <ChevronUp className="h-4 w-4" />
@@ -339,15 +343,17 @@ export default function Dashboard() {
                         <h3 className="text-lg font-semibold">Decision Support</h3>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div
-                          className="hover:bg-accent rounded-sm p-1 cursor-pointer"
+                        <button
+                          type="button"
+                          className="hover:bg-accent rounded-sm p-1"
                           onClick={(e) => {
                             e.stopPropagation();
                             scrollToTop();
                           }}
+                          aria-label="Scroll to top"
                         >
                           <ArrowUp className="h-4 w-4" />
-                        </div>
+                        </button>
                         {sectionsCollapsed.decisionSupport ? 
                           <ChevronDown className="h-4 w-4" /> : 
                           <ChevronUp className="h-4 w-4" />
@@ -380,15 +386,17 @@ export default function Dashboard() {
                       <h3 className="text-lg font-semibold">Analytics</h3>
                     </div>
                     <div className="flex items-center gap-2">
-                      <div
-                        className="hover:bg-accent rounded-sm p-1 cursor-pointer"
+                      <button
+                        type="button"
+                        className="hover:bg-accent rounded-sm p-1"
                         onClick={(e) => {
                           e.stopPropagation();
                           scrollToTop();
                         }}
+                        aria-label="Scroll to top"
                       >
                         <ArrowUp className="h-4 w-4" />
-                      </div>
+                      </button>
                       {sectionsCollapsed.analytics ? 
                         <ChevronDown className="h-4 w-4" /> : 
                         <ChevronUp className="h-4 w-4" />
@@ -421,15 +429,17 @@ export default function Dashboard() {
                       </Badge>
                     </div>
                     <div className="flex items-center gap-2">
-                      <div
-                        className="hover:bg-accent rounded-sm p-1 cursor-pointer"
+                      <button
+                        type="button"
+                        className="hover:bg-accent rounded-sm p-1"
                         onClick={(e) => {
                           e.stopPropagation();
                           scrollToTop();
                         }}
+                        aria-label="Scroll to top"
                       >
                         <ArrowUp className="h-4 w-4" />
-                      </div>
+                      </button>
                       {sectionsCollapsed.proposals ? 
                         <ChevronDown className="h-4 w-4" /> : 
                         <ChevronUp className="h-4 w-4" />
@@ -665,15 +675,17 @@ export default function Dashboard() {
                         <h3 className="text-lg font-semibold">Quick Actions</h3>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div
-                          className="hover:bg-accent rounded-sm p-1 cursor-pointer"
+                        <button
+                          type="button"
+                          className="hover:bg-accent rounded-sm p-1"
                           onClick={(e) => {
                             e.stopPropagation();
                             scrollToTop();
                           }}
+                          aria-label="Scroll to top"
                         >
                           <ArrowUp className="h-4 w-4" />
-                        </div>
+                        </button>
                         {sectionsCollapsed.quickActions ? 
                           <ChevronDown className="h-4 w-4" /> : 
                           <ChevronUp className="h-4 w-4" />
@@ -728,15 +740,17 @@ export default function Dashboard() {
                       </Badge>
                     </div>
                     <div className="flex items-center gap-2">
-                      <div
-                        className="hover:bg-accent rounded-sm p-1 cursor-pointer"
+                      <button
+                        type="button"
+                        className="hover:bg-accent rounded-sm p-1"
                         onClick={(e) => {
                           e.stopPropagation();
                           scrollToTop();
                         }}
+                        aria-label="Scroll to top"
                       >
                         <ArrowUp className="h-4 w-4" />
-                      </div>
+                      </button>
                       {sectionsCollapsed.tasks ? 
                         <ChevronDown className="h-4 w-4" /> : 
                         <ChevronUp className="h-4 w-4" />

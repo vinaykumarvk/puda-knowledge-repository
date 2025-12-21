@@ -556,8 +556,17 @@ function TaskCard({
             {documents && documents.length > 0 && (
               <Card>
                 <CardHeader 
-                  className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors py-3"
+                  className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   onClick={() => setIsDocumentsExpanded(!isDocumentsExpanded)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setIsDocumentsExpanded(!isDocumentsExpanded);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={isDocumentsExpanded}
                 >
                   <div className="flex items-center justify-between">
                     <CardTitle className="flex items-center gap-2 text-base">
@@ -591,8 +600,17 @@ function TaskCard({
             {documents && documents.length > 0 && (
               <Card>
                 <CardHeader 
-                  className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors py-3"
+                  className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   onClick={() => setIsResearchExpanded(!isResearchExpanded)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setIsResearchExpanded(!isResearchExpanded);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={isResearchExpanded}
                 >
                   <div className="flex items-center justify-between">
                     <CardTitle className="flex items-center gap-2 text-base">
@@ -619,8 +637,17 @@ function TaskCard({
             {/* III. Analyst Notes */}
             <Card>
               <CardHeader 
-                className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors py-3"
+                className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={() => setIsRationaleExpanded(!isRationaleExpanded)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setIsRationaleExpanded(!isRationaleExpanded);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                aria-expanded={isRationaleExpanded}
               >
                 <div className="flex items-center justify-between">
                   <CardTitle className="flex items-center gap-2 text-base">
@@ -646,8 +673,17 @@ function TaskCard({
             {/* IV. Investment Rationale (Formal Analysis) */}
             <Card>
               <CardHeader 
-                className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors py-3"
+                className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={() => setIsRationaleExpanded(!isRationaleExpanded)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setIsRationaleExpanded(!isRationaleExpanded);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                aria-expanded={isRationaleExpanded}
               >
                 <div className="flex items-center justify-between">
                   <CardTitle className="flex items-center gap-2 text-base">

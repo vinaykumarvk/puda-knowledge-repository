@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -414,8 +415,18 @@ export function InvestmentDetailsInline({ investment, isExpanded, onToggle }: In
       
       <CollapsibleContent className="mt-4">
         {isInvestmentLoading ? (
-          <div className="flex items-center justify-center p-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <div className="space-y-4 rounded-lg border border-border p-4">
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-5 w-5 rounded" />
+              <Skeleton className="h-4 w-40" />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Skeleton className="h-5 w-full" />
+              <Skeleton className="h-5 w-full" />
+              <Skeleton className="h-5 w-full" />
+              <Skeleton className="h-5 w-full" />
+              <Skeleton className="h-5 w-full" />
+            </div>
           </div>
         ) : investmentDetails && typeof investmentDetails === 'object' && 'targetCompany' in investmentDetails ? (
           <div className="space-y-6">
@@ -458,8 +469,17 @@ export function InvestmentDetailsInline({ investment, isExpanded, onToggle }: In
             {/* II. Analyst Notes / Description */}
             <Card>
               <CardHeader 
-                className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors py-3"
+                className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={() => setIsRationaleExpanded(!isRationaleExpanded)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setIsRationaleExpanded(!isRationaleExpanded);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                aria-expanded={isRationaleExpanded}
               >
                 <div className="flex items-center justify-between">
                   <CardTitle className="flex items-center gap-2 text-base">
@@ -765,8 +785,17 @@ export function InvestmentDetailsInline({ investment, isExpanded, onToggle }: In
             {documents && Array.isArray(documents) && documents.length > 0 && (
               <Card>
                 <CardHeader 
-                  className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors py-3"
+                  className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   onClick={() => setIsDocumentsExpanded(!isDocumentsExpanded)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setIsDocumentsExpanded(!isDocumentsExpanded);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={isDocumentsExpanded}
                 >
                   <div className="flex items-center justify-between">
                     <CardTitle className="flex items-center gap-2 text-base">
@@ -802,8 +831,17 @@ export function InvestmentDetailsInline({ investment, isExpanded, onToggle }: In
             {/* V. Market Regulation Research */}
             <Card>
               <CardHeader 
-                className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors py-3"
+                className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={() => setIsResearchExpanded(!isResearchExpanded)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setIsResearchExpanded(!isResearchExpanded);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                aria-expanded={isResearchExpanded}
               >
                 <div className="flex items-center justify-between">
                   <CardTitle className="flex items-center gap-2 text-base">

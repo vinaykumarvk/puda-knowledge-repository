@@ -26,8 +26,17 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
   return (
     <Card className="border-l-4 border-l-blue-500 bg-gray-50 dark:bg-gray-900">
       <CardHeader 
-        className="pb-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+        className="pb-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         onClick={() => setIsExpanded(!isExpanded)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            setIsExpanded(!isExpanded);
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-expanded={isExpanded}
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">

@@ -168,6 +168,14 @@ export function ThreadSidebar({
                     : "hover:bg-muted/50",
                 )}
                 onClick={() => onSelectThread(thread)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onSelectThread(thread);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
                 data-testid={`thread-item-${thread.id}`}
               >
                 <div className="flex-1 min-w-0 overflow-hidden">
@@ -195,7 +203,9 @@ export function ThreadSidebar({
                   className="h-8 w-8 p-0 flex-shrink-0 hover:bg-destructive hover:text-destructive-foreground text-destructive"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onDeleteThread(thread.id);
+                    if (confirm("Delete this conversation? This action cannot be undone.")) {
+                      onDeleteThread(thread.id);
+                    }
                   }}
                   title="Delete thread"
                 >

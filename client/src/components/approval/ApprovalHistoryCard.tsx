@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Clock, ChevronDown, ChevronUp, CheckCircle, XCircle, AlertCircle, FileText, RotateCcw } from 'lucide-react';
 
 interface ApprovalHistoryCardProps {
@@ -172,8 +173,17 @@ export function ApprovalHistoryCard({ requestType, requestId, isExpanded = true,
     return (
       <Card>
         <CardHeader 
-          className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors py-3"
+          className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           onClick={onToggle}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              onToggle();
+            }
+          }}
+          role="button"
+          tabIndex={0}
+          aria-expanded={isExpanded}
         >
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2 text-base">
@@ -185,8 +195,10 @@ export function ApprovalHistoryCard({ requestType, requestId, isExpanded = true,
         </CardHeader>
         {isExpanded && (
           <CardContent className="pt-0 pb-4">
-            <div className="text-center py-4 text-gray-500 dark:text-gray-400">
-              Loading approval history...
+            <div className="space-y-3 py-2">
+              <Skeleton className="h-5 w-40" />
+              <Skeleton className="h-4 w-64" />
+              <Skeleton className="h-4 w-52" />
             </div>
           </CardContent>
         )}
@@ -197,8 +209,17 @@ export function ApprovalHistoryCard({ requestType, requestId, isExpanded = true,
   return (
     <Card>
       <CardHeader 
-        className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors py-3"
+        className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         onClick={onToggle}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onToggle();
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-expanded={isExpanded}
       >
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-base">

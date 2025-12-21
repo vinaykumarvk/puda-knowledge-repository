@@ -986,23 +986,25 @@ export default function ViewData() {
                             </div>
                             
                             {/* Requirement text with hover interaction */}
-                            <div 
-                              className={`group relative text-sm sm:text-base font-medium text-slate-800 dark:text-slate-100 line-clamp-3 cursor-pointer transition-all duration-200 ${!row.finalResponse ? 'opacity-70' : ''}`}
+                            <button
+                              type="button"
+                              className={`group relative w-full text-left text-sm sm:text-base font-medium text-slate-800 dark:text-slate-100 line-clamp-3 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${!row.finalResponse ? "opacity-70 cursor-not-allowed" : "cursor-pointer"}`}
                               onClick={() => row.finalResponse && handleViewResponse(row)}
+                              disabled={!row.finalResponse}
                               title={row.finalResponse ? "Click to view full response" : "No response generated yet"}
                               aria-label={row.finalResponse ? "Click to view full response" : "No response generated yet"}
                             >
                               {row.requirement}
-                              
+
                               {row.finalResponse && (
-                                <div className="absolute inset-0 bg-gradient-to-r from-transparent to-white/80 dark:to-black/80 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-end pr-4">
-                                  <span className="absolute right-10 top-1/2 transform -translate-y-1/2 bg-slate-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                <div className="absolute inset-0 bg-gradient-to-r from-transparent to-white/80 dark:to-black/80 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100 flex items-center justify-end pr-4">
+                                  <span className="absolute right-10 top-1/2 transform -translate-y-1/2 bg-slate-800 text-white text-xs px-2 py-1 rounded opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
                                     Click to view
                                   </span>
                                   <Hand className="h-5 w-5 text-primary" />
                                 </div>
                               )}
-                            </div>
+                            </button>
                           </div>
                         </div>
                       </CardContent>

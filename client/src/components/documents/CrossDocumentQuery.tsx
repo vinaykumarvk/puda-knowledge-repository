@@ -127,8 +127,17 @@ const CrossDocumentQuery: React.FC<CrossDocumentQueryProps> = ({
   return (
     <Card className="border-2 border-dashed border-blue-200 dark:border-blue-800">
       <CardHeader 
-        className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+        className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         onClick={() => setIsExpanded(!isExpanded)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            setIsExpanded(!isExpanded);
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-expanded={isExpanded}
       >
         <CardTitle className="flex items-center justify-between">
           <div className="flex items-center gap-2">

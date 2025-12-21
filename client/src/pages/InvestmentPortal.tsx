@@ -102,6 +102,7 @@ export default function InvestmentPortal() {
             onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
             className="flex-shrink-0"
             data-testid="button-toggle-sidebar"
+            title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             {isSidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
           </Button>
@@ -116,7 +117,7 @@ export default function InvestmentPortal() {
               <button
                 key={item.path}
                 onClick={() => setLocation(item.path)}
-                className={`w-full flex items-start gap-3 px-3 py-2.5 rounded-lg transition-all ${
+                className={`w-full flex items-start gap-3 px-3 py-2.5 rounded-lg transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                   isActive
                     ? "bg-primary text-primary-foreground shadow-sm"
                     : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
@@ -158,6 +159,7 @@ export default function InvestmentPortal() {
             variant="ghost"
             size="icon"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            title={isMobileMenuOpen ? "Close menu" : "Open menu"}
           >
             {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </Button>
@@ -176,7 +178,7 @@ export default function InvestmentPortal() {
                     setLocation(item.path);
                     setIsMobileMenuOpen(false);
                   }}
-                  className={`w-full flex items-start gap-3 px-3 py-2.5 rounded-lg transition-all ${
+                  className={`w-full flex items-start gap-3 px-3 py-2.5 rounded-lg transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                     isActive
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"

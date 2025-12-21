@@ -10,6 +10,7 @@ import ProtectedRoute from "@/components/protected-route";
 import { MainNavSidebar } from "@/components/main-nav-sidebar";
 import { MobileNavDrawer } from "@/components/mobile-nav-drawer";
 import { TopHeader } from "@/components/top-header";
+import { UxGateAuditor } from "@/components/ux-gate-auditor";
 import ChatbotPage from "@/pages/chatbot";
 import WorkshopPage from "@/pages/workshop";
 import QuizPage from "@/pages/quiz";
@@ -52,19 +53,21 @@ function ProtectedLayout() {
       <div className="flex flex-1 overflow-hidden">
         <MainNavSidebar className="hidden md:flex" />
         <MobileNavDrawer isOpen={isMobileMenuOpen} onClose={closeMobileMenu} />
-        <Switch>
-          <Route path="/" component={ChatbotPage} />
-          <Route path="/workshop" component={WorkshopPage} />
-          <Route path="/quiz" component={QuizPage} />
-          <Route path="/atlas" component={AtlasPage} />
-          <Route path="/rfp" component={RfpPage} />
-          <Route path="/investment-portal" component={InvestmentPortal} />
-          <Route path="/investment-portal/new" component={InvestmentPortal} />
-          <Route path="/investment-portal/investments" component={InvestmentPortal} />
-          <Route path="/investment-portal/tasks" component={InvestmentPortal} />
-          <Route path="/investment-portal/templates" component={InvestmentPortal} />
-          <Route component={NotFound} />
-        </Switch>
+        <main className="flex flex-1 min-h-0 flex-col overflow-hidden">
+          <Switch>
+            <Route path="/" component={ChatbotPage} />
+            <Route path="/workshop" component={WorkshopPage} />
+            <Route path="/quiz" component={QuizPage} />
+            <Route path="/atlas" component={AtlasPage} />
+            <Route path="/rfp" component={RfpPage} />
+            <Route path="/investment-portal" component={InvestmentPortal} />
+            <Route path="/investment-portal/new" component={InvestmentPortal} />
+            <Route path="/investment-portal/investments" component={InvestmentPortal} />
+            <Route path="/investment-portal/tasks" component={InvestmentPortal} />
+            <Route path="/investment-portal/templates" component={InvestmentPortal} />
+            <Route component={NotFound} />
+          </Switch>
+        </main>
       </div>
     </div>
   );
@@ -86,6 +89,7 @@ function App() {
         <TooltipProvider>
           <ThemeProvider>
             <Toaster />
+            <UxGateAuditor />
             <Router />
           </ThemeProvider>
         </TooltipProvider>

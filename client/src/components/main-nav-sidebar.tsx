@@ -37,29 +37,33 @@ export function MainNavSidebar({ className }: MainNavSidebarProps = {}) {
   const [location] = useLocation();
 
   return (
-    <div className={`w-20 border-r border-border bg-card flex flex-col items-center py-6 gap-6 ${className || ''}`}>
+    <nav
+      className={`w-20 border-r border-border bg-card flex flex-col items-center py-6 gap-6 ${className || ''}`}
+      aria-label="Primary"
+    >
       {navItems.map((item) => {
         const Icon = item.icon;
         const isActive = location === item.path;
         
         return (
-          <Link key={item.path} href={item.path}>
-            <div
-              className={cn(
-                "flex flex-col items-center gap-2 p-3 rounded-lg transition-all cursor-pointer group",
-                isActive
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
-              )}
-              data-testid={`nav-${item.name.toLowerCase()}`}
-              title={item.description}
-            >
-              <Icon className="w-6 h-6" />
-              <span className="text-xs font-normal">{item.name}</span>
-            </div>
+          <Link
+            key={item.path}
+            href={item.path}
+            className={cn(
+              "flex flex-col items-center gap-2 rounded-lg p-3 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+              isActive
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            )}
+            data-testid={`nav-${item.name.toLowerCase()}`}
+            title={item.description}
+            aria-label={item.name}
+          >
+            <Icon className="w-6 h-6" />
+            <span className="text-xs font-normal">{item.name}</span>
           </Link>
         );
       })}
-    </div>
+    </nav>
   );
 }

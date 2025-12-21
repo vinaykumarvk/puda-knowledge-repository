@@ -103,9 +103,18 @@ function NetworkNode({ data }: NodeProps) {
       <Handle type="source" position={Position.Right} style={{ background: '#555' }} />
       
       <Card
-        className={`p-3 ${getNodeSize(connections)} ${getNodeColor(nodeType)} cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2`}
+        className={`p-3 ${getNodeSize(connections)} ${getNodeColor(nodeType)} cursor-pointer hover:shadow-lg transition-all hover:scale-105 border-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}
         data-testid={`network-node-${data.id}`}
         onClick={data.onClick}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            data.onClick?.();
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-label={data.label}
       >
         <div className="space-y-1">
           <div className="flex items-center justify-between gap-1">
@@ -607,6 +616,7 @@ export function RelationshipNetworkGraph({ knowledgeGraphData }: RelationshipNet
                   size="icon"
                   className="h-6 w-6"
                   onClick={() => setShowDetails(false)}
+                  title="Hide details"
                 >
                   <EyeOff className="w-4 h-4" />
                 </Button>

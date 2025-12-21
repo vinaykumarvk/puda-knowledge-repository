@@ -154,8 +154,9 @@ export function TopHeader({ questionsAsked = 0, quizzesCompleted = 0, onSearch, 
           <button
             type="button"
             onClick={() => setIsCommandOpen(true)}
-            className="w-full flex items-center justify-between gap-2 rounded-lg border border-border bg-background/70 px-3 py-2 text-left text-sm text-muted-foreground shadow-sm transition hover:border-primary/40 hover:text-foreground"
+            className="w-full flex items-center justify-between gap-2 rounded-lg border border-border bg-background/70 px-3 py-2 text-left text-sm text-muted-foreground shadow-sm transition hover:border-primary/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             data-testid="input-global-search"
+            aria-label="Open search"
           >
             <span className="flex items-center gap-2">
               <Search className="h-4 w-4 text-muted-foreground" />

@@ -1601,9 +1601,9 @@ export default function ChatbotPage() {
           <div className="mx-auto flex max-w-4xl flex-col gap-1 sm:gap-2">
             {!hasMessages && !isLoading && (
               <div className="mb-2 text-center">
-                <div className="flex items-center justify-center gap-2">
+                <div className="flex flex-wrap items-center justify-center gap-2 text-center">
                   <Sparkles className="h-4 w-4 text-primary" />
-                  <h2 className="text-lg font-semibold text-foreground">
+                  <h2 className="text-lg font-semibold text-foreground leading-tight">
                     How can I help you today?
                   </h2>
                 </div>
@@ -1632,11 +1632,7 @@ export default function ChatbotPage() {
                 </div>
                 <div
                   className={
-                    `${showAllStarters ? "max-h-[240px] overflow-y-auto pr-1" : ""} ${
-                      isMobile && !showAllStarters
-                        ? "mt-0 flex gap-3 overflow-x-auto pb-1 pr-2 snap-x snap-mandatory"
-                        : "mt-0 grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
-                    }`
+                    `${showAllStarters ? "max-h-[240px] overflow-y-auto pr-1" : ""} mt-0 grid gap-3 sm:grid-cols-2 lg:grid-cols-3`
                   }
                 >
                   {visibleStarters.map((item) => {
@@ -1645,7 +1641,7 @@ export default function ChatbotPage() {
                       <button
                         key={item.id}
                         type="button"
-                        className={`group relative w-full rounded-xl border border-border/60 bg-card/80 p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md ${isMobile && !showAllStarters ? "min-w-[220px] snap-start" : ""}`}
+                        className="group relative w-full rounded-xl border border-border/60 bg-card/80 p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         onClick={() => handleQuickQuestion(item.question)}
                         disabled={isLoading}
                       >
@@ -1654,7 +1650,7 @@ export default function ChatbotPage() {
                           <Icon className="h-3 w-3" />
                           <span>{item.category}</span>
                         </div>
-                        <span className="mt-3 inline-flex text-[11px] font-medium text-primary/80 opacity-0 transition group-hover:opacity-100">
+                        <span className="mt-3 inline-flex text-[11px] font-medium text-primary/80 opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
                           Explore →
                         </span>
                       </button>

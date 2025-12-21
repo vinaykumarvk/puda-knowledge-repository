@@ -80,10 +80,19 @@ function TopicBubbleNode({ data }: NodeProps) {
 
   return (
     <div
-      className={`rounded-full ${getNodeColor(data.category, data.type)} cursor-pointer hover:shadow-2xl hover:scale-110 transition-all duration-300 flex items-center justify-center p-3`}
+      className={`rounded-full ${getNodeColor(data.category, data.type)} cursor-pointer hover:shadow-2xl hover:scale-110 transition-all duration-300 flex items-center justify-center p-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}
       style={{ width: sizes.width, height: sizes.height }}
       data-testid={`topic-bubble-${data.id}`}
       onClick={data.onClick}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          data.onClick?.();
+        }
+      }}
+      role="button"
+      tabIndex={0}
+      aria-label={data.label}
     >
       <div className="text-center">
         <div className={`font-semibold text-foreground leading-tight`} style={{ fontSize: sizes.fontSize }}>
@@ -189,15 +198,18 @@ function TopicDetailPanel({
                 <h4 className="text-sm font-semibold mb-2">Related Topics</h4>
                 <div className="flex flex-wrap gap-2">
                   {connectedTopics.slice(0, 8).map((connectedTopic) => (
-                    <Badge 
-                      key={connectedTopic.id} 
-                      variant="outline" 
-                      className="text-xs cursor-pointer hover:bg-accent"
+                    <Button
+                      key={connectedTopic.id}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
                       onClick={() => onTopicClick(connectedTopic.id)}
                       data-testid={`badge-related-${connectedTopic.id}`}
+                      aria-label={`Open ${connectedTopic.name}`}
                     >
                       {connectedTopic.name.length > 20 ? connectedTopic.name.substring(0, 17) + "..." : connectedTopic.name}
-                    </Badge>
+                    </Button>
                   ))}
                 </div>
               </div>
@@ -210,11 +222,13 @@ function TopicDetailPanel({
               {subtopicsList.length > 0 ? (
                 <div className="space-y-2">
                   {subtopicsList.map((subtopic) => (
-                    <div
+                    <button
                       key={subtopic.id}
-                      className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-accent cursor-pointer transition-colors"
+                      type="button"
+                      className="flex w-full items-center justify-between rounded-lg border border-border p-3 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                       onClick={() => onTopicClick(subtopic.id)}
                       data-testid={`subtopic-${subtopic.id}`}
+                      aria-label={`Open ${subtopic.name}`}
                     >
                       <div className="flex-1">
                         <div className="text-sm font-medium">{subtopic.name}</div>
@@ -225,7 +239,7 @@ function TopicDetailPanel({
                         )}
                       </div>
                       <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                    </div>
+                    </button>
                   ))}
                 </div>
               ) : (

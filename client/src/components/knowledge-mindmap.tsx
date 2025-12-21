@@ -52,9 +52,18 @@ function KnowledgeNode({ data }: NodeProps) {
       )}
       
       <Card
-        className={`p-3 ${getNodeSize(data.level)} ${getNodeColor(data.level, isExpanded)} cursor-pointer hover:shadow-lg transition-all ${hasChildren ? 'hover:scale-105' : ''}`}
+        className={`p-3 ${getNodeSize(data.level)} ${getNodeColor(data.level, isExpanded)} cursor-pointer hover:shadow-lg transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${hasChildren ? 'hover:scale-105' : ''}`}
         data-testid={`mindmap-node-${data.id}`}
         onClick={data.onClick}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            data.onClick?.();
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-label={data.label}
       >
         <div className="space-y-1">
           <div className="flex items-center justify-center gap-1">

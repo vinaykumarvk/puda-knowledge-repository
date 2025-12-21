@@ -46,7 +46,7 @@ export default function WorkshopPage() {
   ];
 
   return (
-    <div className="flex-1 flex flex-col bg-background">
+    <div className="flex-1 min-h-0 flex flex-col bg-background">
       <header className="border-b border-border bg-card/30 backdrop-blur-sm px-6 py-2.5">
         <div className="flex items-center gap-2.5">
           <Wrench className="w-5 h-5 text-primary" />
@@ -61,7 +61,7 @@ export default function WorkshopPage() {
         </div>
       </header>
 
-      <div className="flex-1 overflow-auto p-4">
+      <div className="flex-1 min-h-0 overflow-auto p-4">
         <div className="max-w-6xl mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {templates.map((template) => {

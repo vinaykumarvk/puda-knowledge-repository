@@ -50,7 +50,9 @@ export function HistorySidebar({ onSelectConversation, selectedId }: HistorySide
 
   const handleDelete = (e: React.MouseEvent, id: number) => {
     e.stopPropagation();
-    deleteMutation.mutate(id);
+    if (confirm("Delete this conversation? This action cannot be undone.")) {
+      deleteMutation.mutate(id);
+    }
   };
 
   const filteredConversations = useMemo(() => {
@@ -176,8 +178,9 @@ export function HistorySidebar({ onSelectConversation, selectedId }: HistorySide
                     data-testid={`delete-conversation-${conversation.id}`}
                     variant="ghost"
                     size="icon"
-                    className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6"
+                    className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
                     onClick={(e) => handleDelete(e, conversation.id)}
+                    title="Delete conversation"
                   >
                     <Trash2 className="w-3 h-3" />
                   </Button>

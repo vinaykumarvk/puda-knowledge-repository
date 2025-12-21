@@ -157,6 +157,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           variant="ghost" 
           size="icon"
           onClick={() => setIsSidebarOpen(false)}
+          title="Close sidebar"
         >
           <Menu className="h-4 w-4" />
         </Button>
@@ -169,11 +170,13 @@ export function AppLayout({ children }: AppLayoutProps) {
           const isActive = location === item.href;
           
           return (
-            <Link key={item.href} href={item.href}>
-              <Button
-                variant={isActive ? "default" : "ghost"}
-                className="w-full justify-start"
-              >
+            <Button
+              key={item.href}
+              asChild
+              variant={isActive ? "default" : "ghost"}
+              className="w-full justify-start"
+            >
+              <Link href={item.href}>
                 <Icon className="mr-3 h-4 w-4" />
                 {item.label}
                 {item.badge && item.badge > 0 && (
@@ -181,8 +184,8 @@ export function AppLayout({ children }: AppLayoutProps) {
                     {item.badge}
                   </Badge>
                 )}
-              </Button>
-            </Link>
+              </Link>
+            </Button>
           );
         })}
         
@@ -202,15 +205,17 @@ export function AppLayout({ children }: AppLayoutProps) {
               const isActive = location === item.href;
               
               return (
-                <Link key={item.href} href={item.href}>
-                  <Button
-                    variant={isActive ? "default" : "ghost"}
-                    className="w-full justify-start"
-                  >
+                <Button
+                  key={item.href}
+                  asChild
+                  variant={isActive ? "default" : "ghost"}
+                  className="w-full justify-start"
+                >
+                  <Link href={item.href}>
                     <Icon className="mr-3 h-4 w-4" />
                     {item.label}
-                  </Button>
-                </Link>
+                  </Link>
+                </Button>
               );
             })}
           </>
@@ -232,7 +237,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon">
+              <Button variant="ghost" size="icon" title="Open settings">
                 <Settings className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -296,6 +301,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                     size="icon"
                     onClick={() => setIsSidebarOpen(false)}
                     className="hover:bg-accent"
+                    title="Close sidebar"
                   >
                     <Menu className="h-5 w-5" />
                   </Button>
