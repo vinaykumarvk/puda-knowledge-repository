@@ -9,7 +9,7 @@ export default function WorkshopPage() {
       name: "Report Portal",
       description: "Complete report creation system with templates, approvals, and tracking",
       icon: FileText,
-      route: "/investment-portal",
+      externalUrl: "http://reports-generator.intellectwealthforcedemo.com",
     },
     {
       name: "RFP Generator",
@@ -73,10 +73,10 @@ export default function WorkshopPage() {
                   key={template.name}
                   className={`hover:shadow-lg hover:border-primary/50 transition-all ${(hasRoute || hasExternal) ? "cursor-pointer" : "cursor-default opacity-60"} bg-card`}
                   onClick={() => {
-                    if (hasRoute && template.route) {
-                      setLocation(template.route);
-                    } else if (hasExternal && template.externalUrl) {
+                    if (hasExternal && template.externalUrl) {
                       window.open(template.externalUrl, "_blank", "noopener,noreferrer");
+                    } else if (hasRoute && template.route) {
+                      setLocation(template.route);
                     }
                   }}
                   data-testid={`card-template-${template.name.toLowerCase().replace(/\s+/g, '-')}`}

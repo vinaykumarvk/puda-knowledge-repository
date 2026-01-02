@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -6,7 +6,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
-import { useIsMobile } from "@/hooks/use-mobile";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,11 +21,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
   Loader2,
   Send,
+  Sparkles,
+  User,
   Download,
   RefreshCw,
   FileText,
@@ -34,24 +37,7 @@ import {
   ThumbsUp,
   ThumbsDown,
   MoreHorizontal,
-  AlertTriangle,
-  Sparkles,
-  BookOpen,
-  Zap,
-  Shield,
-  TrendingUp,
-  Database,
-  Users,
-  Settings,
-  Lock,
 } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import jsPDF from "jspdf";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
@@ -59,11 +45,6 @@ import remarkGfm from "remark-gfm";
 import { WorkspacePanel } from "@/components/workspace-panel";
 import type { Thread, Message } from "@shared/schema";
 
-type BaKnowledgeQuestion = {
-  id: number;
-  category: string;
-  question: string;
-};
 
 // Helper function to decode HTML entities
 function decodeHTMLEntities(text: string): string {
@@ -91,22 +72,6 @@ function cleanupCitations(text: string): string {
   return cleaned;
 }
 
-function removeFollowupSection(text: string): string {
-  if (!text) return text;
-  return text.replace(/##\s*Follow-?up questions[\s\S]*$/i, "").trim();
-}
-
-function normalizeSourcesSpacing(text: string): string {
-  const sourcesMatch = text.match(/(##\s*Sources[\s\S]*$)|(Sources:\s*[\s\S]*$)/i);
-  if (!sourcesMatch) return text;
-  const section = sourcesMatch[0];
-  const normalized = section
-    .replace(/\n{2,}/g, '\n')
-    .replace(/\n\s*-\s+/g, '\n- ')
-    .replace(/\n\s*\*\s+/g, '\n* ');
-  return text.replace(section, normalized);
-}
-
 const responseModeOptions = [
   {
     value: "concise" as const,
@@ -124,28 +89,6 @@ const responseModeOptions = [
     description: "Exhaustive analysis with supporting detail.",
   },
 ];
-
-const processingStages = [
-  "Understanding the question...",
-  "Performing step-back thinking...",
-  "Extracting key entities...",
-  "Finding related entities from knowledge graph...",
-  "Breaking down the query into sub-queries...",
-  "Answering sub-queries...",
-  "Synthesizing subquery responses...",
-  "Finalizing the response...",
-];
-
-const generalStatusMessages = [
-  "Still working on it...",
-  "Getting there soon...",
-  "Processing query...",
-  "Nearly done...",
-  "Just a moment longer...",
-  "Query in progress...",
-];
-
-const GENERAL_STATUS_DURATION = 10000;
 
 // Helper function to format API responses professionally
 function formatProfessionally(text: string): string {
@@ -193,7 +136,7 @@ function formatProfessionally(text: string): string {
     formatted += generatedTimestamp;
   }
   
-  return normalizeSourcesSpacing(formatted);
+  return formatted;
 }
 
 // Helper to extract only the answer portion from verbose outputs
@@ -511,111 +454,20 @@ function downloadThreadAsPDF(messages: Message[], threadTitle: string) {
 }
 
 export default function ChatbotPage() {
-  const isMobile = useIsMobile();
   const [question, setQuestion] = useState("");
   const [currentThreadId, setCurrentThreadId] = useState<number | undefined>();
   const [messages, setMessages] = useState<Message[]>([]);
   const [mode, setMode] = useState<"concise" | "balanced" | "deep">("balanced");
   const [showDownloadDialog, setShowDownloadDialog] = useState(false);
   const [isWorkspaceSheetOpen, setWorkspaceSheetOpen] = useState(false);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [statusType, setStatusType] = useState<"progress" | "error" | null>(null);
-  const [statusHistory, setStatusHistory] = useState<
-    { id: number; text: string; color: string; isGeneral?: boolean }[]
-  >([]);
-  const [showStarterCards, setShowStarterCards] = useState(true);
-  const [showAllStarters, setShowAllStarters] = useState(false);
-  const [checkingJobId, setCheckingJobId] = useState<string | null>(null);
-  const [expandedPairs, setExpandedPairs] = useState<Set<number>>(new Set());
-  const [inputHeight, setInputHeight] = useState<number>(40);
-  const [showRegenerateDialog, setShowRegenerateDialog] = useState(false);
-  const [regenerateMode, setRegenerateMode] = useState<"concise" | "balanced" | "deep">("balanced");
-  const [regenerateQuestion, setRegenerateQuestion] = useState<string>("");
+  const [isStreaming, setIsStreaming] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const lastAssistantMessageRef = useRef<HTMLDivElement>(null);
-  const statusRunIdRef = useRef<number>(0);
-  const statusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { toast } = useToast();
 
   // Store active polling intervals to allow cleanup
   const pollingIntervalsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
-
-  const clearStatusTimer = useCallback(() => {
-    if (statusTimeoutRef.current) {
-      clearTimeout(statusTimeoutRef.current);
-      statusTimeoutRef.current = null;
-    }
-  }, []);
-
-  const stopStatusSequence = useCallback(() => {
-    statusRunIdRef.current += 1;
-    clearStatusTimer();
-    setStatusMessage(null);
-    setStatusType(null);
-    setStatusHistory([]);
-  }, [clearStatusTimer]);
-
-  const showStatusError = useCallback((message: string) => {
-    statusRunIdRef.current += 1;
-    clearStatusTimer();
-    setStatusMessage(message);
-    setStatusType("error");
-  }, [clearStatusTimer]);
-
-  const startStatusSequence = useCallback((selectedMode: "concise" | "balanced" | "deep") => {
-    stopStatusSequence();
-    const runId = Date.now();
-    statusRunIdRef.current = runId;
-    setStatusType("progress");
-    const palette = [
-      "bg-primary/10 text-primary",
-      "bg-blue-500/10 text-blue-400",
-      "bg-amber-500/10 text-amber-500",
-      "bg-emerald-500/10 text-emerald-500",
-      "bg-purple-500/10 text-purple-400",
-      "bg-rose-500/10 text-rose-400",
-      "bg-cyan-500/10 text-cyan-400",
-      "bg-lime-500/10 text-lime-500",
-    ];
-    const appendStage = (text: string, stageIndex: number) => {
-      setStatusHistory((prev) => [
-        ...prev,
-        { id: Date.now(), text, color: palette[stageIndex % palette.length] },
-      ]);
-    };
-    const setGeneral = (text: string) => {
-      setStatusHistory([{ id: Date.now(), text, color: "bg-card/70 text-muted-foreground", isGeneral: true }]);
-    };
-
-    const stageDuration = selectedMode === "concise" ? 8000 : 12000;
-    const generalDuration = GENERAL_STATUS_DURATION;
-    let previousGeneral: string | null = null;
-
-    const runGeneralStatuses = () => {
-      if (statusRunIdRef.current !== runId) return;
-      const available = generalStatusMessages.filter((msg) => msg !== previousGeneral);
-      const nextMessage = available[Math.floor(Math.random() * available.length)];
-      previousGeneral = nextMessage;
-      setStatusMessage(nextMessage);
-      setGeneral(nextMessage);
-      clearStatusTimer();
-      statusTimeoutRef.current = setTimeout(runGeneralStatuses, generalDuration);
-    };
-
-    const runStages = (index: number) => {
-      if (statusRunIdRef.current !== runId) return;
-      if (index < processingStages.length) {
-        setStatusMessage(processingStages[index]);
-        appendStage(processingStages[index], index);
-        clearStatusTimer();
-        statusTimeoutRef.current = setTimeout(() => runStages(index + 1), stageDuration);
-      } else {
-        runGeneralStatuses();
-      }
-    };
-
-    runStages(0);
-  }, [clearStatusTimer, stopStatusSequence]);
+  const streamAbortRef = useRef<AbortController | null>(null);
 
   // Poll job status for async deep mode responses
   const pollJobStatus = useCallback(async (jobId: string, messageId: number, threadId: number) => {
@@ -630,8 +482,8 @@ export default function ChatbotPage() {
     }
 
     const poll = async () => {
-        attempts++;
-        const elapsed = Date.now() - startTime;
+      attempts++;
+      const elapsed = Date.now() - startTime;
       
       // Log progress every attempt (every 2 minutes) for debugging
       if (attempts % 1 === 0) {
@@ -677,17 +529,13 @@ export default function ChatbotPage() {
                 ...msg,
                 content: result.data,
                 responseId: result.responseId || null,
-                sources: result.sources || null,
-                metadata: JSON.stringify({
-                  ...(result.metadata ? JSON.parse(result.metadata) : {}),
-                  status: "completed",
-                }),
+                sources: null,
+                metadata: result.metadata || null,
                 isPolling: false,
               };
             }
             return msg;
           }));
-          stopStatusSequence();
           
           // Invalidate queries to refresh thread list and statuses
           queryClient.invalidateQueries({ queryKey: ["/api/threads"] });
@@ -700,21 +548,6 @@ export default function ChatbotPage() {
           }
           // Invalidate statuses query to remove polling indicator
           queryClient.invalidateQueries({ queryKey: ["/api/threads/statuses"] });
-          setMessages((prev) => prev.map((msg) => {
-            if (msg.id === messageId && msg.role === "assistant") {
-              return {
-                ...msg,
-                metadata: JSON.stringify({
-                  ...(msg.metadata ? JSON.parse(msg.metadata) : {}),
-                  status: "failed",
-                  error: status.error,
-                }),
-                isPolling: false,
-              };
-            }
-            return msg;
-          }));
-          showStatusError(status.error || "An error occurred. Please try again.");
           toast({
             title: "Processing Failed",
             description: status.error || "Deep mode processing failed",
@@ -743,7 +576,6 @@ export default function ChatbotPage() {
             }
             return msg;
           }));
-          showStatusError("Processing timed out. Please try again.");
           
           // Invalidate statuses query to remove polling indicator
           queryClient.invalidateQueries({ queryKey: ["/api/threads/statuses"] });
@@ -802,7 +634,6 @@ export default function ChatbotPage() {
             clearInterval(interval);
             pollingIntervalsRef.current.delete(jobId);
           }
-          showStatusError("An error occurred. Please try again.");
           
           // Only show error toast once
           if (attempts === 1) {
@@ -827,9 +658,11 @@ export default function ChatbotPage() {
       }
     };
 
-    // Run a single poll (manual / on-demand)
+    // Start polling immediately, then every 2 minutes
     poll();
-  }, [mode, showStatusError, stopStatusSequence, toast, queryClient]);
+    const interval = setInterval(poll, 2 * 60 * 1000);
+    pollingIntervalsRef.current.set(jobId, interval);
+  }, [toast, setMessages, queryClient]);
 
   // Fetch current thread details
   const { data: currentThread } = useQuery<Thread>({
@@ -837,84 +670,186 @@ export default function ChatbotPage() {
     enabled: !!currentThreadId,
   });
 
+  // Streaming handler for concise mode (SSE-style over fetch)
+  const streamConciseAnswer = useCallback(async (promptText: string) => {
+    if (isStreaming) return;
+    setIsStreaming(true);
+
+    // Optimistic user message
+    const userMessage: Message = {
+      id: Date.now(),
+      threadId: currentThreadId || -1,
+      role: "user",
+      content: promptText,
+      responseId: null,
+      sources: null,
+      metadata: null,
+      createdAt: new Date(),
+    };
+
+    const tempAssistantId = Date.now() + 1;
+    const assistantMessage: Message & { isStreaming?: boolean } = {
+      id: tempAssistantId,
+      threadId: currentThreadId || -1,
+      role: "assistant",
+      content: "",
+      responseId: null,
+      sources: null,
+      metadata: JSON.stringify({ status: "streaming" }),
+      createdAt: new Date(),
+      isStreaming: true,
+    };
+
+    setMessages((prev) => [...prev, userMessage, assistantMessage]);
+    setQuestion("");
+
+    const controller = new AbortController();
+    streamAbortRef.current = controller;
+
+    try {
+      const response = await fetch("/api/query/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: promptText, mode: "concise", threadId: currentThreadId }),
+        signal: controller.signal,
+      });
+
+      if (!response.body) throw new Error("No response stream");
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let resolvedThreadId = currentThreadId;
+      let resolvedAssistantId = tempAssistantId;
+
+      const finalize = (finalContent: string, responseId?: string) => {
+        setMessages((prev) =>
+          prev.map((msg) => {
+            if (msg.id === resolvedAssistantId) {
+              return {
+                ...msg,
+                content: finalContent,
+                responseId: responseId || null,
+                metadata: JSON.stringify({ status: "completed" }),
+                isStreaming: false,
+                threadId: resolvedThreadId || msg.threadId,
+              };
+            }
+            if (msg.id === userMessage.id) {
+              return { ...msg, threadId: resolvedThreadId || msg.threadId };
+            }
+            return msg;
+          })
+        );
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() || "";
+
+        for (const part of parts) {
+          if (!part.trim()) continue;
+          const lines = part.split("\n").filter(Boolean);
+          const eventLine = lines.find((l) => l.startsWith("event:"));
+          const dataLine = lines.find((l) => l.startsWith("data:"));
+          if (!eventLine || !dataLine) continue;
+          const event = eventLine.replace("event:", "").trim();
+          const data = JSON.parse(dataLine.replace("data:", "").trim());
+
+          if (event === "init") {
+            resolvedThreadId = data.threadId;
+            resolvedAssistantId = data.messageId || tempAssistantId;
+            if (!currentThreadId && resolvedThreadId) {
+              setCurrentThreadId(resolvedThreadId);
+            }
+          } else if (event === "delta") {
+            const deltaText = data.text || "";
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === resolvedAssistantId
+                  ? { ...msg, content: (msg.content || "") + deltaText }
+                  : msg
+              )
+            );
+          } else if (event === "done") {
+            finalize(data.content || "", data.responseId);
+          } else if (event === "error") {
+            finalize("⚠️ Streaming failed. Please try again.");
+          }
+        }
+      }
+
+      const existing = messages.find((m) => m.id === resolvedAssistantId);
+      finalize(existing?.content || "");
+      queryClient.invalidateQueries({ queryKey: ["/api/threads"] });
+    } catch (error: any) {
+      console.error("Streaming failed:", error);
+      toast({
+        title: "Streaming failed",
+        description: error?.message || "Unable to stream response.",
+        variant: "destructive",
+      });
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === tempAssistantId
+            ? {
+                ...msg,
+                metadata: JSON.stringify({ status: "failed" }),
+                isStreaming: false,
+                content: msg.content || "⚠️ Streaming failed.",
+              }
+            : msg
+        )
+      );
+    } finally {
+      setIsStreaming(false);
+      streamAbortRef.current = null;
+    }
+  }, [currentThreadId, isStreaming, messages, queryClient, setMessages, toast]);
+
   // Fetch messages when thread is selected
   const { data: fetchedMessages } = useQuery<Message[]>({
     queryKey: [`/api/threads/${currentThreadId}/messages`],
     enabled: !!currentThreadId,
   });
 
-  // Fetch thread statuses to allow resuming polling after reload
-  const { data: threadStatuses } = useQuery<Record<string, { status: string; jobId?: string; messageId?: number }>>({
-    queryKey: ["/api/threads/statuses"],
-  });
-
-  const { data: baQuestions } = useQuery<BaKnowledgeQuestion[]>({
-    queryKey: ["/api/ba-questions?limit=12"],
-  });
-
   // Update messages when thread changes
   useEffect(() => {
     if (fetchedMessages) {
       setMessages(fetchedMessages);
-      // Expand the last pair by default
-      const pairIds = fetchedMessages
-        .map((m, idx) => ({ m, idx }))
-        .filter(({ m }) => m.role === "assistant")
-        .map(({ m }) => m.id);
-      if (pairIds.length > 0) {
-        setExpandedPairs(new Set([pairIds[pairIds.length - 1]]));
-      }
       
-    // Check for any messages that are still polling and attach manual check
-    // (no continuous timers)
-    fetchedMessages.forEach((msg) => {
-      if (msg.role === "assistant" && msg.metadata) {
-        try {
-          const metadata = JSON.parse(msg.metadata);
-          if (metadata.jobId && metadata.status && metadata.status !== 'completed' && metadata.status !== 'failed') {
-            // Single poll to refresh status
-            pollJobStatus(metadata.jobId, msg.id, msg.threadId);
+      // Check for any messages that are still polling and resume polling
+      fetchedMessages.forEach((msg) => {
+        if (msg.role === "assistant" && msg.metadata) {
+          try {
+            const metadata = JSON.parse(msg.metadata);
+            if (metadata.jobId && metadata.status && metadata.status !== 'completed' && metadata.status !== 'failed') {
+              // Resume polling for this job
+              pollJobStatus(metadata.jobId, msg.id, msg.threadId);
+            }
+          } catch (e) {
+            // Ignore parse errors
           }
-        } catch (e) {
-          // Ignore parse errors
         }
-      }
-    });
+      });
     } else {
       setMessages([]);
     }
   }, [fetchedMessages, pollJobStatus]);
-
-  // Resume polling based on thread status snapshot (helps after reloads)
-  useEffect(() => {
-    if (!currentThreadId || !threadStatuses) return;
-    const statusEntry = threadStatuses[String(currentThreadId)];
-    if (!statusEntry || !statusEntry.jobId || !statusEntry.messageId) return;
-    if (statusEntry.status === "completed" || statusEntry.status === "failed") return;
-
-    // If we already have a message with terminal status, skip
-    const existing = messages.find((m) => m.id === statusEntry.messageId);
-    if (existing && existing.metadata) {
-      try {
-        const meta = JSON.parse(existing.metadata);
-        if (meta.status === "completed" || meta.status === "failed") {
-          return;
-        }
-      } catch {
-        // continue to resume polling
-      }
-    }
-    pollJobStatus(statusEntry.jobId, statusEntry.messageId, currentThreadId);
-  }, [currentThreadId, messages, pollJobStatus, threadStatuses]);
 
   // Cleanup polling intervals on unmount to prevent orphaned timers
   useEffect(() => {
     return () => {
       pollingIntervalsRef.current.forEach(clearInterval);
       pollingIntervalsRef.current.clear();
-      clearStatusTimer();
+      if (streamAbortRef.current) {
+        streamAbortRef.current.abort();
+      }
     };
-  }, [clearStatusTimer]);
+  }, []);
 
   // Auto-scroll to show top of new assistant messages
   useEffect(() => {
@@ -931,43 +866,30 @@ export default function ChatbotPage() {
     }
   }, [messages]);
 
-  useEffect(() => {
-    if (statusMessage && scrollAreaRef.current) {
-      const viewport = scrollAreaRef.current.querySelector<HTMLElement>('[data-radix-scroll-area-viewport]');
-      const target = viewport || scrollAreaRef.current;
-      target.scrollTo({
-        top: target.scrollHeight,
-        behavior: "smooth",
-      });
-    }
-  }, [statusMessage]);
-
   const queryMutation = useMutation({
-    mutationFn: async (payload: { question: string; threadId?: number; refreshCache?: boolean; overrideMode?: "concise" | "balanced" | "deep" }) => {
+    mutationFn: async (payload: { question: string; threadId?: number; refreshCache?: boolean }) => {
       const response = await apiRequest("POST", "/api/query", {
         question: payload.question,
-        mode: payload.overrideMode || mode,
+        mode: mode,
         refresh: false,
         refreshCache: payload.refreshCache || false,
         threadId: payload.threadId,
       });
       const result = await response.json();
       return result;
-  },
-  onSuccess: async (data, variables) => {
-    if (data.error) {
-      showStatusError("An error occurred. Please try again.");
-      toast({
-        title: "Error",
-        description: data.error,
-        variant: "destructive",
-      });
-      return;
-    } else {
-      // Set the thread ID if this was a new conversation
-      if (!currentThreadId && data.threadId) {
-        setCurrentThreadId(data.threadId);
-      }
+    },
+    onSuccess: async (data, variables) => {
+      if (data.error) {
+        toast({
+          title: "Error",
+          description: data.error,
+          variant: "destructive",
+        });
+      } else {
+        // Set the thread ID if this was a new conversation
+        if (!currentThreadId && data.threadId) {
+          setCurrentThreadId(data.threadId);
+        }
         
         // Add user message - use the question from variables instead of state
         const userMessage: Message = {
@@ -987,23 +909,21 @@ export default function ChatbotPage() {
           const assistantMessage: Message & { isCached?: boolean; cacheId?: number; jobId?: string; isPolling?: boolean } = {
             id: data.messageId,
             threadId: data.threadId,
-          role: "assistant",
-          content: data.data || "Working...",
-          responseId: data.responseId || null,
-          sources: null,
-          metadata: JSON.stringify({
-            status: data.status || "working",
+            role: "assistant",
+            content: data.data || "🔄 Deep analysis in progress...",
+            responseId: data.responseId || null,
+            sources: null,
+            metadata: JSON.stringify({
+              status: data.status || 'polling',
+              jobId: data.jobId,
+            }),
+            createdAt: new Date(),
             jobId: data.jobId,
-          }),
-          createdAt: new Date(),
-          jobId: data.jobId,
-          isPolling: true,
+            isPolling: true,
           };
           
           setMessages((prev) => [...prev, userMessage, assistantMessage]);
           setQuestion("");
-          stopStatusSequence();
-          setStatusHistory([]);
           
           // Invalidate thread statuses query to immediately show polling status in sidebar
           queryClient.invalidateQueries({ queryKey: ["/api/threads/statuses"] });
@@ -1012,156 +932,35 @@ export default function ChatbotPage() {
           pollJobStatus(data.jobId, data.messageId, data.threadId);
         } else {
           // Normal synchronous response
-        const assistantMessage: Message & { isCached?: boolean; cacheId?: number } = {
-          id: Date.now() + 1,
-          threadId: data.threadId,
-          role: "assistant",
-          content: data.data,
+          const assistantMessage: Message & { isCached?: boolean; cacheId?: number } = {
+            id: Date.now() + 1,
+            threadId: data.threadId,
+            role: "assistant",
+            content: data.data,
             responseId: data.responseId || null,
             sources: data.citations || null,
             metadata: data.metadata || null,
             createdAt: new Date(),
             isCached: data.isCached || false,
             cacheId: data.cacheId,
-        };
+          };
+          
+          setMessages((prev) => [...prev, userMessage, assistantMessage]);
+          setQuestion("");
+        }
         
-        setMessages((prev) => [...prev, userMessage, assistantMessage]);
-        setQuestion("");
-        stopStatusSequence();
+        // Invalidate queries to refresh thread list
+        queryClient.invalidateQueries({ queryKey: ["/api/threads"] });
       }
-      
-      // Invalidate queries to refresh thread list
-      queryClient.invalidateQueries({ queryKey: ["/api/threads"] });
-    }
-  },
-  onError: (error: Error) => {
-    showStatusError("An error occurred. Please try again.");
-    toast({
-      title: "Error",
-      description: error.message || "Failed to send message",
-      variant: "destructive",
-    });
-  },
-});
-
-  const triggerQuery = useCallback((payload: { question: string; threadId?: number; refreshCache?: boolean; overrideMode?: "concise" | "balanced" | "deep" }) => {
-    setShowStarterCards(false);
-    setShowAllStarters(false);
-    startStatusSequence(payload.overrideMode || mode);
-    queryMutation.mutate(payload);
-  }, [mode, queryMutation, startStatusSequence]);
-
-  // Open regenerate dialog with question pre-filled
-  const openRegenerateDialog = useCallback((questionText: string) => {
-    setRegenerateQuestion(questionText);
-    setRegenerateMode(mode); // Default to current mode
-    setShowRegenerateDialog(true);
-  }, [mode]);
-
-  // Execute regeneration with selected mode
-  const executeRegenerate = useCallback(() => {
-    setShowRegenerateDialog(false);
-    triggerQuery({
-      question: regenerateQuestion,
-      threadId: currentThreadId,
-      refreshCache: true,
-      overrideMode: regenerateMode,
-    });
-  }, [regenerateQuestion, regenerateMode, currentThreadId, triggerQuery]);
-
-  const getMessageStatus = (message: Message) => {
-    if (message.metadata) {
-      try {
-        const meta = JSON.parse(message.metadata);
-        return meta.status as string | undefined;
-      } catch {
-        return undefined;
-      }
-    }
-    return undefined;
-  };
-
-  const getMessageJobInfo = (message: Message) => {
-    if (!message.metadata) return { jobId: undefined, status: undefined };
-    try {
-      const meta = JSON.parse(message.metadata);
-      return { jobId: meta.jobId as string | undefined, status: meta.status as string | undefined };
-    } catch {
-      return { jobId: undefined, status: undefined };
-    }
-  };
-
-  const handleCheckStatus = async (jobId: string, messageId: number, threadId: number) => {
-    setCheckingJobId(jobId);
-    try {
-      toast({ title: "Checking status…", description: "Fetching latest progress from server." });
-      const res = await apiRequest("GET", `/api/jobs/${jobId}/check?messageId=${messageId}&threadId=${threadId}`);
-      const data = await res.json();
-
-      // If server returned updated message content/metadata, sync immediately
-      if (data.messageId) {
-        setMessages((prev) =>
-          prev.map((m) => {
-            if (m.id === data.messageId) {
-              return {
-                ...m,
-                content: data.messageContent ?? m.content,
-                metadata: data.metadata ?? m.metadata,
-                sources: data.sources ?? m.sources,
-              };
-            }
-            return m;
-          }),
-        );
-      }
-
-      // Refresh messages and statuses
-      queryClient.invalidateQueries({ queryKey: [`/api/threads/${threadId}/messages`] });
-      queryClient.invalidateQueries({ queryKey: ["/api/threads/statuses"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/threads"] });
-    } catch (error: any) {
+    },
+    onError: (error: Error) => {
       toast({
-        title: "Status check failed",
-        description: error?.message || "Unable to fetch status",
+        title: "Error",
+        description: error.message || "Failed to send message",
         variant: "destructive",
       });
-    } finally {
-      setCheckingJobId(null);
-    }
-  };
-
-  const messagePairs = useMemo(() => {
-    const pairs: { question: Message | null; answer: Message | null }[] = [];
-    let i = 0;
-    while (i < messages.length) {
-      const current = messages[i];
-      const next = messages[i + 1];
-      if (current.role === "user" && next && next.role === "assistant") {
-        pairs.push({ question: current, answer: next });
-        i += 2;
-      } else if (current.role === "user") {
-        pairs.push({ question: current, answer: null });
-        i += 1;
-      } else {
-        pairs.push({ question: null, answer: current });
-        i += 1;
-      }
-    }
-    return pairs;
-  }, [messages]);
-
-  const togglePair = (answerId?: number) => {
-    if (!answerId) return;
-    setExpandedPairs((prev) => {
-      const next = new Set(prev);
-      if (next.has(answerId)) {
-        next.delete(answerId);
-      } else {
-        next.add(answerId);
-      }
-      return next;
-    });
-  };
+    },
+  });
 
   const handleSubmit = (promptText?: string) => {
     const questionToSubmit = promptText || question;
@@ -1175,25 +974,19 @@ export default function ChatbotPage() {
       return;
     }
 
-    triggerQuery({
-      question: questionToSubmit,
-      threadId: currentThreadId,
-    });
+    if (mode === "concise") {
+      streamConciseAnswer(questionToSubmit);
+    } else {
+      queryMutation.mutate({
+        question: questionToSubmit,
+        threadId: currentThreadId,
+      });
+    }
     
     // Clear the input if submitting from the textarea
     if (!promptText) {
       setQuestion("");
     }
-    setInputHeight(40);
-  };
-
-  const handleQuickQuestion = (promptText: string) => {
-    if (!promptText.trim()) return;
-    triggerQuery({
-      question: promptText,
-      threadId: currentThreadId,
-      overrideMode: "concise",
-    });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1212,9 +1005,6 @@ export default function ChatbotPage() {
     setCurrentThreadId(undefined);
     setMessages([]);
     setQuestion("");
-    setShowStarterCards(true);
-    setShowAllStarters(false);
-    stopStatusSequence();
   };
 
   const handleDeleteThread = async (id: number) => {
@@ -1252,33 +1042,6 @@ export default function ChatbotPage() {
     });
   };
 
-  const handleFollowupClick = (questionText: string, threadId?: number) => {
-    if (!questionText.trim()) return;
-    triggerQuery({
-      question: questionText,
-      threadId: threadId ?? currentThreadId,
-    });
-  };
-
-  const starterLimit = 4;
-  const visibleStarters = useMemo(() => {
-    if (!baQuestions) return [];
-    return showAllStarters ? baQuestions : baQuestions.slice(0, starterLimit);
-  }, [baQuestions, showAllStarters, starterLimit]);
-  const shouldExpandScrollArea = hasMessages || isLoading;
-
-  const getCategoryIcon = (category: string) => {
-    const normalized = category.toLowerCase();
-    if (normalized.includes("risk") || normalized.includes("compliance")) return Shield;
-    if (normalized.includes("portfolio") || normalized.includes("investment")) return TrendingUp;
-    if (normalized.includes("data") || normalized.includes("integration")) return Database;
-    if (normalized.includes("customer") || normalized.includes("client")) return Users;
-    if (normalized.includes("security") || normalized.includes("access")) return Lock;
-    if (normalized.includes("report") || normalized.includes("analytics")) return FileText;
-    if (normalized.includes("operations") || normalized.includes("support")) return Settings;
-    return Sparkles;
-  };
-
   return (
     <div className="flex flex-1 bg-background">
       <WorkspacePanel
@@ -1291,14 +1054,15 @@ export default function ChatbotPage() {
 
       <div className="flex flex-1 flex-col">
         {/* Header */}
-        <header className="border-b border-border bg-card/30 backdrop-blur-sm px-3 py-3 sm:px-6 sm:py-4">
-            <div className="flex flex-col gap-2 sm:gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-start gap-2 sm:gap-3">
+        <header className="border-b border-border bg-card/30 backdrop-blur-sm px-4 py-4 sm:px-6">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-start gap-3">
+              <Sparkles className="mt-1 h-6 w-6 text-primary" />
               <div>
-                <h1 className="text-xl sm:text-2xl font-bold text-foreground" data-testid="text-title">
+                <h1 className="text-2xl font-bold text-foreground" data-testid="text-title">
                   WealthForce Knowledge Agent
                 </h1>
-                <p className="text-xs sm:text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   Conversational Wealth Management Knowledge
                 </p>
               </div>
@@ -1339,377 +1103,253 @@ export default function ChatbotPage() {
         </header>
 
         {/* Messages Area */}
-        {shouldExpandScrollArea && (
-          <ScrollArea ref={scrollAreaRef} className="flex-1">
-            <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        <ScrollArea ref={scrollAreaRef} className="flex-1">
+          <div className="max-w-4xl mx-auto px-6 py-8">
+            {!hasMessages && !isLoading && (
+              <div className="flex flex-col items-center justify-center py-16">
+                <div className="space-y-3 text-center">
+                  <Sparkles className="mx-auto h-16 w-16 text-primary/40" />
+                  <h2 className="text-2xl font-semibold text-foreground">
+                    How can I help you today?
+                  </h2>
+                  <p className="mx-auto max-w-md text-sm text-muted-foreground">
+                    Ask any question about wealth management, customer processes, or system workflows.
+                  </p>
+                </div>
+              </div>
+            )}
 
-              {messagePairs.map((pair, idx) => {
-              const answer = pair.answer;
-              const questionMsg = pair.question;
-              const answerId = answer?.id;
-              const isExpanded = answerId ? expandedPairs.has(answerId) : true;
-              const isLastAssistantMessage = answer && idx === messagePairs.length - 1;
-              const meta = (() => {
-                if (!answer?.metadata) return {};
-                try {
-                  return JSON.parse(answer.metadata);
-                } catch {
-                  return {};
-                }
-              })();
-              const followupQuestions = (() => {
-                const metaFollowups =
-                  meta.followupQuestions ||
-                  meta.followup_questions ||
-                  meta.followups ||
-                  meta.next_questions ||
-                  meta.suggested_questions;
-                if (Array.isArray(metaFollowups)) {
-                  return metaFollowups.filter((item) => typeof item === "string" && item.trim().length > 0);
-                }
-                return [];
-              })();
-              const modeLabel = `Mode: ${meta.mode || "Unknown"}`;
-              const isCachedAnswer = Boolean((answer as any)?.isCached || meta.isCached);
-              const answeredAt = meta.answeredAt
-                ? new Date(meta.answeredAt)
-                : answer?.createdAt
-                  ? typeof answer.createdAt === "string"
-                    ? new Date(answer.createdAt)
-                    : answer.createdAt
-                  : null;
-
-                return (
-                <div key={answerId || questionMsg?.id || idx} className="mb-4">
-                  <div
-                    className="flex items-start gap-2 sm:gap-3"
-                  >
-                    <div className="flex-1">
-                      <div className="rounded-lg bg-primary text-primary-foreground px-3 sm:px-4 py-3 shadow-sm border border-border/20">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-sm font-semibold">
-                            {questionMsg?.content || "Question"}
-                          </p>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2 text-xs"
-                            onClick={() => togglePair(answerId || questionMsg?.id)}
-                          >
-                            {isExpanded ? "Collapse" : "Expand"}
-                          </Button>
-                        </div>
-                        <div className="mt-1 text-xs text-primary-foreground/80 flex items-center gap-2 flex-wrap">
-                          <span>{modeLabel}</span>
-                          {answeredAt && <span>• {answeredAt.toLocaleString()}</span>}
-                          {isCachedAnswer && <span>• Cached</span>}
-                        </div>
-                      </div>
+            {messages.map((message, index) => {
+              // Find the corresponding user message for this assistant message
+              const userMessage = message.role === "assistant" && index > 0 ? messages[index - 1] : null;
+              
+              // Check if this is the last assistant message
+              const isLastAssistantMessage = message.role === "assistant" && index === messages.length - 1;
+              
+              return (
+                <div
+                  key={message.id}
+                  ref={isLastAssistantMessage ? lastAssistantMessageRef : null}
+                  className={`mb-6 flex gap-4 ${
+                    message.role === "user" ? "justify-end" : "justify-start"
+                  }`}
+                  data-testid={`message-${message.role}-${message.id}`}
+                >
+                  {message.role === "assistant" && (
+                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                      <Sparkles className="w-4 h-4 text-primary" />
                     </div>
-                  </div>
-
-                  {isExpanded && answer && (
+                  )}
+                  
+                  <div className="flex-1 max-w-[80%]">
                     <div
-                      ref={isLastAssistantMessage ? lastAssistantMessageRef : null}
-                      className="mt-2"
-                      data-testid={`message-assistant-${answer.id}`}
+                      className={`rounded-lg px-4 py-3 ${
+                        message.role === "user"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted"
+                      }`}
                     >
-                      <div className="rounded-lg bg-muted px-3 sm:px-4 py-3">
+                      {message.role === "user" ? (
+                        <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                      ) : (
                         <div className="prose prose-sm max-w-none dark:prose-invert prose-a:text-primary prose-a:no-underline hover:prose-a:underline">
-                          <ReactMarkdown rehypePlugins={[rehypeRaw]} remarkPlugins={[remarkGfm]}>
-                            {formatProfessionally(
-                              removeFollowupSection(
-                                cleanupCitations(removeKGTags(decodeHTMLEntities(answer.content)))
-                              )
-                            )}
+                          <ReactMarkdown 
+                            rehypePlugins={[rehypeRaw]}
+                            remarkPlugins={[remarkGfm]}
+                          >
+                            {formatProfessionally(cleanupCitations(removeKGTags(decodeHTMLEntities(message.content))))}
                           </ReactMarkdown>
-                        </div>
-                        {followupQuestions.length > 0 && (
-                          <div className="mt-4 rounded-lg border border-border/70 bg-card/60 p-3">
-                            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                              Follow-up questions
-                            </p>
-                            <div className="mt-2 space-y-2">
-                              {followupQuestions.map((item, index) => (
-                                <button
-                                  key={`${answer.id}-followup-${index}`}
-                                  type="button"
-                                  className="flex w-full items-start gap-2 rounded-md border border-transparent px-2 py-1 text-left text-sm text-foreground/90 transition hover:border-primary/40 hover:bg-primary/5"
-                                  onClick={() => handleFollowupClick(item, answer.threadId)}
-                                  disabled={isLoading}
-                                >
-                                  <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-muted-foreground/70" />
-                                  <span>{item}</span>
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {(() => {
-                          const { jobId, status } = getMessageJobInfo(answer);
-                          if (jobId && status && status !== "completed" && status !== "failed") {
-                            return (
-                              <div className="mt-2">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-8 px-2 text-xs"
-                                  onClick={() => handleCheckStatus(jobId, answer.id, answer.threadId)}
-                                  disabled={checkingJobId === jobId}
-                                >
-                                  {checkingJobId === jobId ? (
-                                    <span className="inline-flex items-center gap-2">
-                                      <Loader2 className="h-3 w-3 animate-spin" />
-                                      Checking…
-                                    </span>
-                                  ) : (
-                                    "Check status"
-                                  )}
-                                </Button>
-                              </div>
-                            );
-                          }
-                          return null;
-                        })()}
-                      </div>
-
-                      {/* Action buttons for assistant messages */}
-                      {questionMsg && (
-                        <div className="mt-2 flex items-center gap-2">
-                          {isCachedAnswer && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8 gap-2 text-xs"
-                              onClick={() => openRegenerateDialog(questionMsg.content)}
-                              disabled={isLoading}
-                            >
-                              <RefreshCw className="h-3 w-3" />
-                              Refresh Answer
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            data-testid={`button-feedback-positive-${answer.id}`}
-                            onClick={() => handleReaction("positive")}
-                          >
-                            <ThumbsUp className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            data-testid={`button-feedback-negative-${answer.id}`}
-                            onClick={() => handleReaction("negative")}
-                          >
-                            <ThumbsDown className="h-4 w-4" />
-                          </Button>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8"
-                                data-testid={`button-message-actions-${answer.id}`}
-                              >
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-56">
-                              <DropdownMenuLabel>Response actions</DropdownMenuLabel>
-                              <DropdownMenuItem
-                                onClick={() =>
-                                  downloadMessageMarkdown(
-                                    questionMsg.content,
-                                    answer.content,
-                                    typeof answer.createdAt === "string"
-                                      ? answer.createdAt
-                                      : answer.createdAt.toISOString(),
-                                  )
-                                }
-                              >
-                                <FileText className="mr-2 h-4 w-4" />
-                                Download as Markdown (.md)
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() =>
-                                  downloadMessagePDF(
-                                    questionMsg.content,
-                                    answer.content,
-                                    typeof answer.createdAt === "string"
-                                      ? answer.createdAt
-                                      : answer.createdAt.toISOString(),
-                                  )
-                                }
-                              >
-                                <FileType className="mr-2 h-4 w-4" />
-                                Download as PDF (.pdf)
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                onClick={() => openRegenerateDialog(questionMsg.content)}
-                              >
-                                <RefreshCw className="mr-2 h-4 w-4" />
-                                Regenerate response
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
                         </div>
                       )}
                     </div>
+                    
+                    {/* Action buttons for assistant messages */}
+                    {message.role === "assistant" && userMessage && (
+                      <div className="mt-2 flex items-center gap-2">
+                        {(message as any).isCached && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 gap-2 text-xs"
+                            onClick={() => {
+                              queryMutation.mutate({
+                                question: userMessage.content,
+                                threadId: currentThreadId,
+                                refreshCache: true,
+                              });
+                            }}
+                            disabled={isLoading}
+                          >
+                            <RefreshCw className="h-3 w-3" />
+                            Refresh Answer
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          data-testid={`button-feedback-positive-${message.id}`}
+                          onClick={() => handleReaction("positive")}
+                        >
+                          <ThumbsUp className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          data-testid={`button-feedback-negative-${message.id}`}
+                          onClick={() => handleReaction("negative")}
+                        >
+                          <ThumbsDown className="h-4 w-4" />
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              data-testid={`button-message-actions-${message.id}`}
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start" className="w-56">
+                            <DropdownMenuLabel>Response actions</DropdownMenuLabel>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                downloadMessageMarkdown(
+                                  userMessage.content,
+                                  message.content,
+                                  typeof message.createdAt === "string"
+                                    ? message.createdAt
+                                    : message.createdAt.toISOString(),
+                                )
+                              }
+                            >
+                              <FileText className="mr-2 h-4 w-4" />
+                              Download as Markdown (.md)
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                downloadMessagePDF(
+                                  userMessage.content,
+                                  message.content,
+                                  typeof message.createdAt === "string"
+                                    ? message.createdAt
+                                    : message.createdAt.toISOString(),
+                                )
+                              }
+                            >
+                              <FileType className="mr-2 h-4 w-4" />
+                              Download as PDF (.pdf)
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() =>
+                                queryMutation.mutate({
+                                  question: userMessage.content,
+                                  threadId: currentThreadId,
+                                  refreshCache: true,
+                                })
+                              }
+                            >
+                              <RefreshCw className="mr-2 h-4 w-4" />
+                              Regenerate response
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    )}
+                  </div>
+
+                  {message.role === "user" && (
+                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                      <User className="w-4 h-4 text-foreground" />
+                    </div>
                   )}
                 </div>
-                );
-              })}
+              );
+            })}
 
-              {statusHistory.length > 0 && (
-              <div className="mb-6" data-testid="status-indicator">
-                <div className="rounded-xl border border-border/60 bg-card/60 p-3 shadow-sm">
-                  <div className="flex items-center gap-2 mb-2">
-                    {statusType === "error" ? (
-                      <AlertTriangle className="h-4 w-4 text-destructive" />
-                    ) : (
-                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                    )}
-                    <span className="text-sm font-medium text-foreground">Status updates</span>
+            {isLoading && (
+              <div className="mb-6" data-testid="loading-indicator">
+                <div className="flex gap-4">
+                  <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
+                    <Sparkles className="h-4 w-4 text-primary" />
                   </div>
-                    <div className="flex flex-col gap-2">
-                    {statusHistory.map((item, idx) => (
-                      <div
-                        key={item.id}
-                        className={`rounded-lg px-3 py-2 text-sm transition-all ${item.color} ${idx === statusHistory.length - 1 ? "shadow-md ring-1 ring-border/60" : "opacity-90"}`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="inline-flex h-2 w-2 rounded-full bg-current" />
-                          <span className="text-foreground/90">{item.text}</span>
-                        </div>
+                  <div className="flex-1 rounded-lg bg-muted px-4 py-3">
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span className="text-sm text-muted-foreground">
+                          {mode === "deep" ? "Deep analysis in progress…" : "Thinking…"}
+                        </span>
                       </div>
-                    ))}
+                      {mode === "deep" && (
+                        <span className="text-xs text-muted-foreground/70">
+                          Deep mode provides comprehensive analysis and may take a few minutes.
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
-              )}
-
-            </div>
-          </ScrollArea>
-        )}
+            )}
+          </div>
+        </ScrollArea>
 
         {/* Input Area - Fixed at bottom */}
-        <div className="border-t border-border bg-card/30 backdrop-blur-sm p-3 sm:p-4">
-          <div className="mx-auto flex max-w-4xl flex-col gap-1 sm:gap-2">
-            {!hasMessages && !isLoading && (
-              <div className="mb-2 text-center">
-                <div className="flex flex-wrap items-center justify-center gap-2 text-center">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  <h2 className="text-lg font-semibold text-foreground leading-tight">
-                    How can I help you today?
-                  </h2>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Ask any question about wealth management, customer processes, or system workflows.
-                </p>
-              </div>
-            )}
-            {!hasMessages && !isLoading && showStarterCards && baQuestions && baQuestions.length > 0 && (
-              <div className="mb-3">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Questions Worth Exploring
-                  </p>
-                  {baQuestions.length > starterLimit && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-[11px]"
-                      onClick={() => setShowAllStarters((prev) => !prev)}
-                    >
-                      {showAllStarters ? "Show fewer" : "Show more"}
-                    </Button>
-                  )}
-                </div>
-                <div
-                  className={
-                    `${showAllStarters ? "max-h-[240px] overflow-y-auto pr-1" : ""} mt-0 grid gap-3 sm:grid-cols-2 lg:grid-cols-3`
-                  }
-                >
-                  {visibleStarters.map((item) => {
-                    const Icon = getCategoryIcon(item.category);
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        className="group relative w-full rounded-xl border border-border/60 bg-card/80 p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        onClick={() => handleQuickQuestion(item.question)}
-                        disabled={isLoading}
-                      >
-                        <p className="text-[13px] font-normal text-foreground">{item.question}</p>
-                        <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-                          <Icon className="h-3 w-3" />
-                          <span>{item.category}</span>
-                        </div>
-                        <span className="mt-3 inline-flex text-[11px] font-medium text-primary/80 opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
-                          Explore →
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-            <Textarea
-              data-testid="input-question"
-              placeholder="Ask a question..."
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              onKeyDown={handleKeyDown}
-              rows={1}
-              style={{ height: `${inputHeight}px` }}
-              className="min-h-[40px] max-h-[240px] flex-1 resize-none rounded-xl border border-border/60 bg-background/90"
-              disabled={isLoading}
-              onInput={(e) => {
-                const target = e.target as HTMLTextAreaElement;
-                target.style.height = "auto";
-                const nextHeight = Math.min(target.scrollHeight, 240);
-                target.style.height = `${nextHeight}px`;
-                setInputHeight(nextHeight);
-              }}
-            />
-            <div className="flex items-center gap-2 justify-between">
-              <Select
+        <div className="border-t border-border bg-card/30 backdrop-blur-sm p-4">
+          <div className="mx-auto flex max-w-4xl flex-col gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Response style
+              </Label>
+              <ToggleGroup
+                type="single"
                 value={mode}
                 onValueChange={(value) => value && setMode(value as "concise" | "balanced" | "deep")}
+                className="flex gap-1"
               >
-                <SelectTrigger className="w-[130px] h-[36px] text-xs">
-                  <SelectValue placeholder="Mode" />
-                </SelectTrigger>
-                <SelectContent align="start" className="text-xs">
-                  {responseModeOptions.map((option) => {
-                    const Icon = option.value === "concise" ? Sparkles : option.value === "balanced" ? Zap : BookOpen;
-                    return (
-                      <SelectItem key={option.value} value={option.value}>
-                        <span className="inline-flex items-center gap-2">
-                          <Icon className="h-4 w-4" />
+                {responseModeOptions.map((option) => (
+                  <Tooltip key={option.value}>
+                    <TooltipTrigger asChild>
+                      <span>
+                        <ToggleGroupItem
+                          value={option.value}
+                          className="rounded-full px-3 py-1.5 text-xs data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                        >
                           {option.label}
-                        </span>
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
+                        </ToggleGroupItem>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">{option.description}</TooltipContent>
+                  </Tooltip>
+                ))}
+              </ToggleGroup>
+            </div>
+
+            <div className="flex gap-3">
+              <Textarea
+                data-testid="input-question"
+                placeholder="Ask a question..."
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                onKeyDown={handleKeyDown}
+                className="min-h-[60px] max-h-[160px] flex-1 resize-none rounded-xl border border-border/60 bg-background/90"
+                disabled={isLoading}
+              />
               <Button
                 data-testid="button-submit"
                 onClick={() => handleSubmit()}
                 disabled={!question.trim() || isLoading}
-                size="sm"
-                className="h-[36px] w-[40px] rounded-lg p-0"
+                size="lg"
+                className="h-[60px] w-[60px] rounded-xl p-0 self-end"
               >
                 {isLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="h-5 w-5 animate-spin" />
                 ) : (
-                  <Send className="h-4 w-4" />
+                  <Send className="h-5 w-5" />
                 )}
               </Button>
             </div>
@@ -1767,73 +1407,6 @@ export default function ChatbotPage() {
                 <div className="font-semibold">PDF Document (.pdf)</div>
                 <div className="text-xs text-muted-foreground">Professional format, ready to share</div>
               </div>
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Regenerate Response Dialog with Mode Selection */}
-      <Dialog open={showRegenerateDialog} onOpenChange={setShowRegenerateDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <RefreshCw className="h-5 w-5" />
-              Regenerate Response
-            </DialogTitle>
-            <DialogDescription>
-              Choose the response mode for regeneration. This will bypass the cache and generate a fresh answer.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Response Mode</Label>
-              <div className="grid grid-cols-3 gap-2">
-                <Button
-                  variant={regenerateMode === "concise" ? "default" : "outline"}
-                  size="sm"
-                  className="flex flex-col items-center gap-1 h-auto py-3"
-                  onClick={() => setRegenerateMode("concise")}
-                >
-                  <Zap className="h-4 w-4" />
-                  <span className="text-xs font-medium">Concise</span>
-                  <span className="text-[10px] text-muted-foreground">Quick answer</span>
-                </Button>
-                <Button
-                  variant={regenerateMode === "balanced" ? "default" : "outline"}
-                  size="sm"
-                  className="flex flex-col items-center gap-1 h-auto py-3"
-                  onClick={() => setRegenerateMode("balanced")}
-                >
-                  <Sparkles className="h-4 w-4" />
-                  <span className="text-xs font-medium">Balanced</span>
-                  <span className="text-[10px] text-muted-foreground">Standard</span>
-                </Button>
-                <Button
-                  variant={regenerateMode === "deep" ? "default" : "outline"}
-                  size="sm"
-                  className="flex flex-col items-center gap-1 h-auto py-3"
-                  onClick={() => setRegenerateMode("deep")}
-                >
-                  <BookOpen className="h-4 w-4" />
-                  <span className="text-xs font-medium">Deep</span>
-                  <span className="text-[10px] text-muted-foreground">Detailed report</span>
-                </Button>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-muted-foreground">Question</Label>
-              <div className="text-sm p-3 bg-muted rounded-md max-h-24 overflow-y-auto">
-                {regenerateQuestion}
-              </div>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setShowRegenerateDialog(false)}>
-              Cancel
-            </Button>
-            <Button onClick={executeRegenerate} className="gap-2">
-              <RefreshCw className="h-4 w-4" />
-              Regenerate
             </Button>
           </div>
         </DialogContent>

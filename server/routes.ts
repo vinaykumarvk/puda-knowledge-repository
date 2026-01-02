@@ -13,38 +13,13 @@ import { requireAuth, type AuthenticatedRequest } from "./middleware/requireAuth
 import { DomainRouter } from "./services/domainRouter";
 import { getDomainSyncInfo, listDomains, refreshDomainRegistry, domainExists, DEFAULT_DOMAIN_ID, getDomainConfig } from "./services/domainRegistry";
 import { pollUntilComplete, extractAnswerText, isAsyncDeepModeResponse } from "./services/deepModePoller";
-import { generateStructuredReport } from "./services/reportGeneration";
 import { findSimilarCachedResponse, saveCachedResponse } from "./services/responseCache";
 import { jobStore } from "./services/jobStore";
 import { getUploadDir } from "./utils/uploadPaths";
-import { fixMarkdownFormatting, processMarkdown } from "./services/markdownFormatter";
+import { getUploadDir } from "./utils/uploadPaths";
 
 const EKG_API_URL = "https://ekg-service-47249889063.europe-west6.run.app";
 const domainRouter = new DomainRouter();
-const ACTIVE_POLL_INTERVAL_MS = 10 * 60 * 1000;
-const RESPONSE_FORMAT_DIRECTIVE = `RESPONSE FORMAT:\nReturn a single JSON object with keys \"answer\" and \"followup_questions\".\n- \"answer\": markdown string with the full response.\n- \"followup_questions\": array of 3-5 concise, domain-relevant follow-up questions.\nReturn JSON only.`;
-const EKG_ALLOWED_DOMAINS = new Set(["wealth_management", "apf"]);
-
-function extractCitationsFromResponse(resp: any): any[] | null {
-  try {
-    if (!resp) return null;
-    if (resp.metadata?.citations) return resp.metadata.citations;
-    if (resp.citations) return resp.citations;
-    if (resp.output && Array.isArray(resp.output)) {
-      for (const item of resp.output) {
-        if (item.citations) return item.citations;
-        if (item.content) {
-          const blockWithCitations = (item.content as any[]).find((b) => b.citations || b.references);
-          if (blockWithCitations?.citations) return blockWithCitations.citations;
-          if (blockWithCitations?.references) return blockWithCitations.references;
-        }
-      }
-    }
-  } catch (err) {
-    console.error("Failed to extract citations from response:", err);
-  }
-  return null;
-}
 
 /**
  * Background job processor for deep mode async responses
@@ -95,17 +70,10 @@ async function processDeepModeJob(
 
     // Step 2: Extract raw response
     const rawResponse = extractAnswerText(pollResult.response);
-    const { answer: extractedAnswer, followupQuestions } = extractAnswerPayload(rawResponse);
     await jobStore.updateJobStatus(jobId, { 
       status: 'retrieving',
-      rawResponse: extractedAnswer || rawResponse,
-      metadata: {
-        ...(job.metadata || {}),
-        followupQuestions,
-      },
+      rawResponse,
     });
-
-    const extractedSources = extractCitationsFromResponse(pollResult.response);
     
     await storage.updateMessage(job.messageId, {
       content: "📥 Almost done! Formatting your response...",
@@ -113,34 +81,15 @@ async function processDeepModeJob(
         status: 'formatting',
         jobId,
         responseId,
-        followupQuestions,
-        rawAnswer: extractedAnswer || rawResponse,
       }),
     });
 
     // Step 3: Format with ChatGPT 5.1 (best-effort; fallback to raw)
     await jobStore.updateJobStatus(jobId, { status: 'formatting' });
-    const formattedAnswer = await formatWithModel51(
-      extractedAnswer || rawResponse,
-      question,
-      domainResolution
-    ).catch(error => {
+    const formattedAnswer = await formatWithModel51(rawResponse, question, domainResolution).catch(error => {
       console.error(`[Deep Mode] Formatting failed for job ${jobId}:`, error);
-      return extractedAnswer || rawResponse;
+      return rawResponse;
     });
-
-    // Step 3b: Enrich into a formal report with templates (best-effort)
-    const reportResult = await generateStructuredReport({
-      baseContent: formattedAnswer,
-      question,
-      sources: extractedSources || undefined,
-      responseId,
-    });
-    const finalAnswer = reportResult.content || formattedAnswer;
-    const markdownResult = processMarkdown(finalAnswer);
-    if (markdownResult.issues.length > 0) {
-      console.warn(`[Deep Mode] Markdown issues detected for job ${jobId}:`, markdownResult.issues);
-    }
 
     // Step 4: Update message with final answer
     const metadataPayload = {
@@ -150,25 +99,19 @@ async function processDeepModeJob(
       jobId,
       status: 'completed',
       responseId: responseId, // Include responseId in metadata for redundancy
-      reportFormat: reportResult.formatKey,
-      mode,
-      answeredAt: new Date().toISOString(),
-      followupQuestions,
-      markdownIssues: markdownResult.issues,
     };
     const metadata = JSON.stringify(metadataPayload);
 
     await storage.updateMessage(job.messageId, {
-      content: markdownResult.content,
+      content: formattedAnswer,
       responseId: responseId,
       metadata,
-      sources: extractedSources ? JSON.stringify(extractedSources) : null,
     });
     await storage.updateThreadTimestamp(job.threadId);
 
     await jobStore.updateJobStatus(jobId, {
       status: 'completed',
-      formattedResult: markdownResult.content,
+      formattedResult: formattedAnswer,
       metadata: metadataPayload,
     });
 
@@ -184,8 +127,8 @@ async function processDeepModeJob(
     await saveCachedResponse(
       question,
       mode,
-      markdownResult.content,
-      extractedAnswer || rawResponse,
+      formattedAnswer,
+      rawResponse,
       metadataPayload,
       responseId,
       originalCacheId
@@ -221,31 +164,6 @@ const openai = (process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 }) : null;
-
-// Backend sweep to poll active deep-mode jobs every 10 minutes (best-effort)
-setInterval(async () => {
-  try {
-    const activeJobs = await jobStore.getActiveJobs();
-    for (const job of activeJobs) {
-      try {
-        // Skip if already terminal (defensive)
-        if (job.status === 'completed' || job.status === 'failed') continue;
-        await processDeepModeJob(
-          job.id,
-          job.responseId,
-          job.question,
-          "deep",
-          job.metadata?.domainResolution,
-          false
-        );
-      } catch (err) {
-        console.error(`[Background Poll] Failed to process job ${job.id}:`, err);
-      }
-    }
-  } catch (err) {
-    console.error("[Background Poll] Sweep failed:", err);
-  }
-}, ACTIVE_POLL_INTERVAL_MS);
 
 async function formatWithModel51(rawResponse: string, question: string, domainResolution: any): Promise<string> {
   if (!openai) {
@@ -360,100 +278,6 @@ function cleanAnswer(markdown: string): string {
     .trim();
 }
 
-function extractJsonObject(text: string): any | null {
-  const cleaned = text
-    .trim()
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/```$/i, "")
-    .trim();
-  const start = cleaned.indexOf("{");
-  const end = cleaned.lastIndexOf("}");
-  if (start === -1 || end === -1 || end <= start) {
-    return null;
-  }
-  try {
-    return JSON.parse(cleaned.slice(start, end + 1));
-  } catch {
-    return null;
-  }
-}
-
-function normalizeFollowupQuestions(value: unknown): string[] {
-  if (!value) return [];
-  if (Array.isArray(value)) {
-    return value
-      .map((item) => String(item).trim())
-      .filter(Boolean)
-      .slice(0, 5);
-  }
-  if (typeof value === "string") {
-    const parts = value
-      .split(/\r?\n|•|\d+\.\s+|-\s+/)
-      .map((item) => item.trim())
-      .filter(Boolean);
-    return parts.slice(0, 5);
-  }
-  return [];
-}
-
-function extractAnswerPayload(text: string): { answer: string; followupQuestions: string[] } {
-  if (!text || typeof text !== "string") {
-    return { answer: "", followupQuestions: [] };
-  }
-  const parsed = extractJsonObject(text);
-  if (parsed && typeof parsed === "object") {
-    const answer =
-      typeof parsed.answer === "string"
-        ? parsed.answer
-        : typeof parsed.markdown === "string"
-          ? parsed.markdown
-          : typeof parsed.response === "string"
-            ? parsed.response
-            : "";
-    const followupValue =
-      parsed.followup_questions ??
-      parsed.followupQuestions ??
-      parsed.followups ??
-      parsed.next_questions ??
-      parsed.suggested_questions;
-    const followupQuestions = normalizeFollowupQuestions(followupValue);
-    if (answer) {
-      return { answer, followupQuestions };
-    }
-  }
-  return { answer: text, followupQuestions: [] };
-}
-
-async function generateFollowupQuestions(answer: string): Promise<string[]> {
-  if (!answer || !openai) return [];
-  try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.4,
-      messages: [
-        {
-          role: "system",
-          content:
-            "Generate 3-5 concise, domain-relevant follow-up questions based on the provided answer. Return JSON only.",
-        },
-        {
-          role: "user",
-          content: `Answer:\n${answer}\n\nReturn JSON: {"followup_questions":["..."]}`,
-        },
-      ],
-      response_format: { type: "json_object" },
-    });
-    const content = completion.choices?.[0]?.message?.content || "";
-    const parsed = extractJsonObject(content);
-    const followups = normalizeFollowupQuestions(parsed?.followup_questions || parsed?.followupQuestions);
-    return followups;
-  } catch (error) {
-    console.error("Failed to generate follow-up questions:", error);
-    return [];
-  }
-}
-
 function extractDomainFromMetadata(metadata?: string | null): string | undefined {
   if (!metadata) return undefined;
   try {
@@ -500,6 +324,132 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: false,
         error: "Failed to refresh domains. Check server logs for details.",
       });
+    }
+  });
+
+  // Streaming endpoint for concise mode (SSE) using Responses API streaming
+  app.post("/api/query/stream", async (req, res) => {
+    try {
+      const { question, mode, threadId: inputThreadId } = req.body || {};
+      if (!question || mode !== "concise") {
+        return res.status(400).json({ error: "Streaming is supported only for concise mode with a question." });
+      }
+
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+      res.flushHeaders?.();
+
+      const sendEvent = (event: string, data: any) => {
+        res.write(`event: ${event}\n`);
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+      };
+
+      // Create thread if needed
+      let threadId = inputThreadId;
+      if (!threadId) {
+        const title = question.length > 60 ? question.substring(0, 60) + "..." : question;
+        const thread = await storage.createThread({ title });
+        threadId = thread.id;
+      }
+
+      // Save user message
+      await storage.createMessage({
+        threadId: threadId!,
+        role: "user",
+        content: question,
+        responseId: null,
+        sources: null,
+        metadata: null,
+      });
+
+      // Placeholder assistant message
+      const assistantMessage = await storage.createMessage({
+        threadId: threadId!,
+        role: "assistant",
+        content: "",
+        responseId: null,
+        sources: null,
+        metadata: JSON.stringify({ status: "streaming" }),
+      });
+
+      sendEvent("init", { threadId, messageId: assistantMessage.id });
+
+      const client = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      const stream = await client.responses.create({
+        model: process.env.OPENAI_CONCISE_MODEL || "gpt-4.1-mini",
+        input: question,
+        stream: true,
+        max_output_tokens: 400,
+      } as any);
+
+      let fullText = "";
+      let responseId: string | null = null;
+
+      for await (const event of stream) {
+        responseId = responseId || (event as any)?.response?.id || (event as any)?.id || null;
+
+        // Handle delta text events
+        if ((event as any).type && (event as any).type.includes("output_text.delta")) {
+          const delta =
+            (event as any).delta ??
+            (event as any).text ??
+            (event as any).output_text ??
+            "";
+          if (delta) {
+            fullText += delta;
+            sendEvent("delta", { text: delta });
+          }
+        }
+
+        // Handle output_text.done carrying the full text
+        if ((event as any).type && (event as any).type.includes("output_text.done")) {
+          const content =
+            (event as any).output_text ??
+            (event as any).text ??
+            (event as any).content ??
+            "";
+          if (content && fullText.indexOf(content) === -1) {
+            fullText += content;
+          }
+        }
+
+        // Terminal event: response.completed
+        if ((event as any).type === "response.completed") {
+          const out = (event as any).response?.output_text;
+          if (out && fullText.indexOf(out) === -1) {
+            fullText += out;
+          }
+          break;
+        }
+      }
+
+      await storage.updateMessage(assistantMessage.id, {
+        content: fullText,
+        responseId: responseId,
+        metadata: JSON.stringify({ status: "completed" }),
+      });
+      await storage.updateThreadTimestamp(threadId!);
+
+      sendEvent("done", {
+        threadId,
+        messageId: assistantMessage.id,
+        responseId,
+        content: fullText,
+      });
+      res.end();
+    } catch (error: any) {
+      console.error("Streaming error:", error);
+      try {
+        res.write(`event: error\ndata: ${JSON.stringify({ error: error.message || "Stream failed" })}\n\n`);
+      } catch (e) {
+        // ignore
+      }
+      res.end();
     }
   });
 
@@ -570,16 +520,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const cached = await findSimilarCachedResponse(question, mode);
         
         if (cached) {
-          console.log(`[Cache HIT] Returning cached response (original mode: ${cached.cachedMode}, requested mode: ${mode})`);
-          const cachedMetadata = {
-            ...(cached.metadata || {}),
-            isCached: true,
-            cacheId: cached.id,
-            cachedSimilarity: cached.similarity,
-            cachedMode: cached.cachedMode,
-            mode, // requested mode
-            answeredAt: new Date().toISOString(),
-          };
+          console.log(`[Cache HIT] Returning cached response for mode: ${mode}`);
           
           // Get or create thread
           let threadId = validatedData.threadId;
@@ -608,21 +549,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
             content: cached.response,
             responseId: cached.responseId || null,
             sources: null,
-            metadata: JSON.stringify(cachedMetadata),
+            metadata: cached.metadata ? JSON.stringify(cached.metadata) : null,
           });
           
           await storage.updateThreadTimestamp(threadId!);
           
           return res.json({
             threadId,
-            data: fixMarkdownFormatting(cached.response),
-            metadata: JSON.stringify(cachedMetadata),
+            data: cached.response,
+            metadata: cached.metadata ? JSON.stringify(cached.metadata) : undefined,
             citations: undefined,
             responseId: cached.responseId,
             isCached: true,
             cacheId: cached.id,
-            cachedSimilarity: cached.similarity,
-            cachedMode: cached.cachedMode,
             resolvedDomain: cached.metadata?.domainResolution?.domainId,
             domainStrategy: cached.metadata?.domainResolution?.strategy,
           });
@@ -711,9 +650,7 @@ STEP 2 - Focused Response Generation:
 • Be concise while remaining comprehensive on the core topic
 • Prioritize clarity and relevance over exhaustive coverage
 
-User's Question: ${validatedData.question}
-
-${RESPONSE_FORMAT_DIRECTIVE}`;
+User's Question: ${validatedData.question}`;
       } else {
         // Add focus directives for initial questions
         questionToSend = `[Focused Response Directive]
@@ -725,9 +662,7 @@ Please follow these instructions when answering:
 • Be concise while remaining comprehensive on the core topic
 • Prioritize clarity and relevance over exhaustive coverage
 
-User's Question: ${validatedData.question}
-
-${RESPONSE_FORMAT_DIRECTIVE}`;
+User's Question: ${validatedData.question}`;
       }
       
       const domainResolution = domainRouter.resolve({
@@ -744,15 +679,6 @@ ${RESPONSE_FORMAT_DIRECTIVE}`;
         console.warn(`[Domain Validation] Invalid resolved domain: ${resolvedDomain}. Falling back to default: ${DEFAULT_DOMAIN_ID}`);
         finalDomain = DEFAULT_DOMAIN_ID;
         // Update domainResolution to reflect the fallback
-        domainResolution.domainId = DEFAULT_DOMAIN_ID;
-        domainResolution.strategy = "fallback";
-        domainResolution.confidence = 0;
-      }
-      if (!EKG_ALLOWED_DOMAINS.has(finalDomain)) {
-        console.warn(
-          `[Domain Validation] Resolved domain ${finalDomain} is not supported by EKG. Falling back to ${DEFAULT_DOMAIN_ID}.`
-        );
-        finalDomain = DEFAULT_DOMAIN_ID;
         domainResolution.domainId = DEFAULT_DOMAIN_ID;
         domainResolution.strategy = "fallback";
         domainResolution.confidence = 0;
@@ -842,7 +768,6 @@ ${RESPONSE_FORMAT_DIRECTIVE}`;
             ...(result.meta || {}),
             domainResolution,
             status: 'polling',
-            mode: validatedData.mode,
             jobId: null, // Will be set after job creation
           }),
         });
@@ -877,15 +802,6 @@ ${RESPONSE_FORMAT_DIRECTIVE}`;
         
         // Return immediately with job info
         await storage.updateThreadTimestamp(threadId!);
-
-        // Persist mode/domain info on job metadata for later
-        await jobStore.updateJobStatus(jobId, {
-          metadata: {
-            ...(result.meta || {}),
-            domainResolution,
-            mode: validatedData.mode,
-          },
-        });
         
         return res.json({
           threadId: threadId,
@@ -902,16 +818,8 @@ ${RESPONSE_FORMAT_DIRECTIVE}`;
 
       // Handle both 'answer' and 'markdown' fields (API documentation shows 'markdown', but actual API returns 'answer')
       const responseText = result.markdown || result.answer;
-      const { answer: extractedAnswer, followupQuestions: initialFollowups } = extractAnswerPayload(
-        typeof responseText === "string" ? responseText : ""
-      );
-      const responseBody = extractedAnswer || (typeof responseText === "string" ? responseText : "");
-      const followupQuestions =
-        initialFollowups.length > 0
-          ? initialFollowups
-          : await generateFollowupQuestions(responseBody);
       
-      if (result && responseBody) {
+      if (result && responseText) {
         
         // Format sources if available
         let sources = "";
@@ -923,7 +831,6 @@ ${RESPONSE_FORMAT_DIRECTIVE}`;
         const metadataPayload = {
           ...(result.meta || {}),
           domainResolution,
-          followupQuestions,
         };
         const metadata = JSON.stringify(metadataPayload);
         
@@ -941,14 +848,10 @@ ${RESPONSE_FORMAT_DIRECTIVE}`;
         await storage.createMessage({
           threadId: threadId!,
           role: "assistant",
-          content: responseBody,
+          content: responseText,
           responseId: result.response_id || null,
           sources: sources || null,
-          metadata: JSON.stringify({
-            ...(metadata ? JSON.parse(metadata) : {}),
-            mode: validatedData.mode,
-            answeredAt: new Date().toISOString(),
-          }),
+          metadata,
         });
         
         // Capture and store conversation_id from API response for long-running context
@@ -974,7 +877,7 @@ ${RESPONSE_FORMAT_DIRECTIVE}`;
         await saveCachedResponse(
           question,
           mode,
-          responseBody,
+          responseText,
           rawResponseForCache, // Raw response for deep mode
           metadataPayload,
           result.response_id,
@@ -983,7 +886,7 @@ ${RESPONSE_FORMAT_DIRECTIVE}`;
         
         res.json({
           threadId: threadId,
-          data: fixMarkdownFormatting(responseBody),
+          data: responseText,
           metadata,
           citations: sources || undefined,
           responseId: result.response_id,
@@ -1007,8 +910,8 @@ ${RESPONSE_FORMAT_DIRECTIVE}`;
     }
   });
 
-  // Deep mode job status polling endpoints (no auth to allow post-restart checks)
-  app.get("/api/jobs/:jobId/status", async (req, res) => {
+  // Deep mode job status polling endpoints
+  app.get("/api/jobs/:jobId/status", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
       const job = await jobStore.getJob(req.params.jobId);
       if (!job) {
@@ -1068,7 +971,7 @@ ${RESPONSE_FORMAT_DIRECTIVE}`;
   });
 
   // Check for stuck jobs and recover them
-  app.post("/api/jobs/recover-stuck", requireAuth, async (req, res) => {
+  app.post("/api/jobs/recover-stuck", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
       const stuckJobs = await jobStore.getStuckJobs(40); // Align with 30m poll window to avoid false positives
       const recovered: string[] = [];
@@ -1114,7 +1017,7 @@ ${RESPONSE_FORMAT_DIRECTIVE}`;
   });
 
   // Get all jobs (for debugging)
-  app.get("/api/jobs", requireAuth, async (req, res) => {
+  app.get("/api/jobs", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
       const allJobs = await jobStore.getAllJobs();
       const stuckJobs = await jobStore.getStuckJobs(40);
@@ -1147,7 +1050,7 @@ ${RESPONSE_FORMAT_DIRECTIVE}`;
   });
 
   // Get completed job result
-  app.get("/api/jobs/:jobId/result", async (req, res) => {
+  app.get("/api/jobs/:jobId/result", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
       const job = await jobStore.getJob(req.params.jobId);
       if (!job) {
@@ -1175,8 +1078,7 @@ ${RESPONSE_FORMAT_DIRECTIVE}`;
       res.json({
         threadId: job.threadId,
         messageId: job.messageId,
-        data: fixMarkdownFormatting(message.content),
-        sources: message.sources,
+        data: message.content,
         metadata: message.metadata,
         responseId: message.responseId,
         resolvedDomain: metadata.domainResolution?.domainId,
@@ -1187,166 +1089,6 @@ ${RESPONSE_FORMAT_DIRECTIVE}`;
       res.status(500).json({
         error: error instanceof Error ? error.message : "Failed to get job result",
       });
-    }
-  });
-
-  // Manual check endpoint: single status fetch from OpenAI, finalize if done, and return current message snapshot
-  app.get("/api/jobs/:jobId/check", async (req, res) => {
-    try {
-      const job = await jobStore.getJob(req.params.jobId);
-      if (!job) {
-        return res.status(404).json({ error: "Job not found" });
-      }
-
-      const message = await storage.getMessages(job.threadId).then((msgs) =>
-        msgs.find((m) => m.id === job.messageId)
-      );
-
-      // Helper to return current snapshot
-      const returnSnapshot = async (status: string, errorMsg?: string) => {
-        const refreshed = await storage.getMessages(job.threadId).then((msgs) =>
-          msgs.find((m) => m.id === job.messageId)
-        );
-        return res.json({
-          status,
-          error: errorMsg || null,
-          messageId: job.messageId,
-          threadId: job.threadId,
-          messageContent: refreshed?.content ? fixMarkdownFormatting(refreshed.content) : refreshed?.content,
-          metadata: refreshed?.metadata,
-          sources: refreshed?.sources,
-        });
-      };
-
-      // If already terminal, return snapshot
-      if (job.status === "completed" || job.status === "failed") {
-        return returnSnapshot(job.status, job.error || undefined);
-      }
-
-      // Need OpenAI client for status
-      const client = (process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY)
-        ? new OpenAI({
-            apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
-            baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-          })
-        : null;
-
-      if (!client) {
-        return res.status(500).json({ error: "OpenAI client not configured" });
-      }
-
-      // Fetch current status from OpenAI
-      const resp = await (client as any).responses.retrieve(job.responseId);
-      const status = resp?.status || "unknown";
-
-      // If still in progress, just return latest snapshot with updated status
-      if (status !== "completed") {
-        await jobStore.updateJobStatus(job.id, { status: status as any });
-        if (message) {
-          const metadata = message.metadata ? JSON.parse(message.metadata) : {};
-          metadata.status = status;
-          await storage.updateMessage(message.id, { metadata: JSON.stringify(metadata) });
-        }
-        return returnSnapshot(status);
-      }
-
-      // Completed: extract, format, save
-      const rawResponse = extractAnswerText(resp);
-      const { answer: extractedAnswer, followupQuestions: initialFollowups } =
-        extractAnswerPayload(rawResponse);
-      const followupQuestions =
-        initialFollowups.length > 0
-          ? initialFollowups
-          : await generateFollowupQuestions(extractedAnswer || rawResponse);
-      const extractedSources = extractCitationsFromResponse(resp);
-
-      await jobStore.updateJobStatus(job.id, {
-        status: "retrieving",
-        rawResponse: extractedAnswer || rawResponse,
-        metadata: {
-          ...(job.metadata || {}),
-          followupQuestions,
-        },
-      });
-      if (message) {
-        await storage.updateMessage(message.id, {
-          content: "📥 Almost done! Formatting your response...",
-          metadata: JSON.stringify({
-            ...(message.metadata ? JSON.parse(message.metadata) : {}),
-            status: "formatting",
-            jobId: job.id,
-            responseId: job.responseId,
-            mode: job.metadata?.mode,
-            followupQuestions,
-            rawAnswer: extractedAnswer || rawResponse,
-          }),
-        });
-      }
-
-      const formattedAnswer = await formatWithModel51(
-        extractedAnswer || rawResponse,
-        job.question,
-        job.metadata?.domainResolution
-      ).catch(
-        (err) => {
-          console.error(`[Deep Mode] Formatting failed for job ${job.id} (check):`, err);
-          return extractedAnswer || rawResponse;
-        }
-      );
-      const reportResult = await generateStructuredReport({
-        baseContent: formattedAnswer,
-        question: job.question,
-        sources: extractedSources || undefined,
-        responseId: job.responseId,
-      });
-      const finalAnswer = reportResult.content || formattedAnswer;
-      const markdownResult = processMarkdown(finalAnswer);
-      if (markdownResult.issues.length > 0) {
-        console.warn(`[Deep Mode] Markdown issues detected for job ${job.id} (check):`, markdownResult.issues);
-      }
-
-      const metadataPayload = {
-        ...(message?.metadata ? JSON.parse(message.metadata) : {}),
-        polled: true,
-        poll_status: status,
-        domainResolution: job.metadata?.domainResolution,
-        jobId: job.id,
-        status: "completed",
-        responseId: job.responseId,
-        reportFormat: reportResult.formatKey,
-        mode: job.metadata?.mode,
-        answeredAt: new Date().toISOString(),
-        followupQuestions,
-        markdownIssues: markdownResult.issues,
-      };
-      await storage.updateMessage(job.messageId, {
-        content: markdownResult.content,
-        responseId: job.responseId,
-        metadata: JSON.stringify(metadataPayload),
-        sources: extractedSources ? JSON.stringify(extractedSources) : null,
-      });
-
-      await storage.updateThreadTimestamp(job.threadId);
-
-      await jobStore.updateJobStatus(job.id, {
-        status: "completed",
-        formattedResult: markdownResult.content,
-        metadata: metadataPayload,
-      });
-
-      await saveCachedResponse(
-        job.question,
-        "deep",
-        markdownResult.content,
-        extractedAnswer || rawResponse,
-        metadataPayload,
-        job.responseId
-      );
-
-      return returnSnapshot("completed");
-    } catch (error) {
-      console.error("Job check error:", error);
-      res.status(500).json({ error: error instanceof Error ? error.message : "Failed to check job" });
     }
   });
 
@@ -1485,19 +1227,6 @@ Generate quiz questions that:
     }
   });
 
-  // BA knowledge starter questions
-  app.get("/api/ba-questions", async (req, res) => {
-    try {
-      const limitParam = typeof req.query.limit === "string" ? Number(req.query.limit) : 6;
-      const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, 50) : 6;
-      const questions = await storage.getBaKnowledgeQuestions(limit);
-      res.json(questions);
-    } catch (error) {
-      console.error("Error fetching BA questions:", error);
-      res.status(500).json({ error: "Failed to fetch BA questions" });
-    }
-  });
-
   // Helper function to calculate mastery score
   async function calculateMasteryScore() {
     // Get recent quiz attempts (last 20 for performance calculation)
@@ -1617,12 +1346,7 @@ Generate quiz questions that:
     try {
       const id = parseInt(req.params.id);
       const messages = await storage.getMessages(id);
-      // Apply markdown formatting to assistant messages
-      const formattedMessages = messages.map(msg => ({
-        ...msg,
-        content: msg.role === 'assistant' ? fixMarkdownFormatting(msg.content) : msg.content
-      }));
-      res.json(formattedMessages);
+      res.json(messages);
     } catch (error) {
       console.error("Error fetching messages:", error);
       res.status(500).json({ error: "Failed to fetch messages" });
