@@ -76,10 +76,35 @@ router.post(
 
 router.get(
   "/me",
-  requireAuth,
-  asyncHandler<AuthenticatedRequest>(async (req, res) => {
-    const { password: _password, ...userWithoutPassword } = req.user;
-    res.json({ user: userWithoutPassword });
+  // RBAC postponed - make auth optional for now
+  asyncHandler(async (req, res) => {
+    // Try to get authenticated user, but fall back to default if not authenticated
+    try {
+      const sessionId = req.cookies?.wf_session as string | undefined;
+      if (sessionId) {
+        const sessionWithUser = await storage.getSessionWithUser(sessionId);
+        if (sessionWithUser) {
+          const { password: _password, ...userWithoutPassword } = sessionWithUser.user;
+          return res.json({ user: userWithoutPassword });
+        }
+      }
+    } catch (error) {
+      // Ignore auth errors, fall through to default user
+    }
+    
+    // Return default user when not authenticated (RBAC postponed)
+    res.json({
+      user: {
+        id: "default",
+        username: "user",
+        fullName: "Default User",
+        team: "admin",
+        email: null,
+        isActive: true,
+        createdAt: new Date().toISOString(),
+        lastLogin: null,
+      },
+    });
   })
 );
 

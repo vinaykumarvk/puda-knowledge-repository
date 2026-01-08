@@ -16,7 +16,15 @@ import { pollUntilComplete, extractAnswerText, isAsyncDeepModeResponse } from ".
 import { findSimilarCachedResponse, saveCachedResponse } from "./services/responseCache";
 import { jobStore } from "./services/jobStore";
 import { getUploadDir } from "./utils/uploadPaths";
-import { getUploadDir } from "./utils/uploadPaths";
+import { 
+  generateQueryId, 
+  startQueryTracking, 
+  completeQuery, 
+  failQuery, 
+  getQueryStatus,
+  cleanupOldQueries,
+  getThreadStatuses 
+} from "./services/queryStatusTracker";
 
 const EKG_API_URL = "https://ekg-service-47249889063.europe-west6.run.app";
 const domainRouter = new DomainRouter();
@@ -299,6 +307,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
+  // Query status endpoint - returns current processing phase
+  app.get("/api/query/:queryId/status", (req, res) => {
+    const { queryId } = req.params;
+    const status = getQueryStatus(queryId);
+    if (!status) {
+      return res.status(404).json({ error: "Query not found" });
+    }
+    res.json(status);
+  });
+
+  // Thread statuses endpoint for sidebar badges
+  app.get("/api/threads/statuses", (_req, res) => {
+    res.json(getThreadStatuses());
+  });
+
+  // Periodic cleanup of old query statuses (every 5 minutes)
+  setInterval(() => {
+    cleanupOldQueries();
+  }, 5 * 60 * 1000);
+
   app.use("/api/auth", authRouter);
 
   app.get("/api/domains", (_req, res) => {
@@ -309,9 +337,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  app.post("/api/domains/refresh", async (_req, res) => {
+  app.post("/api/domains/refresh", async (req, res) => {
     try {
-      const success = await refreshDomainRegistry();
+      const force =
+        req.query?.force === "true" ||
+        req.body?.force === true ||
+        req.body?.force === "true";
+      const success = await refreshDomainRegistry({ force });
       const syncInfo = getDomainSyncInfo();
       res.json({
         success,
@@ -331,7 +363,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/query/stream", async (req, res) => {
     try {
       const { question, mode, threadId: inputThreadId } = req.body || {};
+      console.log("[Stream] Received request:", { question: question?.substring(0, 50), mode, threadId: inputThreadId });
+      
       if (!question || mode !== "concise") {
+        console.error("[Stream] Invalid request:", { hasQuestion: !!question, mode });
         return res.status(400).json({ error: "Streaming is supported only for concise mode with a question." });
       }
 
@@ -339,21 +374,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
       res.flushHeaders?.();
+      
+      console.log("[Stream] Headers set, starting processing...");
 
       const sendEvent = (event: string, data: any) => {
         res.write(`event: ${event}\n`);
         res.write(`data: ${JSON.stringify(data)}\n\n`);
       };
 
-      // Create thread if needed
+      // Start query tracking for status updates
+      const queryId = generateQueryId();
       let threadId = inputThreadId;
+      startQueryTracking(queryId, mode, threadId);
+
+      // Create thread if needed
       if (!threadId) {
+        console.log("[Stream] Creating new thread...");
         const title = question.length > 60 ? question.substring(0, 60) + "..." : question;
         const thread = await storage.createThread({ title });
         threadId = thread.id;
+        // Update query tracking with resolved threadId
+        startQueryTracking(queryId, mode, threadId);
+        console.log("[Stream] Thread created:", threadId);
+      } else {
+        console.log("[Stream] Using existing thread:", threadId);
       }
 
       // Save user message
+      console.log("[Stream] Saving user message...");
       await storage.createMessage({
         threadId: threadId!,
         role: "user",
@@ -362,86 +410,151 @@ export async function registerRoutes(app: Express): Promise<Server> {
         sources: null,
         metadata: null,
       });
+      console.log("[Stream] User message saved");
 
       // Placeholder assistant message
+      console.log("[Stream] Creating assistant message placeholder...");
       const assistantMessage = await storage.createMessage({
         threadId: threadId!,
         role: "assistant",
         content: "",
         responseId: null,
         sources: null,
-        metadata: JSON.stringify({ status: "streaming" }),
+        metadata: JSON.stringify({ status: "streaming", queryId }),
       });
+      console.log("[Stream] Assistant message created:", assistantMessage.id);
 
-      sendEvent("init", { threadId, messageId: assistantMessage.id });
+      sendEvent("init", { threadId, messageId: assistantMessage.id, queryId });
+      console.log("[Stream] Init event sent");
+
+      // Start status update interval
+      const statusInterval = setInterval(() => {
+        const status = getQueryStatus(queryId);
+        if (status && !status.completed) {
+          sendEvent("status", {
+            message: status.message,
+            extendedWaitMessage: status.extendedWaitMessage,
+            phase: status.phase,
+            phaseName: status.phaseName,
+          });
+        }
+      }, 2000); // Send status updates every 2 seconds
+
+      const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+      if (!apiKey) {
+        console.error("[Stream] OpenAI API key not configured");
+        clearInterval(statusInterval);
+        sendEvent("error", { error: "OpenAI API key not configured" });
+        failQuery(queryId, "OpenAI API key not configured");
+        res.end();
+        return;
+      }
+      console.log("[Stream] OpenAI API key found, creating client...");
 
       const client = new OpenAI({
-        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+        apiKey: apiKey,
         baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
       });
 
-      const stream = await client.responses.create({
-        model: process.env.OPENAI_CONCISE_MODEL || "gpt-4.1-mini",
-        input: question,
-        stream: true,
-        max_output_tokens: 400,
-      } as any);
+      try {
+        console.log("[Stream] Calling OpenAI Responses API...");
+        const stream = await client.responses.create({
+          model: process.env.OPENAI_CONCISE_MODEL || "gpt-4.1-mini",
+          input: question,
+          stream: true,
+          max_output_tokens: 400,
+        } as any);
+        console.log("[Stream] OpenAI stream created, processing events...");
 
-      let fullText = "";
-      let responseId: string | null = null;
+        let fullText = "";
+        let responseId: string | null = null;
 
-      for await (const event of stream) {
-        responseId = responseId || (event as any)?.response?.id || (event as any)?.id || null;
+        let eventCount = 0;
+        for await (const event of stream) {
+          eventCount++;
+          responseId = responseId || (event as any)?.response?.id || (event as any)?.id || null;
 
-        // Handle delta text events
-        if ((event as any).type && (event as any).type.includes("output_text.delta")) {
-          const delta =
-            (event as any).delta ??
-            (event as any).text ??
-            (event as any).output_text ??
-            "";
-          if (delta) {
-            fullText += delta;
-            sendEvent("delta", { text: delta });
+          // Handle delta text events
+          if ((event as any).type && (event as any).type.includes("output_text.delta")) {
+            const delta =
+              (event as any).delta ??
+              (event as any).text ??
+              (event as any).output_text ??
+              "";
+            if (delta) {
+              fullText += delta;
+              sendEvent("delta", { text: delta });
+            }
+          }
+
+          // Handle output_text.done carrying the full text
+          if ((event as any).type && (event as any).type.includes("output_text.done")) {
+            const content =
+              (event as any).output_text ??
+              (event as any).text ??
+              (event as any).content ??
+              "";
+            if (content && fullText.indexOf(content) === -1) {
+              fullText += content;
+            }
+          }
+
+          // Terminal event: response.completed
+          if ((event as any).type === "response.completed") {
+            const out = (event as any).response?.output_text;
+            if (out && fullText.indexOf(out) === -1) {
+              fullText += out;
+            }
+            console.log("[Stream] Response completed, total events:", eventCount, "text length:", fullText.length);
+            break;
           }
         }
-
-        // Handle output_text.done carrying the full text
-        if ((event as any).type && (event as any).type.includes("output_text.done")) {
-          const content =
-            (event as any).output_text ??
-            (event as any).text ??
-            (event as any).content ??
-            "";
-          if (content && fullText.indexOf(content) === -1) {
-            fullText += content;
-          }
+        
+        if (eventCount === 0) {
+          console.warn("[Stream] No events received from OpenAI stream");
         }
 
-        // Terminal event: response.completed
-        if ((event as any).type === "response.completed") {
-          const out = (event as any).response?.output_text;
-          if (out && fullText.indexOf(out) === -1) {
-            fullText += out;
-          }
-          break;
-        }
+        // Stop status updates
+        clearInterval(statusInterval);
+        completeQuery(queryId, { threadId, messageId: assistantMessage.id, responseId, content: fullText });
+
+        console.log("[Stream] Updating message in database:", {
+          messageId: assistantMessage.id,
+          contentLength: fullText.length,
+          threadId,
+        });
+        
+        const updatedMessage = await storage.updateMessage(assistantMessage.id, {
+          content: fullText,
+          responseId: responseId,
+          metadata: JSON.stringify({ status: "completed", queryId }),
+        });
+        
+        console.log("[Stream] Message updated successfully:", {
+          messageId: updatedMessage.id,
+          contentLength: updatedMessage.content?.length || 0,
+        });
+        
+        await storage.updateThreadTimestamp(threadId!);
+
+        sendEvent("done", {
+          threadId,
+          messageId: assistantMessage.id,
+          responseId,
+          content: fullText,
+        });
+        res.end();
+      } catch (openaiError: any) {
+        console.error("OpenAI streaming error:", openaiError);
+        clearInterval(statusInterval);
+        failQuery(queryId, openaiError.message || "OpenAI API error");
+        sendEvent("error", { error: openaiError.message || "OpenAI API error" });
+        await storage.updateMessage(assistantMessage.id, {
+          content: "⚠️ Error: " + (openaiError.message || "Failed to get response"),
+          metadata: JSON.stringify({ status: "failed", error: openaiError.message, queryId }),
+        });
+        res.end();
       }
-
-      await storage.updateMessage(assistantMessage.id, {
-        content: fullText,
-        responseId: responseId,
-        metadata: JSON.stringify({ status: "completed" }),
-      });
-      await storage.updateThreadTimestamp(threadId!);
-
-      sendEvent("done", {
-        threadId,
-        messageId: assistantMessage.id,
-        responseId,
-        content: fullText,
-      });
-      res.end();
     } catch (error: any) {
       console.error("Streaming error:", error);
       try {
@@ -884,6 +997,11 @@ User's Question: ${validatedData.question}`;
           originalCacheId // Link to original if this was a refresh
         );
         
+        // Get the message IDs that were just created
+        const messages = await storage.getMessages(threadId!);
+        const lastUserMessage = messages.filter(m => m.role === 'user').pop();
+        const lastAssistantMessage = messages.filter(m => m.role === 'assistant').pop();
+        
         res.json({
           threadId: threadId,
           data: responseText,
@@ -894,6 +1012,8 @@ User's Question: ${validatedData.question}`;
           resolvedDomain,
           domainStrategy: domainResolution.strategy,
           isCached: false,
+          messageId: lastAssistantMessage?.id, // Return the actual message ID from database
+          userMessageId: lastUserMessage?.id,
         });
       } else {
         res.status(500).json({

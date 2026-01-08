@@ -49,7 +49,12 @@ export function ThreadSidebar({
     },
   });
 
-  const filteredThreads = threads.filter((thread) =>
+  // Deduplicate threads by ID (in case API returns duplicates)
+  const uniqueThreads = Array.from(
+    new Map(threads.map((thread) => [thread.id, thread])).values()
+  );
+
+  const filteredThreads = uniqueThreads.filter((thread) =>
     thread.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -193,7 +198,7 @@ export function ThreadSidebar({
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {formatDistanceToNow(new Date(thread.updatedAt), { addSuffix: true })}
+                    {thread.updatedAt ? formatDistanceToNow(new Date(thread.updatedAt), { addSuffix: true }) : 'recently'}
                   </p>
                 </div>
                 <Button

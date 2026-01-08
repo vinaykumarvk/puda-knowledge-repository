@@ -9,8 +9,7 @@ interface ProtectedRouteProps {
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { user, loading } = useAuth();
 
-  // TEMPORARY: Bypass auth while database connectivity is being fixed
-  // TODO: Set to false once Replit database is working
+  // RBAC postponed - bypass authentication for now
   const bypassAuth = true;
 
   if (bypassAuth) {
@@ -26,13 +25,8 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
       );
     }
     
-    // In bypass mode, redirect unauthenticated users to login
-    if (!user) {
-      return <Redirect to="/login" />;
-    }
-    
-    // Allow authenticated users through
-    console.warn("⚠️ Authentication bypass is ENABLED. Database connectivity issue - authentication temporarily disabled.");
+    // In bypass mode, allow access regardless of user state
+    // RBAC will be implemented later
     return <>{children}</>;
   }
 

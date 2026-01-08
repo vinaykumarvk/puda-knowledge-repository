@@ -43,6 +43,28 @@ export const insertMessageSchema = createInsertSchema(messages).omit({
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type Message = typeof messages.$inferSelect;
 
+// Domains table - persisted domain registry for vector stores
+export const domains = pgTable("domains", {
+  id: text("id").primaryKey(),
+  label: text("label").notNull(),
+  description: text("description").notNull(),
+  ekgDomain: text("ekg_domain").notNull(),
+  defaultVectorStoreId: text("default_vector_store_id").notNull(),
+  vectorStoreName: text("vector_store_name").notNull(),
+  status: text("status"),
+  keywords: text("keywords").notNull(), // JSON string
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertDomainSchema = createInsertSchema(domains).omit({
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertDomain = z.infer<typeof insertDomainSchema>;
+export type Domain = typeof domains.$inferSelect;
+
 // Deep mode background jobs (persisted)
 export const deepModeJobs = pgTable("deep_mode_jobs", {
   id: text("id").primaryKey(),
@@ -109,6 +131,7 @@ export const querySchema = z.object({
   refresh: z.boolean().optional(),
   refreshCache: z.boolean().optional(), // Bypass cache and get fresh answer
   threadId: z.number().optional(), // Optional thread ID for conversational mode
+  background: z.boolean().optional(), // Run in background (async)
 });
 
 export type Query = z.infer<typeof querySchema>;

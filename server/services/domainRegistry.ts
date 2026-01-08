@@ -1,4 +1,6 @@
 import OpenAI from "openai";
+import { db } from "../db";
+import { domains } from "@shared/schema";
 
 export type DomainId = string;
 
@@ -99,6 +101,20 @@ function buildRegistryFromBase(): Record<DomainId, DomainConfig> {
   return entries;
 }
 
+function serializeKeywords(keywords: string[]): string {
+  return JSON.stringify(keywords || []);
+}
+
+function parseKeywords(value: string | null | undefined): string[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_error) {
+    return value.split(",").map((item) => item.trim()).filter(Boolean);
+  }
+}
+
 function normalizeDomainId(name: string | null | undefined): DomainId {
   if (!name) return DEFAULT_DOMAIN_ID;
   return name
@@ -196,6 +212,101 @@ function buildRegistryFromStores(stores: Awaited<
   return nextRegistry;
 }
 
+async function loadRegistryFromDb(): Promise<{
+  registry: Record<DomainId, DomainConfig>;
+  lastSyncedAt: string | null;
+}> {
+  let rows: Array<typeof domains.$inferSelect> = [];
+  try {
+    rows = await db.select().from(domains);
+  } catch (error) {
+    console.warn("Domain registry DB load failed:", error);
+    return { registry: {}, lastSyncedAt: null };
+  }
+  if (!rows.length) {
+    return { registry: {}, lastSyncedAt: null };
+  }
+
+  const registry: Record<DomainId, DomainConfig> = {};
+  let latest: string | null = null;
+
+  for (const row of rows) {
+    registry[row.id] = {
+      id: row.id,
+      label: row.label,
+      description: row.description,
+      ekgDomain: row.ekgDomain,
+      defaultVectorStoreId: row.defaultVectorStoreId,
+      vectorStoreName: row.vectorStoreName,
+      status: row.status ?? undefined,
+      keywords: parseKeywords(row.keywords),
+    };
+
+    const updatedAt = row.updatedAt?.toISOString?.() ?? null;
+    if (updatedAt && (!latest || updatedAt > latest)) {
+      latest = updatedAt;
+    }
+  }
+
+  if (!registry[DEFAULT_DOMAIN_ID] && BASE_DOMAIN_METADATA[DEFAULT_DOMAIN_ID]) {
+    const meta = BASE_DOMAIN_METADATA[DEFAULT_DOMAIN_ID];
+    registry[DEFAULT_DOMAIN_ID] = {
+      id: meta.id,
+      label: meta.label,
+      description: meta.description,
+      ekgDomain: meta.id,
+      defaultVectorStoreId: meta.fallbackVectorStoreId || "",
+      vectorStoreName: meta.id,
+      status: "fallback",
+      keywords: meta.keywords,
+    };
+  }
+
+  return { registry, lastSyncedAt: latest };
+}
+
+async function persistRegistryToDb(
+  registry: Record<DomainId, DomainConfig>,
+): Promise<void> {
+  const now = new Date();
+  const rows = Object.values(registry).map((domain) => ({
+    id: domain.id,
+    label: domain.label,
+    description: domain.description,
+    ekgDomain: domain.ekgDomain,
+    defaultVectorStoreId: domain.defaultVectorStoreId,
+    vectorStoreName: domain.vectorStoreName,
+    status: domain.status || null,
+    keywords: serializeKeywords(domain.keywords),
+    updatedAt: now,
+  }));
+
+  if (!rows.length) {
+    return;
+  }
+
+  await db.transaction(async (tx) => {
+    for (const row of rows) {
+      await tx
+        .insert(domains)
+        .values(row)
+        .onConflictDoUpdate({
+          target: domains.id,
+          set: {
+            label: row.label,
+            description: row.description,
+            ekgDomain: row.ekgDomain,
+            defaultVectorStoreId: row.defaultVectorStoreId,
+            vectorStoreName: row.vectorStoreName,
+            status: row.status,
+            keywords: row.keywords,
+            updatedAt: row.updatedAt,
+          },
+        });
+    }
+  });
+}
+
 export async function initializeDomainRegistry(): Promise<void> {
   if (syncInFlight) {
     await syncInFlight;
@@ -210,17 +321,38 @@ export async function initializeDomainRegistry(): Promise<void> {
   }
 }
 
-export async function refreshDomainRegistry(): Promise<boolean> {
+export async function refreshDomainRegistry(options?: {
+  force?: boolean;
+}): Promise<boolean> {
   try {
+    if (!options?.force) {
+      const fromDb = await loadRegistryFromDb();
+      if (Object.keys(fromDb.registry).length > 0) {
+        domainRegistry = fromDb.registry;
+        lastSyncedAt = fromDb.lastSyncedAt || new Date().toISOString();
+        return true;
+      }
+    }
+
     const stores = await fetchAllVectorStores();
     domainRegistry = buildRegistryFromStores(stores);
     lastSyncedAt = new Date().toISOString();
+    await persistRegistryToDb(domainRegistry);
     return true;
   } catch (error) {
     console.error("Failed to refresh domain registry:", error);
     // Preserve whatever registry we currently have; ensure at least base defaults
     if (Object.keys(domainRegistry).length === 0) {
-      domainRegistry = buildRegistryFromBase();
+      const fromDb = await loadRegistryFromDb().catch(() => ({
+        registry: {},
+        lastSyncedAt: null,
+      }));
+      if (Object.keys(fromDb.registry).length > 0) {
+        domainRegistry = fromDb.registry;
+        lastSyncedAt = fromDb.lastSyncedAt || new Date().toISOString();
+      } else {
+        domainRegistry = buildRegistryFromBase();
+      }
     }
     if (!lastSyncedAt) {
       lastSyncedAt = new Date().toISOString();

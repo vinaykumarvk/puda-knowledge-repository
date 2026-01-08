@@ -22,7 +22,7 @@ export function WorkspacePanel({
   return (
     <div
       className={cn(
-        "flex h-full flex-col border-border bg-card/70 backdrop-blur",
+        "flex h-full flex-col min-h-0 border-border bg-card/70 backdrop-blur",
         layout === "desktop" ? "hidden w-[280px] border-r md:flex" : "flex w-full",
         className,
       )}

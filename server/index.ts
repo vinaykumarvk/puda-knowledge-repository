@@ -3,7 +3,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import cookieParser from "cookie-parser";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
-import { seedUsers } from "./seed-users";
+// import { seedUsers } from "./seed-users"; // Commented out - not used in production
 import { initializeDomainRegistry } from "./services/domainRegistry";
 
 const app = express();
@@ -88,15 +88,13 @@ app.use((req, res, next) => {
     console.log('Static file serving configured');
   }
 
-  // Seed sample users on startup
-  // Temporarily commented out due to database connectivity issues
+  // Seed sample users on startup - disabled in production
   // await seedUsers();
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || '5000', 10);
+  // Cloud Run uses PORT env var (defaults to 8080)
+  // For local dev, default to 5000 if not specified
+  const port = parseInt(process.env.PORT || (process.env.NODE_ENV === 'production' ? '8080' : '5000'), 10);
   
   // Use standard Node.js server.listen() syntax
   // Cloud Run requires listening on 0.0.0.0 to accept external connections

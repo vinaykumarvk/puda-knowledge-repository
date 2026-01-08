@@ -24,10 +24,32 @@ import type { UserMastery } from "@shared/schema";
 function ProtectedLayout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Fetch mastery data for header stats
-  const { data: masteryData } = useQuery<UserMastery>({
+  // Fetch mastery data for header stats (optional - don't fail if it errors)
+  const { data: masteryData, error: masteryError } = useQuery<UserMastery>({
     queryKey: ["/api/mastery"],
+    retry: false,
+    refetchOnWindowFocus: false,
+    throwOnError: false, // Don't throw errors - just return undefined
+    queryFn: async () => {
+      try {
+        const res = await fetch("/api/mastery", { credentials: "include" });
+        if (!res.ok) {
+          // Return undefined instead of throwing
+          return undefined;
+        }
+        return await res.json();
+      } catch (error) {
+        // Silently handle errors - mastery data is optional
+        console.debug("Mastery data not available:", error);
+        return undefined;
+      }
+    },
   });
+
+  // Log errors but don't let them crash the component
+  if (masteryError) {
+    console.debug("Mastery query error (non-blocking):", masteryError);
+  }
 
   const handleSearch = (query: string) => {
     console.log("Global search:", query);

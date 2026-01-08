@@ -37,14 +37,17 @@ RUN npm ci --only=production && npm cache clean --force
 COPY --from=builder /app/dist ./dist
 # Copy shared schema (needed at runtime for type inference)
 COPY --from=builder /app/shared ./shared
-# Copy attached assets (images, etc.)
+# Copy attached assets (images, JSON files, etc.)
 COPY --from=builder /app/attached_assets ./attached_assets
+# Copy docs directory (contains JSON config files)
+COPY --from=builder /app/docs ./docs
 
 # Create uploads directory (ephemeral in Cloud Run - files lost on restart)
 RUN mkdir -p /tmp/uploads/documents
 
 # Set environment to production
 ENV NODE_ENV=production
+# PORT is set by Cloud Run automatically, but we set a default for local testing
 ENV PORT=8080
 
 # Expose port (Cloud Run uses PORT env var)

@@ -31,8 +31,15 @@ export async function setupVite(app: Express, server: Server) {
   
   // Import vite config dynamically
   // This path is relative to the source file location (server/vite.ts -> ../vite.config.ts)
-  const viteConfigModule = await import("../vite.config");
-  const viteConfig = viteConfigModule.default;
+  // Use a try-catch to handle if vite.config is not available (shouldn't happen in dev)
+  let viteConfig;
+  try {
+    const viteConfigModule = await import("../vite.config");
+    viteConfig = viteConfigModule.default;
+  } catch (e) {
+    console.error('Failed to import vite.config:', e);
+    throw new Error('vite.config.ts is required for development mode');
+  }
   
   const viteLogger = createLogger();
   

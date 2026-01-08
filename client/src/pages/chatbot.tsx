@@ -688,7 +688,8 @@ export default function ChatbotPage() {
     };
 
     const tempAssistantId = Date.now() + 1;
-    const assistantMessage: Message & { isStreaming?: boolean } = {
+    let statusMessage = "";
+    const assistantMessage: Message & { isStreaming?: boolean; statusMessage?: string } = {
       id: tempAssistantId,
       threadId: currentThreadId || -1,
       role: "assistant",
@@ -698,6 +699,7 @@ export default function ChatbotPage() {
       metadata: JSON.stringify({ status: "streaming" }),
       createdAt: new Date(),
       isStreaming: true,
+      statusMessage: "",
     };
 
     setMessages((prev) => [...prev, userMessage, assistantMessage]);
@@ -733,6 +735,7 @@ export default function ChatbotPage() {
                 metadata: JSON.stringify({ status: "completed" }),
                 isStreaming: false,
                 threadId: resolvedThreadId || msg.threadId,
+                statusMessage: undefined,
               };
             }
             if (msg.id === userMessage.id) {
@@ -740,6 +743,17 @@ export default function ChatbotPage() {
             }
             return msg;
           })
+        );
+      };
+
+      const updateStatus = (statusText: string) => {
+        statusMessage = statusText;
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === resolvedAssistantId
+              ? { ...msg, statusMessage: statusText }
+              : msg
+          )
         );
       };
 
@@ -765,12 +779,22 @@ export default function ChatbotPage() {
             if (!currentThreadId && resolvedThreadId) {
               setCurrentThreadId(resolvedThreadId);
             }
+          } else if (event === "status") {
+            // Update status message
+            const statusText = data.extendedWaitMessage || data.message || "";
+            if (statusText) {
+              updateStatus(statusText);
+            }
           } else if (event === "delta") {
             const deltaText = data.text || "";
+            // Clear status message when content starts streaming
+            if (deltaText && statusMessage) {
+              updateStatus("");
+            }
             setMessages((prev) =>
               prev.map((msg) =>
                 msg.id === resolvedAssistantId
-                  ? { ...msg, content: (msg.content || "") + deltaText }
+                  ? { ...msg, content: (msg.content || "") + deltaText, statusMessage: "" }
                   : msg
               )
             );
@@ -784,7 +808,12 @@ export default function ChatbotPage() {
 
       const existing = messages.find((m) => m.id === resolvedAssistantId);
       finalize(existing?.content || "");
+      
+      // Invalidate both threads and messages queries to ensure fresh data
       queryClient.invalidateQueries({ queryKey: ["/api/threads"] });
+      if (resolvedThreadId) {
+        queryClient.invalidateQueries({ queryKey: [`/api/threads/${resolvedThreadId}/messages`] });
+      }
     } catch (error: any) {
       console.error("Streaming failed:", error);
       toast({
@@ -818,7 +847,15 @@ export default function ChatbotPage() {
 
   // Update messages when thread changes
   useEffect(() => {
+    // Don't replace messages if we're currently streaming for this thread
+    // This prevents overwriting streaming content when user clicks thread during streaming
+    if (isStreaming && currentThreadId) {
+      console.log('[Chatbot] Skipping message update - currently streaming for thread:', currentThreadId);
+      return;
+    }
+    
     if (fetchedMessages) {
+      console.log('[Chatbot] Loading messages from database:', { threadId: currentThreadId, count: fetchedMessages.length });
       setMessages(fetchedMessages);
       
       // Check for any messages that are still polling and resume polling
@@ -838,7 +875,7 @@ export default function ChatbotPage() {
     } else {
       setMessages([]);
     }
-  }, [fetchedMessages, pollJobStatus]);
+  }, [fetchedMessages, pollJobStatus, isStreaming, currentThreadId]);
 
   // Cleanup polling intervals on unmount to prevent orphaned timers
   useEffect(() => {
@@ -851,17 +888,53 @@ export default function ChatbotPage() {
     };
   }, []);
 
-  // Auto-scroll to show top of new assistant messages
+  // Track if user has manually scrolled up
+  const userScrolledUpRef = useRef(false);
+  const lastScrollTopRef = useRef(0);
+
+  // Monitor scroll position to detect manual scrolling
   useEffect(() => {
-    if (lastAssistantMessageRef.current && messages.length > 0) {
+    const scrollArea = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
+    if (!scrollArea) return;
+
+    const handleScroll = () => {
+      const currentScrollTop = scrollArea.scrollTop;
+      const scrollHeight = scrollArea.scrollHeight;
+      const clientHeight = scrollArea.clientHeight;
+      
+      // If user scrolled up (scrollTop decreased), mark as manually scrolled
+      if (currentScrollTop < lastScrollTopRef.current) {
+        userScrolledUpRef.current = true;
+      }
+      
+      // If user is near bottom (within 100px), reset the flag
+      if (scrollHeight - currentScrollTop - clientHeight < 100) {
+        userScrolledUpRef.current = false;
+      }
+      
+      lastScrollTopRef.current = currentScrollTop;
+    };
+
+    scrollArea.addEventListener('scroll', handleScroll);
+    return () => scrollArea.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Auto-scroll to show top of new assistant messages (only if user hasn't scrolled up)
+  useEffect(() => {
+    if (lastAssistantMessageRef.current && messages.length > 0 && !userScrolledUpRef.current) {
       const lastMessage = messages[messages.length - 1];
       
       // Only scroll if the last message is an assistant message (new answer)
       if (lastMessage.role === "assistant") {
-        lastAssistantMessageRef.current.scrollIntoView({ 
-          behavior: "smooth", 
-          block: "start" 
-        });
+        // Use setTimeout to ensure DOM is updated
+        setTimeout(() => {
+          if (!userScrolledUpRef.current && lastAssistantMessageRef.current) {
+            lastAssistantMessageRef.current.scrollIntoView({ 
+              behavior: "smooth", 
+              block: "start" 
+            });
+          }
+        }, 100);
       }
     }
   }, [messages]);
@@ -932,31 +1005,120 @@ export default function ChatbotPage() {
           pollJobStatus(data.jobId, data.messageId, data.threadId);
         } else {
           // Normal synchronous response
-          const assistantMessage: Message & { isCached?: boolean; cacheId?: number } = {
-            id: Date.now() + 1,
-            threadId: data.threadId,
-            role: "assistant",
-            content: data.data,
-            responseId: data.responseId || null,
-            sources: data.citations || null,
-            metadata: data.metadata || null,
-            createdAt: new Date(),
-            isCached: data.isCached || false,
-            cacheId: data.cacheId,
-          };
+          // For regenerate (refreshCache), we should replace the old assistant message
+          // For new queries, we add new messages
+          const isRegenerate = variables.refreshCache;
           
-          setMessages((prev) => [...prev, userMessage, assistantMessage]);
+          if (isRegenerate && currentThreadId) {
+            // Regenerate: Replace the last assistant message with the new one
+            // First, invalidate to get the real message IDs from database
+            queryClient.invalidateQueries({ queryKey: [`/api/threads/${currentThreadId}/messages`] });
+            
+            // Also update optimistically, but the real data will come from the query
+            setMessages((prev) => {
+              // Find the last assistant message and replace it
+              const newMessages = [...prev];
+              let lastAssistantIndex = -1;
+              for (let i = newMessages.length - 1; i >= 0; i--) {
+                if (newMessages[i].role === "assistant") {
+                  lastAssistantIndex = i;
+                  break;
+                }
+              }
+              
+              if (lastAssistantIndex >= 0) {
+                // Replace the last assistant message
+                newMessages[lastAssistantIndex] = {
+                  ...newMessages[lastAssistantIndex],
+                  content: data.data,
+                  responseId: data.responseId || null,
+                  metadata: data.metadata || null,
+                  isCached: data.isCached || false,
+                  cacheId: data.cacheId,
+                };
+              } else {
+                // No assistant message found, add new one
+                const assistantMessage: Message & { isCached?: boolean; cacheId?: number } = {
+                  id: data.messageId || Date.now() + 1,
+                  threadId: data.threadId,
+                  role: "assistant",
+                  content: data.data,
+                  responseId: data.responseId || null,
+                  sources: data.citations || null,
+                  metadata: data.metadata || null,
+                  createdAt: new Date(),
+                  isCached: data.isCached || false,
+                  cacheId: data.cacheId,
+                };
+                newMessages.push(userMessage, assistantMessage);
+              }
+              
+              return newMessages;
+            });
+          } else {
+            // New query: Add new messages
+            const assistantMessage: Message & { isCached?: boolean; cacheId?: number } = {
+              id: data.messageId || Date.now() + 1,
+              threadId: data.threadId,
+              role: "assistant",
+              content: data.data,
+              responseId: data.responseId || null,
+              sources: data.citations || null,
+              metadata: data.metadata || null,
+              createdAt: new Date(),
+              isCached: data.isCached || false,
+              cacheId: data.cacheId,
+            };
+            
+            setMessages((prev) => [...prev, userMessage, assistantMessage]);
+          }
+          
           setQuestion("");
         }
         
-        // Invalidate queries to refresh thread list
+        // Invalidate queries to refresh thread list and messages
         queryClient.invalidateQueries({ queryKey: ["/api/threads"] });
+        if (data.threadId) {
+          queryClient.invalidateQueries({ queryKey: [`/api/threads/${data.threadId}/messages`] });
+        }
       }
     },
     onError: (error: Error) => {
       toast({
         title: "Error",
         description: error.message || "Failed to send message",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const refreshDomainsMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/domains/refresh", {
+        force: true,
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      if (!data?.success) {
+        toast({
+          title: "Refresh failed",
+          description: data?.error || "Unable to refresh domain registry",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const domainCount = Array.isArray(data?.domains) ? data.domains.length : 0;
+      toast({
+        title: "Domain registry updated",
+        description: `Synced ${domainCount} domains${data?.lastSyncedAt ? ` at ${new Date(data.lastSyncedAt).toLocaleString()}` : ""}.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Refresh failed",
+        description: error.message || "Unable to refresh domain registry",
         variant: "destructive",
       });
     },
@@ -1043,7 +1205,7 @@ export default function ChatbotPage() {
   };
 
   return (
-    <div className="flex flex-1 bg-background">
+    <div className="flex flex-1 h-full min-h-0 bg-background">
       <WorkspacePanel
         layout="desktop"
         onSelectThread={handleSelectThread}
@@ -1052,9 +1214,9 @@ export default function ChatbotPage() {
         selectedThreadId={currentThreadId}
       />
 
-      <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col min-h-0 overflow-hidden">
         {/* Header */}
-        <header className="border-b border-border bg-card/30 backdrop-blur-sm px-4 py-4 sm:px-6">
+        <header className="border-b border-border bg-card/30 backdrop-blur-sm px-4 py-4 sm:px-6 flex-shrink-0">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="flex items-start gap-3">
               <Sparkles className="mt-1 h-6 w-6 text-primary" />
@@ -1086,6 +1248,17 @@ export default function ChatbotPage() {
                 </SheetContent>
               </Sheet>
 
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => refreshDomainsMutation.mutate()}
+                disabled={refreshDomainsMutation.isPending}
+              >
+                <RefreshCw className={`h-4 w-4 ${refreshDomainsMutation.isPending ? "animate-spin" : ""}`} />
+                Refresh Domains
+              </Button>
+
               {currentThreadId && hasMessages && (
                 <Button
                   variant="outline"
@@ -1103,22 +1276,49 @@ export default function ChatbotPage() {
         </header>
 
         {/* Messages Area */}
-        <ScrollArea ref={scrollAreaRef} className="flex-1">
-          <div className="max-w-4xl mx-auto px-6 py-8">
+        <ScrollArea ref={scrollAreaRef} className="flex-1 min-h-0">
+          <div className="max-w-4xl mx-auto px-6 min-h-full flex flex-col">
             {!hasMessages && !isLoading && (
-              <div className="flex flex-col items-center justify-center py-16">
-                <div className="space-y-3 text-center">
+              <div className="flex flex-col items-center justify-center flex-1 py-8 pb-32">
+                <div className="space-y-6 text-center max-w-2xl mx-auto w-full">
                   <Sparkles className="mx-auto h-16 w-16 text-primary/40" />
-                  <h2 className="text-2xl font-semibold text-foreground">
-                    How can I help you today?
-                  </h2>
-                  <p className="mx-auto max-w-md text-sm text-muted-foreground">
-                    Ask any question about wealth management, customer processes, or system workflows.
-                  </p>
+                  <div className="space-y-3">
+                    <h2 className="text-2xl font-semibold text-foreground">
+                      How can I help you today?
+                    </h2>
+                    <p className="mx-auto max-w-md text-sm text-muted-foreground">
+                      Ask any question about wealth management, customer processes, or system workflows.
+                    </p>
+                  </div>
+                  
+                  {/* Suggested Questions */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-8 px-4">
+                    {[
+                      "What are the steps in mutual funds order placement?",
+                      "How does the OTP verification process work?",
+                      "Explain the compliance requirements for transactions",
+                      "What is the risk profiling process?",
+                    ].map((suggestion, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          setQuestion(suggestion);
+                          handleSubmit(suggestion);
+                        }}
+                        className="text-left p-4 rounded-lg border border-border/60 bg-card/50 hover:bg-card hover:border-primary/50 transition-all duration-200 group"
+                      >
+                        <p className="text-sm font-medium text-foreground group-hover:text-primary transition-colors">
+                          {suggestion}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
 
+            {messages.length > 0 && (
+              <div className="py-8">
             {messages.map((message, index) => {
               // Find the corresponding user message for this assistant message
               const userMessage = message.role === "assistant" && index > 0 ? messages[index - 1] : null;
@@ -1152,14 +1352,31 @@ export default function ChatbotPage() {
                       {message.role === "user" ? (
                         <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                       ) : (
-                        <div className="prose prose-sm max-w-none dark:prose-invert prose-a:text-primary prose-a:no-underline hover:prose-a:underline">
-                          <ReactMarkdown 
-                            rehypePlugins={[rehypeRaw]}
-                            remarkPlugins={[remarkGfm]}
-                          >
-                            {formatProfessionally(cleanupCitations(removeKGTags(decodeHTMLEntities(message.content))))}
-                          </ReactMarkdown>
-                        </div>
+                        <>
+                          {/* Status message (shown while waiting for response) */}
+                          {(message as any).statusMessage && !message.content && (
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <span>{(message as any).statusMessage}</span>
+                            </div>
+                          )}
+                          {/* Actual content */}
+                          {message.content ? (
+                            <div className="prose prose-sm max-w-none dark:prose-invert prose-a:text-primary prose-a:no-underline hover:prose-a:underline">
+                              <ReactMarkdown 
+                                rehypePlugins={[rehypeRaw]}
+                                remarkPlugins={[remarkGfm]}
+                              >
+                                {formatProfessionally(cleanupCitations(removeKGTags(decodeHTMLEntities(message.content))))}
+                              </ReactMarkdown>
+                            </div>
+                          ) : (message as any).isStreaming && !(message as any).statusMessage ? (
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <span>Thinking...</span>
+                            </div>
+                          ) : null}
+                        </>
                       )}
                     </div>
                     
@@ -1270,6 +1487,8 @@ export default function ChatbotPage() {
                 </div>
               );
             })}
+              </div>
+            )}
 
             {isLoading && (
               <div className="mb-6" data-testid="loading-indicator">
@@ -1299,7 +1518,7 @@ export default function ChatbotPage() {
         </ScrollArea>
 
         {/* Input Area - Fixed at bottom */}
-        <div className="border-t border-border bg-card/30 backdrop-blur-sm p-4">
+        <div className="border-t border-border bg-card/30 backdrop-blur-sm p-4 flex-shrink-0">
           <div className="mx-auto flex max-w-4xl flex-col gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">

@@ -88,7 +88,11 @@ export function TopHeader({ questionsAsked = 0, quizzesCompleted = 0, onSearch, 
   const recentThreads = useMemo(
     () =>
       [...threads]
-        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+        .sort((a, b) => {
+          const timeA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+          const timeB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+          return timeB - timeA;
+        })
         .slice(0, 6),
     [threads],
   );
@@ -278,7 +282,7 @@ export function TopHeader({ questionsAsked = 0, quizzesCompleted = 0, onSearch, 
                   <div className="flex flex-col">
                     <span className="text-sm font-medium">{thread.title}</span>
                     <span className="text-xs text-muted-foreground">
-                      Updated {formatDistanceToNow(new Date(thread.updatedAt), { addSuffix: true })}
+                      Updated {thread.updatedAt ? formatDistanceToNow(new Date(thread.updatedAt), { addSuffix: true }) : 'recently'}
                     </span>
                   </div>
                 </CommandItem>

@@ -12,9 +12,8 @@ coverage
 .DS_Store
 uploads
 server.log
-*.png
-*.jpg
-*.jpeg
 test-*.ts
 *.backup
+# Note: .png, .jpg, .jpeg, and .json files are needed in production
+# They are included in attached_assets and docs directories
 
