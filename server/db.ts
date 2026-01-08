@@ -14,7 +14,7 @@ if (!process.env.DATABASE_URL) {
 // Configure SSL for Supabase connections
 // In development, allow self-signed certificates; in production, use strict verification
 const isDevelopment = process.env.NODE_ENV === 'development';
-const isSupabase = process.env.DATABASE_URL.includes('supabase.co');
+const isSupabase = process.env.DATABASE_URL?.includes('supabase.co') || false;
 
 // Initialize Supabase JS client (works via REST API over HTTPS - same as report-generator)
 let supabaseClient: SupabaseClient | null = null;
