@@ -84,7 +84,7 @@ export function MasteryBar() {
       </TooltipTrigger>
       <TooltipContent side="bottom" className="max-w-xs">
         <div className="space-y-2">
-          <div className="font-semibold text-sm">Wealth Knowledge Mastery</div>
+          <div className="font-semibold text-sm">Urban Administration Knowledge Mastery</div>
           <div className="space-y-1 text-xs">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Quiz Performance:</span>

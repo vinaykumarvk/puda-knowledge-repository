@@ -22,6 +22,7 @@ Set these in Google Cloud Run/App Engine environment variables or Secret Manager
   - OR `AI_INTEGRATIONS_OPENAI_API_KEY` - Replit AI Integrations key
 - `AI_INTEGRATIONS_OPENAI_BASE_URL` - (Optional) Custom OpenAI base URL
 - `OPENAI_FORMATTER_MODEL` - (Optional) Model for formatting responses (default: "gpt-5.1")
+- `PUDA_ACTS_REGULATIONS_KG_PATH` - **Required** KG path (recommended: `gs://bucket/path/to/puda_master_kg.json`)
 
 ### Application
 - `NODE_ENV` - Set to `production` (automatically set in Dockerfile)
@@ -50,7 +51,7 @@ Set these in Google Cloud Run/App Engine environment variables or Secret Manager
    ```bash
    gcloud run services update ekg-product \
      --region=us-central1 \
-     --set-env-vars="DATABASE_URL=your_db_url,OPENAI_API_KEY=your_key"
+     --set-env-vars="DATABASE_URL=your_db_url,OPENAI_API_KEY=your_key,PUDA_ACTS_REGULATIONS_KG_PATH=gs://your-bucket/path/to/puda_master_kg.json"
    ```
 
 #### Manual Deployment
@@ -72,8 +73,14 @@ Set these in Google Cloud Run/App Engine environment variables or Secret Manager
      --cpu 2 \
      --min-instances 1 \
      --max-instances 10 \
-     --set-env-vars "DATABASE_URL=your_db_url,OPENAI_API_KEY=your_key"
+     --set-env-vars "DATABASE_URL=your_db_url,OPENAI_API_KEY=your_key,PUDA_ACTS_REGULATIONS_KG_PATH=gs://your-bucket/path/to/puda_master_kg.json"
    ```
+
+### KG File Placement
+
+- Store the large PUDA KG JSON in Cloud Storage (GCS).
+- Do not commit KG JSON files to GitHub.
+- The container no longer bundles local `master_kg*.json` files; runtime uses `PUDA_ACTS_REGULATIONS_KG_PATH`.
 
 ### Option 2: App Engine
 
@@ -94,10 +101,7 @@ Before first deployment, run database migrations:
 # Set DATABASE_URL environment variable
 export DATABASE_URL="your_connection_string"
 
-# Push schema to database
-npm run db:push
-
-# Optionally initialize with seed data
+# Prepare extensions, push schema, and seed default users
 npm run db:init
 ```
 
@@ -191,4 +195,3 @@ Configured in:
 2. **Use Cloud SQL Proxy** for Cloud SQL (reduces connection overhead)
 3. **Enable Cloud CDN** for static assets (if using Cloud Storage)
 4. **Monitor usage** in Cloud Console
-

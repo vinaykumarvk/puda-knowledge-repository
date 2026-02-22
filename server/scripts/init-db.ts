@@ -1,59 +1,62 @@
 import { fileURLToPath } from "node:url";
 import { sql } from "drizzle-orm";
-import { db } from "../db";
+import { db, pool } from "../db";
+import { users } from "@shared/schema";
 import { hashPassword } from "../auth";
 
 const SAMPLE_USERS = [
-  { username: "admin", password: "Admin@2025", fullName: "Admin User", team: "admin", email: "admin@wealthforce.com" },
-  { username: "presales", password: "Presales@2025", fullName: "John Smith", team: "presales", email: "john.smith@wealthforce.com" },
-  { username: "ba_analyst", password: "BA@2025", fullName: "Sarah Johnson", team: "ba", email: "sarah.johnson@wealthforce.com" },
-  { username: "manager", password: "Manager@2025", fullName: "Michael Chen", team: "management", email: "michael.chen@wealthforce.com" },
+  { username: "user123", password: "password123", fullName: "User 123", team: "admin", email: "user123@wealthforce.com" },
 ] as const;
 
-async function ensureTables() {
-  await db.execute(sql`
-    CREATE TABLE IF NOT EXISTS users (
-      id SERIAL PRIMARY KEY,
-      username VARCHAR(255) UNIQUE NOT NULL,
-      password VARCHAR(255) NOT NULL,
-      full_name VARCHAR(255) NOT NULL,
-      email VARCHAR(255),
-      team VARCHAR(50) NOT NULL,
-      is_active BOOLEAN DEFAULT true NOT NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-      last_login TIMESTAMP
-    )
+async function resetDatabaseData() {
+  const tableResult = await db.execute<{ tablename: string }>(sql`
+    SELECT tablename
+    FROM pg_tables
+    WHERE schemaname = 'public'
+      AND tablename <> '__drizzle_migrations'
   `);
 
-  await db.execute(sql`
-    CREATE TABLE IF NOT EXISTS sessions (
-      id VARCHAR(255) PRIMARY KEY,
-      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-      expires_at TIMESTAMP NOT NULL
-    )
-  `);
+  const tableNames = tableResult.rows
+    .map((row) => row.tablename)
+    .filter((name): name is string => Boolean(name));
+
+  if (tableNames.length === 0) {
+    return;
+  }
+
+  const quotedTableNames = tableNames
+    .map((name) => `"${name.replace(/"/g, "\"\"")}"`)
+    .join(", ");
+
+  await db.execute(
+    sql.raw(`TRUNCATE TABLE ${quotedTableNames} RESTART IDENTITY CASCADE`)
+  );
 }
 
 async function seedSampleUsers() {
   for (const userData of SAMPLE_USERS) {
     const hashedPassword = await hashPassword(userData.password);
-    await db.execute(sql`
-      INSERT INTO users (username, password, full_name, email, team, is_active)
-      VALUES (${userData.username}, ${hashedPassword}, ${userData.fullName}, ${userData.email}, ${userData.team}, true)
-      ON CONFLICT (username) DO NOTHING
-    `);
+
+    await db.insert(users).values({
+      username: userData.username,
+      password: hashedPassword,
+      fullName: userData.fullName,
+      team: userData.team,
+      email: userData.email,
+      isActive: true,
+    });
   }
 }
 
 export async function initDatabase() {
-  await ensureTables();
+  await resetDatabaseData();
   await seedSampleUsers();
 }
 
 async function run() {
   await initDatabase();
   console.log("Database initialized successfully with default users.");
+  await pool.end();
 }
 
 const isMain = process.argv[1] === fileURLToPath(import.meta.url);

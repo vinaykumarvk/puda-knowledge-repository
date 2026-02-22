@@ -72,20 +72,18 @@ export default function LoginPage() {
           <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
             <Shield className="w-6 h-6 text-primary" />
           </div>
-          <CardTitle className="text-2xl font-bold">WealthForce Knowledge Agent</CardTitle>
+          <CardTitle className="text-2xl font-bold">Puda Knowledge Agent</CardTitle>
           <CardDescription>
             Sign in to access your enterprise AI assistant
           </CardDescription>
           
-          {/* Test accounts notice */}
+          {/* Local account notice */}
           <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
             <p className="text-xs text-blue-800 dark:text-blue-200 font-semibold mb-1">
-              📋 Test Accounts
+              📋 Local Login
             </p>
-            <p className="text-xs text-blue-800 dark:text-blue-200 space-y-0.5">
-              <span className="block">• <code className="font-mono">john_ba</code> / <code className="font-mono">password123</code></span>
-              <span className="block">• <code className="font-mono">M1</code> / <code className="font-mono">password123</code> (Manager)</span>
-              <span className="block">• <code className="font-mono">M2</code> / <code className="font-mono">password123</code> (Manager)</span>
+            <p className="text-xs text-blue-800 dark:text-blue-200">
+              <span className="block">• <code className="font-mono">user123</code> / <code className="font-mono">password123</code></span>
             </p>
           </div>
         </CardHeader>

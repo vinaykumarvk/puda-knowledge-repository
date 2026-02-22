@@ -44,7 +44,7 @@ function deriveAriaLabel(props: ButtonProps): string | undefined {
     return props.title.trim()
   }
 
-  const testId = props["data-testid"]
+  const testId = (props as Record<string, unknown>)["data-testid"]
   if (typeof testId === "string" && testId.trim()) {
     return testId
       .replace(/^(button|icon|nav)[-_]/, "")

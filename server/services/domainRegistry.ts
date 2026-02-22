@@ -15,7 +15,13 @@ export interface DomainConfig {
   keywords: string[];
 }
 
-export const DEFAULT_DOMAIN_ID: DomainId = "wealth_management";
+export const PRIMARY_DOMAIN_ID: DomainId = "puda_acts_regulations";
+export const DEFAULT_DOMAIN_ID: DomainId = PRIMARY_DOMAIN_ID;
+
+export function canonicalizeDomainId(input?: string | null): DomainId | undefined {
+  if (!input) return undefined;
+  return input.toLowerCase().trim() as DomainId;
+}
 
 interface BaseDomainMetadata {
   id: DomainId;
@@ -26,24 +32,38 @@ interface BaseDomainMetadata {
 }
 
 const BASE_DOMAIN_METADATA: Record<DomainId, BaseDomainMetadata> = {
-  wealth_management: {
-    id: "wealth_management",
-    label: "Wealth Management",
+  puda_acts_regulations: {
+    id: "puda_acts_regulations",
+    label: "PUDA Urban Administration",
     description:
-      "Mutual funds, onboarding flows, compliance processes, and investment servicing.",
+      "PUDA acts, regulations, urban development workflows, land/property administration, and authority compliance processes.",
     keywords: [
-      "kyc",
-      "wealth",
-      "portfolio",
-      "redemption",
-      "sip",
-      "mutual fund",
-      "nav",
-      "investment",
-      "risk profile",
-      "customer onboarding",
+      "puda",
+      "urban development",
+      "urban administration",
+      "urban planning",
+      "property transfer",
+      "noc",
+      "no objection",
+      "building plan",
+      "land use",
+      "zoning",
+      "allotment",
+      "plot",
+      "estate",
+      "colony",
+      "development authority",
+      "regulation",
+      "act",
+      "notification",
+      "policy",
+      "approval",
+      "mutation",
+      "leasehold",
+      "freehold",
+      "citizen services",
       "compliance",
-      "ops",
+      "administration",
     ],
     // No fallback - will use dynamically registered vector stores from OpenAI
   },
@@ -117,11 +137,12 @@ function parseKeywords(value: string | null | undefined): string[] {
 
 function normalizeDomainId(name: string | null | undefined): DomainId {
   if (!name) return DEFAULT_DOMAIN_ID;
-  return name
+  const normalized = name
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "") || DEFAULT_DOMAIN_ID;
+  return canonicalizeDomainId(normalized) || DEFAULT_DOMAIN_ID;
 }
 
 function toTitleCase(value: string): string {
@@ -228,21 +249,33 @@ async function loadRegistryFromDb(): Promise<{
   }
 
   const registry: Record<DomainId, DomainConfig> = {};
+  const rowUpdatedAtByDomain: Record<DomainId, string> = {};
   let latest: string | null = null;
 
   for (const row of rows) {
-    registry[row.id] = {
-      id: row.id,
+    const rowUpdatedAt = row.updatedAt?.toISOString?.() ?? "";
+    const canonicalId = canonicalizeDomainId(row.id) || DEFAULT_DOMAIN_ID;
+    const canonicalEkgDomain =
+      canonicalizeDomainId(row.ekgDomain) || canonicalId;
+    const existingUpdatedAt = rowUpdatedAtByDomain[canonicalId] || "";
+
+    if (existingUpdatedAt && rowUpdatedAt && rowUpdatedAt < existingUpdatedAt) {
+      continue;
+    }
+
+    registry[canonicalId] = {
+      id: canonicalId,
       label: row.label,
       description: row.description,
-      ekgDomain: row.ekgDomain,
+      ekgDomain: canonicalEkgDomain,
       defaultVectorStoreId: row.defaultVectorStoreId,
       vectorStoreName: row.vectorStoreName,
       status: row.status ?? undefined,
       keywords: parseKeywords(row.keywords),
     };
+    rowUpdatedAtByDomain[canonicalId] = rowUpdatedAt;
 
-    const updatedAt = row.updatedAt?.toISOString?.() ?? null;
+    const updatedAt = rowUpdatedAt || null;
     if (updatedAt && (!latest || updatedAt > latest)) {
       latest = updatedAt;
     }
@@ -368,15 +401,17 @@ export function listDomains(): DomainConfig[] {
 }
 
 export function getDomainConfig(domainId?: string): DomainConfig {
-  if (domainId && domainRegistry[domainId]) {
-    return domainRegistry[domainId];
+  const canonicalDomainId = canonicalizeDomainId(domainId);
+  if (canonicalDomainId && domainRegistry[canonicalDomainId]) {
+    return domainRegistry[canonicalDomainId];
   }
   return domainRegistry[DEFAULT_DOMAIN_ID];
 }
 
 export function domainExists(domainId: string | undefined): domainId is DomainId {
-  if (!domainId) return false;
-  return Boolean(domainRegistry[domainId]);
+  const canonicalDomainId = canonicalizeDomainId(domainId);
+  if (!canonicalDomainId) return false;
+  return Boolean(domainRegistry[canonicalDomainId]);
 }
 
 export function getDomainSyncInfo() {

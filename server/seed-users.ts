@@ -5,32 +5,11 @@ import { eq } from "drizzle-orm";
 
 const SAMPLE_USERS = [
   {
-    username: "admin",
-    password: "Admin@2025",
-    fullName: "Admin User",
+    username: "user123",
+    password: "password123",
+    fullName: "User 123",
     team: "admin",
-    email: "admin@wealthforce.com",
-  },
-  {
-    username: "presales",
-    password: "Presales@2025",
-    fullName: "John Smith",
-    team: "presales",
-    email: "john.smith@wealthforce.com",
-  },
-  {
-    username: "ba_analyst",
-    password: "BA@2025",
-    fullName: "Sarah Johnson",
-    team: "ba",
-    email: "sarah.johnson@wealthforce.com",
-  },
-  {
-    username: "manager",
-    password: "Manager@2025",
-    fullName: "Michael Chen",
-    team: "management",
-    email: "michael.chen@wealthforce.com",
+    email: "user123@wealthforce.com",
   },
 ];
 

@@ -19,7 +19,7 @@ interface QuizTopic {
 
 const categoryIcons: Record<string, any> = {
   "Order Management": FileText,
-  "Wealth Management Fundamentals": BookCheck,
+  "Urban Administration Fundamentals": BookCheck,
   "Investment Products & Strategies": TrendingUp,
   "Client Relationship Management": Users,
   "Regulatory & Compliance": Shield,
@@ -57,7 +57,7 @@ export default function QuizPage() {
   const flashcardDecks = [
     {
       name: "Quick Concepts Review",
-      description: "Rapid-fire review of key wealth management terms",
+      description: "Rapid-fire review of key urban administration terms",
       icon: Sparkles,
       cardCount: 50,
       category: "All Topics",

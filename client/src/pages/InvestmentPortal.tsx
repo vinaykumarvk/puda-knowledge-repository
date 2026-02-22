@@ -70,11 +70,9 @@ export default function InvestmentPortal() {
               The Report Portal requires authentication to create and manage reports. Click the user icon in the top-right corner to login.
             </p>
             <div className="bg-muted p-4 rounded-lg">
-              <p className="text-xs font-semibold text-foreground mb-2">Test Accounts:</p>
+              <p className="text-xs font-semibold text-foreground mb-2">Local Account:</p>
               <div className="space-y-1 text-xs text-muted-foreground">
-                <p>• <span className="font-mono">john_ba</span> / <span className="font-mono">password123</span></p>
-                <p>• <span className="font-mono">sarah_ba</span> / <span className="font-mono">password123</span></p>
-                <p>• <span className="font-mono">M1</span> / <span className="font-mono">password123</span> (Manager)</p>
+                <p>• <span className="font-mono">user123</span> / <span className="font-mono">password123</span></p>
               </div>
             </div>
           </CardContent>

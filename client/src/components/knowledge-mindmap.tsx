@@ -239,7 +239,7 @@ export function KnowledgeMindmap({ knowledgeGraphData }: KnowledgeMindmapProps) 
       position: { x: 0, y: 0 }, // Temporary position
       data: {
         id: rootId,
-        label: "Order Management & Wealth Operations",
+        label: "Urban Administration & PUDA Operations",
         level: 0,
         count: knowledgeGraphData.nodes.length,
         hasChildren: true,

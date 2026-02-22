@@ -1201,22 +1201,5 @@ export class DatabaseStorage implements IStorage {
   }
 }
 
-// Export storage - can switch between Drizzle and Supabase implementations
-// Set USE_SUPABASE_CLIENT=true in .env to use Supabase JS client (works locally)
-// Otherwise uses DatabaseStorage with Drizzle (requires direct PostgreSQL connection)
-
-import { SupabaseStorage } from './supabase-storage';
-
-let storageInstance: IStorage;
-
-if (process.env.USE_SUPABASE_CLIENT === 'true') {
-  // Use Supabase JS client (works via REST API - same as report-generator)
-  storageInstance = new SupabaseStorage();
-  console.log('✅ Using SupabaseStorage (REST API)');
-} else {
-  // Use Drizzle ORM (requires direct PostgreSQL connection)
-  storageInstance = new DatabaseStorage();
-  console.log('✅ Using DatabaseStorage (Drizzle ORM)');
-}
-
-export const storage = storageInstance;
+// Export storage - PostgreSQL + Drizzle only
+export const storage = new DatabaseStorage();

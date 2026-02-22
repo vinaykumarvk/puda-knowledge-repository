@@ -175,7 +175,7 @@ function TopicDetailPanel({
             <div>
               <h4 className="text-sm font-semibold mb-2">Description</h4>
               <p className="text-sm text-muted-foreground">
-                {topic.description || `Learn about ${topic.name} and its role in wealth management operations.`}
+                {topic.description || `Learn about ${topic.name} and its role in PUDA urban administration operations.`}
               </p>
             </div>
             
@@ -254,7 +254,7 @@ function TopicDetailPanel({
             <div>
               <h4 className="text-sm font-semibold mb-2">Deep Dive</h4>
               <p className="text-sm text-muted-foreground mb-3">
-                {topic.description || `${topic.name} is a critical component in wealth management systems.`}
+                {topic.description || `${topic.name} is a critical component in PUDA urban administration systems.`}
               </p>
               
               {topic.originalNodeData && (
@@ -411,7 +411,7 @@ export function SimplifiedTopicNetwork({ knowledgeGraphData }: SimplifiedTopicNe
           keyPoints: [
             `Type: ${node.type}`, 
             `Evidence sources: ${node.evidence_count || 0}`,
-            "Core concept in wealth management"
+            "Core concept in urban administration"
           ],
           evidenceCount: node.evidence_count || 0,
           relatedQuizzes: Math.floor(Math.random() * 5) + 1,

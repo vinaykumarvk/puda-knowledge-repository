@@ -43,7 +43,15 @@ import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
 import { WorkspacePanel } from "@/components/workspace-panel";
+import { landingPagePromptSuggestions } from "@/constants/conversation-starters";
 import type { Thread, Message } from "@shared/schema";
+
+type ChatMessage = Message & {
+  isCached?: boolean;
+  cacheId?: number;
+  jobId?: string;
+  isPolling?: boolean;
+};
 
 
 // Helper function to decode HTML entities
@@ -60,8 +68,7 @@ function removeKGTags(text: string): string {
 
 // Helper function to remove "Sources by File" section and clean up citations
 function cleanupCitations(text: string): string {
-  // Remove the entire "Sources by File" section
-  let cleaned = text.replace(/---\s*##\s*\*\*Sources by File\*\*[\s\S]*$/i, '');
+  let cleaned = text;
 
   // Remove bold formatting from citation filenames (e.g., **[1]** → [1])
   cleaned = cleaned.replace(/\*\*\[(\d+)\]\*\*/g, '[$1]');
@@ -70,6 +77,74 @@ function cleanupCitations(text: string): string {
   cleaned = cleaned.replace(/\*\*([^*]+\.(pdf|docx|doc|xlsx)[^*]*)\*\*/gi, '$1');
 
   return cleaned;
+}
+
+type ReferenceDisplayMode = "with" | "without";
+
+function removeDuplicateSourcesLists(text: string): string {
+  // Remove legacy list-style "Sources" block when a canonical markdown "Sources" heading also exists.
+  return text.replace(
+    /(?:^|\n)\s*(?:[Ss]?ources(?:\s+by\s+file)?)\s*\n(?:\s*[-*]\s+.*\[\d+(?:\s*,\s*\d+)*\].*(?:\n|$))+(\n*)(?=\s*#{1,6}\s*sources\b)/im,
+    "\n\n",
+  );
+}
+
+function dedupeSourcesSections(text: string): string {
+  const headerPattern = /(?:^|\n)\s*(?:#{1,6}\s*)?(?:\*\*)?(?:sources(?:\s+by\s+file)?|references)(?:\*\*)?\s*:?\s*$/gim;
+  const matches = [...text.matchAll(headerPattern)];
+  if (matches.length <= 1) {
+    return removeDuplicateSourcesLists(text);
+  }
+
+  const lastMatch = matches[matches.length - 1];
+  const lastSectionStart = lastMatch.index ?? 0;
+  const prefix = text.slice(0, lastSectionStart);
+  const suffix = text.slice(lastSectionStart).trim();
+  const prefixWithoutSources = stripReferencesSection(prefix).trimEnd();
+
+  const merged = prefixWithoutSources
+    ? `${prefixWithoutSources}\n\n${suffix}`
+    : suffix;
+
+  return removeDuplicateSourcesLists(merged);
+}
+
+function stripReferencesSection(text: string): string {
+  const sectionPatterns = [
+    /(?:^|\n)\s*---\s*\n\s*##\s*\*\*Sources by File\*\*[\s\S]*$/im,
+    /(?:^|\n)\s*#{1,6}\s*(?:sources(?:\s+by\s+file)?|references)\s*$[\s\S]*$/im,
+    /(?:^|\n)\s*(?:\*\*)?(?:sources(?:\s+by\s+file)?|references)(?:\*\*)?\s*:?\s*$[\s\S]*$/im,
+  ];
+
+  let cleaned = text;
+  for (const pattern of sectionPatterns) {
+    cleaned = cleaned.replace(pattern, "");
+  }
+
+  return cleaned;
+}
+
+function stripInlineCitations(text: string): string {
+  return text
+    .replace(/\s*\[(?:\d+(?:\s*,\s*\d+)*)\](?=(?:\s|[.,;:!?)]|$))/g, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\s+([.,;:!?])/g, "$1")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function applyReferenceDisplay(text: string, mode: ReferenceDisplayMode): string {
+  if (mode === "with") {
+    return text;
+  }
+
+  return stripInlineCitations(stripReferencesSection(text));
+}
+
+function normalizeAssistantContent(rawText: string, referenceMode: ReferenceDisplayMode): string {
+  const cleaned = formatProfessionally(cleanupCitations(removeKGTags(decodeHTMLEntities(rawText))));
+  const deduped = dedupeSourcesSections(cleaned);
+  return applyReferenceDisplay(deduped, referenceMode);
 }
 
 const responseModeOptions = [
@@ -87,6 +162,19 @@ const responseModeOptions = [
     value: "deep" as const,
     label: "Deep",
     description: "Exhaustive analysis with supporting detail.",
+  },
+];
+
+const referenceDisplayOptions = [
+  {
+    value: "with" as const,
+    label: "With refs",
+    description: "Show inline citations and the sources section.",
+  },
+  {
+    value: "without" as const,
+    label: "No refs",
+    description: "Hide inline citations and the sources section.",
   },
 ];
 
@@ -228,8 +316,14 @@ function extractAnswerSection(text: string): string {
 }
 
 // Helper function to download a single message exchange as Markdown
-function downloadMessageMarkdown(userMessage: string, assistantMessage: string, timestamp: string) {
-  const content = `# WealthForce Knowledge Agent - Conversation Export
+function downloadMessageMarkdown(
+  userMessage: string,
+  assistantMessage: string,
+  timestamp: string,
+  referenceMode: ReferenceDisplayMode,
+) {
+  const normalizedAssistant = normalizeAssistantContent(assistantMessage, referenceMode);
+  const content = `# Puda Knowledge Agent - Conversation Export
 
 **Generated:** ${new Date(timestamp).toLocaleString()}
 
@@ -243,7 +337,7 @@ ${userMessage}
 
 ## Answer
 
-${assistantMessage}
+${normalizedAssistant}
 
 ---
 `;
@@ -260,7 +354,13 @@ ${assistantMessage}
 }
 
 // Helper function to download a single message exchange as PDF
-function downloadMessagePDF(userMessage: string, assistantMessage: string, timestamp: string) {
+function downloadMessagePDF(
+  userMessage: string,
+  assistantMessage: string,
+  timestamp: string,
+  referenceMode: ReferenceDisplayMode,
+) {
+  const normalizedAssistant = normalizeAssistantContent(assistantMessage, referenceMode);
   const pdf = new jsPDF();
   const margin = 20;
   const pageWidth = pdf.internal.pageSize.getWidth();
@@ -270,7 +370,7 @@ function downloadMessagePDF(userMessage: string, assistantMessage: string, times
   // Title
   pdf.setFontSize(16);
   pdf.setFont('helvetica', 'bold');
-  pdf.text('WealthForce Knowledge Agent', margin, yPosition);
+  pdf.text('Puda Knowledge Agent', margin, yPosition);
   yPosition += 10;
 
   pdf.setFontSize(10);
@@ -300,7 +400,7 @@ function downloadMessagePDF(userMessage: string, assistantMessage: string, times
   pdf.setFont('helvetica', 'normal');
   
   // Clean the assistant message for PDF (remove markdown)
-  const cleanAnswer = assistantMessage
+  const cleanAnswer = normalizedAssistant
     .replace(/[#*_`]/g, '')
     .replace(/\[(\d+)\]/g, '[$1]')
     .replace(/<[^>]*>/g, '');
@@ -325,8 +425,12 @@ function downloadMessagePDF(userMessage: string, assistantMessage: string, times
 }
 
 // Helper function to download entire thread conversation as text
-function downloadThreadAsText(messages: Message[], threadTitle: string) {
-  let content = `WealthForce Knowledge Agent - Full Conversation Export
+function downloadThreadAsText(
+  messages: Message[],
+  threadTitle: string,
+  referenceMode: ReferenceDisplayMode,
+) {
+  let content = `Puda Knowledge Agent - Full Conversation Export
 Thread: ${threadTitle}
 Generated: ${new Date().toLocaleString()}
 
@@ -337,9 +441,10 @@ Generated: ${new Date().toLocaleString()}
     const assistantMsg = messages[i + 1];
     
     if (userMsg && assistantMsg) {
+      const normalizedAssistant = normalizeAssistantContent(assistantMsg.content, referenceMode);
       content += `[${new Date(userMsg.createdAt).toLocaleString()}]\n`;
       content += `Question:\n${userMsg.content}\n\n`;
-      content += `Answer:\n${assistantMsg.content}\n\n`;
+      content += `Answer:\n${normalizedAssistant}\n\n`;
       content += `========================================\n\n`;
     }
   }
@@ -356,7 +461,11 @@ Generated: ${new Date().toLocaleString()}
 }
 
 // Helper function to download entire thread conversation as PDF
-function downloadThreadAsPDF(messages: Message[], threadTitle: string) {
+function downloadThreadAsPDF(
+  messages: Message[],
+  threadTitle: string,
+  referenceMode: ReferenceDisplayMode,
+) {
   const pdf = new jsPDF();
   const margin = 15;
   const maxWidth = pdf.internal.pageSize.getWidth() - 2 * margin;
@@ -366,7 +475,7 @@ function downloadThreadAsPDF(messages: Message[], threadTitle: string) {
   // Title
   pdf.setFontSize(16);
   pdf.setFont('helvetica', 'bold');
-  pdf.text('WealthForce Knowledge Agent', margin, yPosition);
+  pdf.text('Puda Knowledge Agent', margin, yPosition);
   yPosition += 10;
 
   pdf.setFontSize(12);
@@ -382,6 +491,7 @@ function downloadThreadAsPDF(messages: Message[], threadTitle: string) {
     const assistantMsg = messages[i + 1];
     
     if (userMsg && assistantMsg) {
+      const normalizedAssistant = normalizeAssistantContent(assistantMsg.content, referenceMode);
       // Check if we need a new page for this Q&A
       if (yPosition + 40 > pageHeight - margin) {
         pdf.addPage();
@@ -423,7 +533,7 @@ function downloadThreadAsPDF(messages: Message[], threadTitle: string) {
       pdf.setFont('helvetica', 'normal');
       
       // Clean the assistant message for PDF
-      const cleanAnswer = assistantMsg.content
+      const cleanAnswer = normalizedAssistant
         .replace(/[#*_`]/g, '')
         .replace(/\[(\d+)\]/g, '[$1]')
         .replace(/<[^>]*>/g, '');
@@ -456,8 +566,9 @@ function downloadThreadAsPDF(messages: Message[], threadTitle: string) {
 export default function ChatbotPage() {
   const [question, setQuestion] = useState("");
   const [currentThreadId, setCurrentThreadId] = useState<number | undefined>();
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [mode, setMode] = useState<"concise" | "balanced" | "deep">("balanced");
+  const [referenceDisplayMode, setReferenceDisplayMode] = useState<ReferenceDisplayMode>("with");
   const [showDownloadDialog, setShowDownloadDialog] = useState(false);
   const [isWorkspaceSheetOpen, setWorkspaceSheetOpen] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -687,10 +798,11 @@ export default function ChatbotPage() {
       createdAt: new Date(),
     };
 
-    const tempAssistantId = Date.now() + 1;
+    // Keep a stable local assistant ID for UI updates during streaming.
+    const localAssistantId = Date.now() + 1;
     let statusMessage = "";
     const assistantMessage: Message & { isStreaming?: boolean; statusMessage?: string } = {
-      id: tempAssistantId,
+      id: localAssistantId,
       threadId: currentThreadId || -1,
       role: "assistant",
       content: "",
@@ -716,22 +828,32 @@ export default function ChatbotPage() {
         signal: controller.signal,
       });
 
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || `Streaming request failed (${response.status})`);
+      }
       if (!response.body) throw new Error("No response stream");
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
       let resolvedThreadId = currentThreadId;
-      let resolvedAssistantId = tempAssistantId;
+      let accumulatedText = "";
+      let resolvedResponseId: string | undefined;
+      let hasFinalized = false;
 
-      const finalize = (finalContent: string, responseId?: string) => {
+      const finalize = (finalContent?: string, responseId?: string) => {
+        if (hasFinalized) return;
+        hasFinalized = true;
+
+        const contentToSet = finalContent ?? accumulatedText;
         setMessages((prev) =>
           prev.map((msg) => {
-            if (msg.id === resolvedAssistantId) {
+            if (msg.id === localAssistantId) {
               return {
                 ...msg,
-                content: finalContent,
-                responseId: responseId || null,
+                content: contentToSet,
+                responseId: responseId || msg.responseId || null,
                 metadata: JSON.stringify({ status: "completed" }),
                 isStreaming: false,
                 threadId: resolvedThreadId || msg.threadId,
@@ -750,7 +872,7 @@ export default function ChatbotPage() {
         statusMessage = statusText;
         setMessages((prev) =>
           prev.map((msg) =>
-            msg.id === resolvedAssistantId
+            msg.id === localAssistantId
               ? { ...msg, statusMessage: statusText }
               : msg
           )
@@ -770,15 +892,28 @@ export default function ChatbotPage() {
           const eventLine = lines.find((l) => l.startsWith("event:"));
           const dataLine = lines.find((l) => l.startsWith("data:"));
           if (!eventLine || !dataLine) continue;
+
           const event = eventLine.replace("event:", "").trim();
-          const data = JSON.parse(dataLine.replace("data:", "").trim());
+          let data: any = {};
+          try {
+            data = JSON.parse(dataLine.replace("data:", "").trim());
+          } catch {
+            continue;
+          }
 
           if (event === "init") {
             resolvedThreadId = data.threadId;
-            resolvedAssistantId = data.messageId || tempAssistantId;
             if (!currentThreadId && resolvedThreadId) {
               setCurrentThreadId(resolvedThreadId);
             }
+            setMessages((prev) =>
+              prev.map((msg) => {
+                if (msg.id === localAssistantId || msg.id === userMessage.id) {
+                  return { ...msg, threadId: resolvedThreadId || msg.threadId };
+                }
+                return msg;
+              })
+            );
           } else if (event === "status") {
             // Update status message
             const statusText = data.extendedWaitMessage || data.message || "";
@@ -787,28 +922,37 @@ export default function ChatbotPage() {
             }
           } else if (event === "delta") {
             const deltaText = data.text || "";
+            if (!deltaText) continue;
+
+            accumulatedText += deltaText;
             // Clear status message when content starts streaming
-            if (deltaText && statusMessage) {
+            if (statusMessage) {
               updateStatus("");
             }
             setMessages((prev) =>
               prev.map((msg) =>
-                msg.id === resolvedAssistantId
-                  ? { ...msg, content: (msg.content || "") + deltaText, statusMessage: "" }
+                msg.id === localAssistantId
+                  ? { ...msg, content: accumulatedText, statusMessage: "" }
                   : msg
               )
             );
           } else if (event === "done") {
-            finalize(data.content || "", data.responseId);
+            resolvedResponseId = data.responseId || resolvedResponseId;
+            if (typeof data.content === "string" && data.content.length > 0) {
+              accumulatedText = data.content;
+            }
+            finalize(accumulatedText, resolvedResponseId);
           } else if (event === "error") {
-            finalize("⚠️ Streaming failed. Please try again.");
+            const errorText = data.error || "Streaming failed. Please try again.";
+            finalize(accumulatedText || `⚠️ ${errorText}`);
           }
         }
       }
 
-      const existing = messages.find((m) => m.id === resolvedAssistantId);
-      finalize(existing?.content || "");
-      
+      if (!hasFinalized) {
+        finalize(accumulatedText, resolvedResponseId);
+      }
+
       // Invalidate both threads and messages queries to ensure fresh data
       queryClient.invalidateQueries({ queryKey: ["/api/threads"] });
       if (resolvedThreadId) {
@@ -823,7 +967,7 @@ export default function ChatbotPage() {
       });
       setMessages((prev) =>
         prev.map((msg) =>
-          msg.id === tempAssistantId
+          msg.id === localAssistantId
             ? {
                 ...msg,
                 metadata: JSON.stringify({ status: "failed" }),
@@ -837,7 +981,7 @@ export default function ChatbotPage() {
       setIsStreaming(false);
       streamAbortRef.current = null;
     }
-  }, [currentThreadId, isStreaming, messages, queryClient, setMessages, toast]);
+  }, [currentThreadId, isStreaming, queryClient, setMessages, toast]);
 
   // Fetch messages when thread is selected
   const { data: fetchedMessages } = useQuery<Message[]>({
@@ -847,13 +991,14 @@ export default function ChatbotPage() {
 
   // Update messages when thread changes
   useEffect(() => {
-    // Don't replace messages if we're currently streaming for this thread
-    // This prevents overwriting streaming content when user clicks thread during streaming
-    if (isStreaming && currentThreadId) {
-      console.log('[Chatbot] Skipping message update - currently streaming for thread:', currentThreadId);
+    // Don't replace messages while streaming; keep optimistic updates visible.
+    if (isStreaming) {
+      if (currentThreadId) {
+        console.log('[Chatbot] Skipping message update - currently streaming for thread:', currentThreadId);
+      }
       return;
     }
-    
+
     if (fetchedMessages) {
       console.log('[Chatbot] Loading messages from database:', { threadId: currentThreadId, count: fetchedMessages.length });
       setMessages(fetchedMessages);
@@ -872,7 +1017,7 @@ export default function ChatbotPage() {
           }
         }
       });
-    } else {
+    } else if (currentThreadId) {
       setMessages([]);
     }
   }, [fetchedMessages, pollJobStatus, isStreaming, currentThreadId]);
@@ -1136,14 +1281,11 @@ export default function ChatbotPage() {
       return;
     }
 
-    if (mode === "concise") {
-      streamConciseAnswer(questionToSubmit);
-    } else {
-      queryMutation.mutate({
-        question: questionToSubmit,
-        threadId: currentThreadId,
-      });
-    }
+    // Use the repository-grounded /api/query path for all modes.
+    queryMutation.mutate({
+      question: questionToSubmit,
+      threadId: currentThreadId,
+    });
     
     // Clear the input if submitting from the textarea
     if (!promptText) {
@@ -1191,7 +1333,7 @@ export default function ChatbotPage() {
     }
   };
 
-  const isLoading = queryMutation.isPending;
+  const isLoading = queryMutation.isPending || isStreaming;
   const hasMessages = messages.length > 0;
 
   const handleReaction = (type: "positive" | "negative") => {
@@ -1222,10 +1364,10 @@ export default function ChatbotPage() {
               <Sparkles className="mt-1 h-6 w-6 text-primary" />
               <div>
                 <h1 className="text-2xl font-bold text-foreground" data-testid="text-title">
-                  WealthForce Knowledge Agent
+                  Puda Knowledge Agent
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                  Conversational Wealth Management Knowledge
+                  Conversational PUDA Knowledge Repository
                 </p>
               </div>
             </div>
@@ -1287,18 +1429,13 @@ export default function ChatbotPage() {
                       How can I help you today?
                     </h2>
                     <p className="mx-auto max-w-md text-sm text-muted-foreground">
-                      Ask any question about wealth management, customer processes, or system workflows.
+                      Ask any question about PUDA policies, allotment workflows, dues, payments, and certificates.
                     </p>
                   </div>
                   
                   {/* Suggested Questions */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-8 px-4">
-                    {[
-                      "What are the steps in mutual funds order placement?",
-                      "How does the OTP verification process work?",
-                      "Explain the compliance requirements for transactions",
-                      "What is the risk profiling process?",
-                    ].map((suggestion, idx) => (
+                    {landingPagePromptSuggestions.map((suggestion, idx) => (
                       <button
                         key={idx}
                         onClick={() => {
@@ -1367,7 +1504,7 @@ export default function ChatbotPage() {
                                 rehypePlugins={[rehypeRaw]}
                                 remarkPlugins={[remarkGfm]}
                               >
-                                {formatProfessionally(cleanupCitations(removeKGTags(decodeHTMLEntities(message.content))))}
+                                {normalizeAssistantContent(message.content, referenceDisplayMode)}
                               </ReactMarkdown>
                             </div>
                           ) : (message as any).isStreaming && !(message as any).statusMessage ? (
@@ -1440,6 +1577,7 @@ export default function ChatbotPage() {
                                   typeof message.createdAt === "string"
                                     ? message.createdAt
                                     : message.createdAt.toISOString(),
+                                  referenceDisplayMode,
                                 )
                               }
                             >
@@ -1454,6 +1592,7 @@ export default function ChatbotPage() {
                                   typeof message.createdAt === "string"
                                     ? message.createdAt
                                     : message.createdAt.toISOString(),
+                                  referenceDisplayMode,
                                 )
                               }
                             >
@@ -1520,32 +1659,63 @@ export default function ChatbotPage() {
         {/* Input Area - Fixed at bottom */}
         <div className="border-t border-border bg-card/30 backdrop-blur-sm p-4 flex-shrink-0">
           <div className="mx-auto flex max-w-4xl flex-col gap-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Response style
-              </Label>
-              <ToggleGroup
-                type="single"
-                value={mode}
-                onValueChange={(value) => value && setMode(value as "concise" | "balanced" | "deep")}
-                className="flex gap-1"
-              >
-                {responseModeOptions.map((option) => (
-                  <Tooltip key={option.value}>
-                    <TooltipTrigger asChild>
-                      <span>
-                        <ToggleGroupItem
-                          value={option.value}
-                          className="rounded-full px-3 py-1.5 text-xs data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-                        >
-                          {option.label}
-                        </ToggleGroupItem>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">{option.description}</TooltipContent>
-                  </Tooltip>
-                ))}
-              </ToggleGroup>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Response style
+                </Label>
+                <ToggleGroup
+                  type="single"
+                  value={mode}
+                  onValueChange={(value) => value && setMode(value as "concise" | "balanced" | "deep")}
+                  className="flex gap-1"
+                >
+                  {responseModeOptions.map((option) => (
+                    <Tooltip key={option.value}>
+                      <TooltipTrigger asChild>
+                        <span>
+                          <ToggleGroupItem
+                            value={option.value}
+                            className="rounded-full px-3 py-1.5 text-xs data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                          >
+                            {option.label}
+                          </ToggleGroupItem>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">{option.description}</TooltipContent>
+                    </Tooltip>
+                  ))}
+                </ToggleGroup>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  References
+                </Label>
+                <ToggleGroup
+                  type="single"
+                  value={referenceDisplayMode}
+                  onValueChange={(value) => value && setReferenceDisplayMode(value as ReferenceDisplayMode)}
+                  className="flex gap-1"
+                  data-testid="toggle-reference-display"
+                >
+                  {referenceDisplayOptions.map((option) => (
+                    <Tooltip key={option.value}>
+                      <TooltipTrigger asChild>
+                        <span>
+                          <ToggleGroupItem
+                            value={option.value}
+                            className="rounded-full px-3 py-1.5 text-xs data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                          >
+                            {option.label}
+                          </ToggleGroupItem>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">{option.description}</TooltipContent>
+                    </Tooltip>
+                  ))}
+                </ToggleGroup>
+              </div>
             </div>
 
             <div className="flex gap-3">
@@ -1592,7 +1762,7 @@ export default function ChatbotPage() {
               className="w-full justify-start gap-3"
               data-testid="button-download-text"
               onClick={() => {
-                downloadThreadAsText(messages, currentThread?.title || "Conversation");
+                downloadThreadAsText(messages, currentThread?.title || "Conversation", referenceDisplayMode);
                 setShowDownloadDialog(false);
                 toast({
                   title: "Download Started",
@@ -1613,7 +1783,7 @@ export default function ChatbotPage() {
               className="w-full justify-start gap-3"
               data-testid="button-download-pdf"
               onClick={() => {
-                downloadThreadAsPDF(messages, currentThread?.title || "Conversation");
+                downloadThreadAsPDF(messages, currentThread?.title || "Conversation", referenceDisplayMode);
                 setShowDownloadDialog(false);
                 toast({
                   title: "Download Started",

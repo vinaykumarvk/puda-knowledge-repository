@@ -37,7 +37,7 @@ export function AIConfigSidebar({ onConfigChange, variant = "default", className
     temperature: 0.7,
     hops: 3,
     tokenLimit: 2048,
-    systemPrompt: "You are a helpful wealth management AI assistant.",
+    systemPrompt: "You are a helpful PUDA urban administration AI assistant.",
   });
 
   const updateConfig = (updates: Partial<AIConfig>) => {

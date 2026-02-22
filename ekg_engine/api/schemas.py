@@ -1,0 +1,72 @@
+from pydantic import BaseModel, model_validator, Field
+from typing import Any, Dict, Optional, Literal, List
+
+class AskRequest(BaseModel):
+    # Support both simple string question and structured payload
+    question: Optional[str] = None  # Simple question string (backward compatible)
+    question_payload: Optional[Dict[str, Any]] = None  # Structured input with system_prompt, requirement, etc.
+    domain: str = "puda_acts_regulations"
+    vectorstore_id: Optional[str] = None  # Now optional - can use domain default
+    response_id: Optional[str] = None  # For conversational context
+    conversation_id: Optional[str] = None  # Alternative conversation tracking
+    params: Optional[Dict[str, Any]] = None
+    output_format: Literal["markdown", "json"] = "markdown"  # Output format control
+    async_mode: bool = Field(default=False, description="Run in background and return task_id immediately")
+    
+    @model_validator(mode='after')
+    def validate_question_or_payload(self):
+        """Ensure at least one of question or question_payload is provided"""
+        if not self.question and not self.question_payload:
+            raise ValueError("Either 'question' or 'question_payload' must be provided")
+        
+        # Auto-set to JSON if structured payload is used
+        if self.question_payload and self.output_format != "json":
+            self.output_format = "json"
+        
+        return self
+
+class AskResponse(BaseModel):
+    response_id: str
+    markdown: Optional[str] = None  # Markdown output (for backward compatibility)
+    json_data: Optional[Dict[str, Any]] = None  # JSON output (for structured responses)
+    sources: Optional[Any] = None
+    meta: Optional[Dict[str, Any]] = None
+
+class TaskInfo(BaseModel):
+    """Information about a background task"""
+    task_id: str
+    question: str
+    domain: str
+    mode: str
+    status: str
+    error: Optional[str] = None
+    created_at: str
+    updated_at: str
+    completed_at: Optional[str] = None
+
+class TaskListResponse(BaseModel):
+    """Response for listing tasks"""
+    tasks: List[TaskInfo]
+    total: int
+    stats: Optional[Dict[str, int]] = None
+
+class TaskStatusResponse(BaseModel):
+    """Response for task status check"""
+    task_id: str
+    status: str
+    question: str
+    domain: str
+    mode: str
+    created_at: str
+    result: Optional[AskResponse] = None
+    error: Optional[str] = None
+
+class DomainInfo(BaseModel):
+    """Information about an available domain"""
+    domain_id: str
+    name: str
+    description: str
+    kg_loaded: bool
+    kg_nodes: int
+    kg_edges: int
+    default_vectorstore_id: Optional[str]

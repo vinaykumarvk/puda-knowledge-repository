@@ -4,6 +4,8 @@ dist
 .gitignore
 .env
 .env.local
+.venv
+ekg_engine/.venv
 *.log
 *.md
 .vscode
@@ -14,6 +16,9 @@ uploads
 server.log
 test-*.ts
 *.backup
-# Note: .png, .jpg, .jpeg, and .json files are needed in production
-# They are included in attached_assets and docs directories
 
+# Local KG files are not bundled in images.
+# Provide KG location via PUDA_ACTS_REGULATIONS_KG_PATH (typically gs://... in production).
+master_kg.json
+kg_mastr.json
+puda_master_kg.json

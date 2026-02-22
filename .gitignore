@@ -13,3 +13,12 @@ vite.config.ts.*
 server.log
 uploads/
 /tmp/
+.venv/
+ekg_engine/.venv/
+**/__pycache__/
+*.pyc
+
+# Large local KG files (store in Cloud Storage / GCS, do not commit)
+master_kg.json
+kg_mastr.json
+puda_master_kg.json

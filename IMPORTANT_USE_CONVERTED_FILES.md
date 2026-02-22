@@ -1,44 +1,32 @@
-# ⚠️ IMPORTANT: Use Converted Files
+# Use Converted SQL Files for Manual Imports
 
-## The Problem
+The files in `pg_dump_split/` use `COPY ... FROM stdin`, which works with `psql` but is inconvenient in tools that only accept plain SQL statements.
 
-The files in `pg_dump_split/` use `COPY ... FROM stdin` format which **does NOT work** in Supabase SQL Editor.
+If you want simple paste-and-run SQL scripts, use the converted files in `pg_dump_split_converted/`.
 
-## The Solution
+## File Selection
 
-**Use files from `pg_dump_split_converted/` directory instead!**
-
-## File Locations
-
-❌ **DON'T USE:** `pg_dump_split/02_core_tables.sql` (has COPY format)
-✅ **USE:** `pg_dump_split_converted/02_core_tables.sql` (has INSERT format)
+1. Prefer `pg_dump_split_converted/*.sql` for manual execution.
+2. Use `pg_dump_split/*.sql` only when loading through `psql`.
 
 ## How to Tell the Difference
 
-**Wrong file (COPY format):**
+`COPY` format:
 ```sql
 COPY public.users (...) FROM stdin;
 m1-001	M1	$2b$10$...	Manager One	...
 \.
 ```
 
-**Correct file (INSERT format):**
+`INSERT` format:
 ```sql
 INSERT INTO public.users (...) VALUES
 ('m1-001', 'M1', '$2b$10$...', 'Manager One', ...),
 ('m2-001', 'M2', '$2b$10$...', 'Manager Two', ...);
 ```
 
-## Quick Checklist
+## Recommended Execution Order
 
-- [ ] Using files from `pg_dump_split_converted/` directory
-- [ ] Files contain `INSERT INTO` statements
-- [ ] Boolean values are `true`/`false` (not `'t'`/`'f'`)
-- [ ] NULL values are `NULL` (not `\N`)
-
-## All Converted Files
-
-Run these in order from `pg_dump_split_converted/`:
 1. 01_schema_setup.sql
 2. 02_core_tables.sql
 3. 03_messages_data.sql

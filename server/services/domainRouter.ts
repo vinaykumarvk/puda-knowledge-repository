@@ -1,4 +1,5 @@
 import {
+  canonicalizeDomainId,
   DEFAULT_DOMAIN_ID,
   DomainConfig,
   DomainId,
@@ -36,27 +37,30 @@ export class DomainRouter {
   resolve(input: DomainResolutionInput): DomainResolutionResult {
     const normalizedQuestion = input.question?.toLowerCase().trim() ?? "";
 
-    if (domainExists(input.explicitDomain)) {
+    const explicitDomain = canonicalizeDomainId(input.explicitDomain);
+    if (domainExists(explicitDomain)) {
       return {
-        domainId: input.explicitDomain as DomainId,
+        domainId: explicitDomain as DomainId,
         strategy: "explicit",
         confidence: 1,
         matchedKeywords: [],
       };
     }
 
-    if (domainExists(input.conversationDomain)) {
+    const conversationDomain = canonicalizeDomainId(input.conversationDomain);
+    if (domainExists(conversationDomain)) {
       return {
-        domainId: input.conversationDomain as DomainId,
+        domainId: conversationDomain as DomainId,
         strategy: "conversation",
         confidence: 1,
         matchedKeywords: [],
       };
     }
 
-    if (domainExists(input.metadataDomain)) {
+    const metadataDomain = canonicalizeDomainId(input.metadataDomain);
+    if (domainExists(metadataDomain)) {
       return {
-        domainId: input.metadataDomain as DomainId,
+        domainId: metadataDomain as DomainId,
         strategy: "metadata",
         confidence: 0.9,
         matchedKeywords: [],

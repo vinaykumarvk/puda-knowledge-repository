@@ -1,14 +1,11 @@
-import { useState } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
-import { AuthProvider, useAuth } from "@/contexts/auth-context";
+import { AuthProvider } from "@/contexts/auth-context";
 import ProtectedRoute from "@/components/protected-route";
-import { MainNavSidebar } from "@/components/main-nav-sidebar";
-import { MobileNavDrawer } from "@/components/mobile-nav-drawer";
 import { TopHeader } from "@/components/top-header";
 import { UxGateAuditor } from "@/components/ux-gate-auditor";
 import ChatbotPage from "@/pages/chatbot";
@@ -22,8 +19,6 @@ import InvestmentPortal from "@/pages/InvestmentPortal";
 import type { UserMastery } from "@shared/schema";
 
 function ProtectedLayout() {
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
   // Fetch mastery data for header stats (optional - don't fail if it errors)
   const { data: masteryData, error: masteryError } = useQuery<UserMastery>({
     queryKey: ["/api/mastery"],
@@ -56,25 +51,14 @@ function ProtectedLayout() {
     // Future: Implement global search functionality
   };
 
-  const toggleMobileMenu = () => {
-    setIsMobileMenuOpen(!isMobileMenuOpen);
-  };
-
-  const closeMobileMenu = () => {
-    setIsMobileMenuOpen(false);
-  };
-
   return (
     <div className="flex flex-col h-screen">
       <TopHeader 
         questionsAsked={0}
         quizzesCompleted={masteryData?.totalQuizzesTaken || 0}
         onSearch={handleSearch}
-        onMenuClick={toggleMobileMenu}
       />
       <div className="flex flex-1 overflow-hidden">
-        <MainNavSidebar className="hidden md:flex" />
-        <MobileNavDrawer isOpen={isMobileMenuOpen} onClose={closeMobileMenu} />
         <main className="flex flex-1 min-h-0 flex-col overflow-hidden">
           <Switch>
             <Route path="/" component={ChatbotPage} />
@@ -99,7 +83,11 @@ function Router() {
   return (
     <Switch>
       <Route path="/login" component={LoginPage} />
-      <Route><ProtectedLayout /></Route>
+      <Route>
+        <ProtectedRoute>
+          <ProtectedLayout />
+        </ProtectedRoute>
+      </Route>
     </Switch>
   );
 }

@@ -5,6 +5,11 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 // import { seedUsers } from "./seed-users"; // Commented out - not used in production
 import { initializeDomainRegistry } from "./services/domainRegistry";
+import {
+  initializeEmbeddedEkgEngine,
+  isEmbeddedEkgEnabled,
+  registerEmbeddedEkgShutdownHandlers,
+} from "./services/embeddedEkgEngine";
 
 const app = express();
 app.use(express.json());
@@ -43,9 +48,12 @@ app.use((req, res, next) => {
 
 (async () => {
   try {
+    const isDevelopment = process.env.NODE_ENV === "development";
+    const defaultPort = isDevelopment ? "5000" : "8080";
+
     console.log('Starting server initialization...');
     console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
-    console.log(`PORT: ${process.env.PORT || '5000'}`);
+    console.log(`PORT: ${process.env.PORT || defaultPort}`);
     
     // Ensure domain registry reflects latest vector stores before wiring routes
     // This may fail if OpenAI API is not configured, but we continue anyway
@@ -54,6 +62,17 @@ app.use((req, res, next) => {
       console.warn('Domain registry initialization failed (non-fatal):', err.message);
     });
     console.log('Domain registry initialized');
+
+    registerEmbeddedEkgShutdownHandlers();
+    if (isEmbeddedEkgEnabled()) {
+      console.log("Initializing embedded EKG engine...");
+      await initializeEmbeddedEkgEngine().catch((err) => {
+        console.warn(
+          "Embedded EKG engine initialization failed (non-fatal):",
+          err.message,
+        );
+      });
+    }
 
   // Serve attached assets FIRST (before routes and Vite)
   // This ensures the static files are served correctly
@@ -80,7 +99,7 @@ app.use((req, res, next) => {
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
   console.log('Setting up static file serving...');
-  if (app.get("env") === "development") {
+  if (isDevelopment) {
     await setupVite(app, server);
     console.log('Vite dev server configured');
   } else {
@@ -94,7 +113,7 @@ app.use((req, res, next) => {
   // ALWAYS serve the app on the port specified in the environment variable PORT
   // Cloud Run uses PORT env var (defaults to 8080)
   // For local dev, default to 5000 if not specified
-  const port = parseInt(process.env.PORT || (process.env.NODE_ENV === 'production' ? '8080' : '5000'), 10);
+  const port = parseInt(process.env.PORT || defaultPort, 10);
   
   // Use standard Node.js server.listen() syntax
   // Cloud Run requires listening on 0.0.0.0 to accept external connections

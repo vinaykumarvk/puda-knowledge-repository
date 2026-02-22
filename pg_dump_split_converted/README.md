@@ -1,6 +1,6 @@
-# Converted SQL Files for Supabase
+# Converted SQL Files for PostgreSQL
 
-These files have been converted from `COPY ... FROM stdin` format to standard `INSERT` statements, making them compatible with Supabase SQL Editor.
+These scripts convert `COPY ... FROM stdin` dumps into `INSERT` statements for easier manual execution against PostgreSQL.
 
 ## Files (Run in Order)
 
@@ -16,19 +16,19 @@ These files have been converted from `COPY ... FROM stdin` format to standard `I
 ## Important Notes
 
 ### Boolean Values
-The converted files use `'t'` and `'f'` for boolean values. If you encounter errors, you may need to:
+The converted files may include `'t'` and `'f'`. If your tooling rejects them, replace with:
 - Replace `'t'` with `true`
 - Replace `'f'` with `false`
 
-However, PostgreSQL should accept `'t'`/`'f'` if the column type is boolean, so this should work as-is.
+PostgreSQL accepts `'t'`/`'f'` for boolean columns.
 
 ### NULL Values
 `\N` from the original COPY format has been converted to `NULL` in INSERT statements.
 
 ### File Sizes
-- Files 01-06: Small to medium size (should work in SQL Editor)
+- Files 01-06: Small to medium size (easy manual run)
 - Files 07-08: Large files (3-4 MB each)
-  - If too large for SQL Editor, use psql command line:
+  - Prefer `psql` for these:
     ```bash
     psql "$DATABASE_URL" < pg_dump_split_converted/07_response_cache.sql
     psql "$DATABASE_URL" < pg_dump_split_converted/08_other_tables_and_constraints.sql
@@ -36,7 +36,7 @@ However, PostgreSQL should accept `'t'`/`'f'` if the column type is boolean, so 
 
 ## Usage
 
-1. Go to Supabase Dashboard → SQL Editor
+1. Ensure `DATABASE_URL` points to your local PostgreSQL instance
 2. Run files 01-08 in order
 3. Wait for each file to complete before running the next
 

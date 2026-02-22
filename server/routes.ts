@@ -16,6 +16,12 @@ import { pollUntilComplete, extractAnswerText, isAsyncDeepModeResponse } from ".
 import { findSimilarCachedResponse, saveCachedResponse } from "./services/responseCache";
 import { jobStore } from "./services/jobStore";
 import { getUploadDir } from "./utils/uploadPaths";
+import {
+  fetchEkg,
+  mapDomainForEkg,
+  postEkgAnswer,
+  resolveEkgVectorStoreId,
+} from "./services/ekgClient";
 import { 
   generateQueryId, 
   startQueryTracking, 
@@ -25,9 +31,16 @@ import {
   cleanupOldQueries,
   getThreadStatuses 
 } from "./services/queryStatusTracker";
-
-const EKG_API_URL = "https://ekg-service-47249889063.europe-west6.run.app";
 const domainRouter = new DomainRouter();
+const NOT_ENOUGH_INFO_MESSAGE = "not enough information available";
+const REPOSITORY_ONLY_RULES = `
+Repository-only requirements:
+• Use ONLY information retrieved from the internal repository knowledge base for this query
+• Do NOT use external/web/general knowledge or assumptions
+• Do NOT provide jurisdiction-neutral background or broad legal commentary
+• If asked for an act/rule/regulation, name only exact acts/rules/regulations present in repository evidence
+• If repository evidence is insufficient, respond with exactly: ${NOT_ENOUGH_INFO_MESSAGE}
+`.trim();
 
 /**
  * Background job processor for deep mode async responses
@@ -71,7 +84,14 @@ async function processDeepModeJob(
     });
 
     if (pollResult.status !== "completed" || !pollResult.response) {
-      const errorMsg = pollResult.error || `Polling failed with status: ${pollResult.status}`;
+      const upstreamError =
+        pollResult.response?.error?.message ||
+        pollResult.response?.error?.code ||
+        pollResult.response?.incomplete_details?.reason;
+      const errorMsg =
+        pollResult.error ||
+        upstreamError ||
+        `Polling failed with status: ${pollResult.status}`;
       console.error(`[Deep Mode] Job ${jobId} polling failed: ${errorMsg}`);
       throw new Error(errorMsg);
     }
@@ -189,7 +209,7 @@ async function formatWithModel51(rawResponse: string, question: string, domainRe
         },
         {
           role: "user",
-          content: `Question:\n${question}\n\nResolved Domain: ${domainResolution?.domainId || 'unknown'}\n\nRaw Answer:\n${rawResponse}`,
+          content: `Question:\n${question}\n\nDomain Context: PUDA urban development and administration\n\nRaw Answer:\n${rawResponse}`,
         },
       ],
     });
@@ -359,6 +379,101 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // EKG API compatibility endpoints (now served by embedded engine)
+  app.get("/api/ekg/health", requireAuth, async (_req, res) => {
+    try {
+      const upstream = await fetchEkg("/health");
+      const payload = await upstream.json();
+      res.status(upstream.status).json(payload);
+    } catch (error: any) {
+      res.status(502).json({
+        error: "Embedded EKG engine unavailable",
+        details: error?.message || String(error),
+      });
+    }
+  });
+
+  app.get("/api/ekg/domains", requireAuth, async (_req, res) => {
+    try {
+      const upstream = await fetchEkg("/domains");
+      const payload = await upstream.json();
+      res.status(upstream.status).json(payload);
+    } catch (error: any) {
+      res.status(502).json({
+        error: "Failed to fetch EKG domains",
+        details: error?.message || String(error),
+      });
+    }
+  });
+
+  app.post("/api/ekg/answer", requireAuth, async (req, res) => {
+    try {
+      const upstream = await fetchEkg("/v1/answer", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(req.body || {}),
+      });
+      const payloadText = await upstream.text();
+      try {
+        res.status(upstream.status).json(JSON.parse(payloadText));
+      } catch {
+        res.status(upstream.status).json({ raw: payloadText });
+      }
+    } catch (error: any) {
+      res.status(502).json({
+        error: "Failed to execute EKG answer request",
+        details: error?.message || String(error),
+      });
+    }
+  });
+
+  app.get("/api/ekg/tasks", requireAuth, async (req, res) => {
+    try {
+      const params = new URLSearchParams();
+      if (typeof req.query.status === "string") params.set("status", req.query.status);
+      if (typeof req.query.limit === "string") params.set("limit", req.query.limit);
+      if (typeof req.query.offset === "string") params.set("offset", req.query.offset);
+
+      const suffix = params.toString() ? `?${params.toString()}` : "";
+      const upstream = await fetchEkg(`/v1/tasks${suffix}`);
+      const payload = await upstream.json();
+      res.status(upstream.status).json(payload);
+    } catch (error: any) {
+      res.status(502).json({
+        error: "Failed to list EKG tasks",
+        details: error?.message || String(error),
+      });
+    }
+  });
+
+  app.get("/api/ekg/tasks/:taskId", requireAuth, async (req, res) => {
+    try {
+      const upstream = await fetchEkg(`/v1/tasks/${req.params.taskId}`);
+      const payload = await upstream.json();
+      res.status(upstream.status).json(payload);
+    } catch (error: any) {
+      res.status(502).json({
+        error: "Failed to fetch EKG task",
+        details: error?.message || String(error),
+      });
+    }
+  });
+
+  app.get("/api/ekg/answer/status/:taskId", requireAuth, async (req, res) => {
+    try {
+      const upstream = await fetchEkg(`/v1/answer/status/${req.params.taskId}`);
+      const payload = await upstream.json();
+      res.status(upstream.status).json(payload);
+    } catch (error: any) {
+      res.status(502).json({
+        error: "Failed to fetch EKG answer status",
+        details: error?.message || String(error),
+      });
+    }
+  });
+
   // Streaming endpoint for concise mode (SSE) using Responses API streaming
   app.post("/api/query/stream", async (req, res) => {
     try {
@@ -455,12 +570,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
         apiKey: apiKey,
         baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
       });
+      const defaultDomainConfig = getDomainConfig(DEFAULT_DOMAIN_ID);
+      const streamVectorStoreId = resolveEkgVectorStoreId(
+        DEFAULT_DOMAIN_ID,
+        defaultDomainConfig?.defaultVectorStoreId || undefined,
+      );
+
+      if (!streamVectorStoreId) {
+        console.error("[Stream] No vector store configured for concise streaming");
+        clearInterval(statusInterval);
+        const errorMsg =
+          "No vector store configured. Set DOC_VECTOR_STORE_ID (or domain override) to enable repository-only concise answers.";
+        sendEvent("error", { error: errorMsg });
+        failQuery(queryId, errorMsg);
+        await storage.updateMessage(assistantMessage.id, {
+          content: `⚠️ Error: ${errorMsg}`,
+          metadata: JSON.stringify({ status: "failed", error: errorMsg, queryId }),
+        });
+        res.end();
+        return;
+      }
 
       try {
         console.log("[Stream] Calling OpenAI Responses API...");
+        const concisePrompt = `[Repository-Only Response Policy]
+
+You are an internal PUDA knowledge assistant.
+${REPOSITORY_ONLY_RULES}
+
+User's Question: ${question}`;
+
         const stream = await client.responses.create({
           model: process.env.OPENAI_CONCISE_MODEL || "gpt-4.1-mini",
-          input: question,
+          input: concisePrompt,
+          tools: [
+            {
+              type: "file_search",
+              vector_store_ids: [streamVectorStoreId],
+            },
+          ],
           stream: true,
           max_output_tokens: 400,
         } as any);
@@ -470,7 +618,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let responseId: string | null = null;
 
         let eventCount = 0;
-        for await (const event of stream) {
+        for await (const event of stream as any) {
           eventCount++;
           responseId = responseId || (event as any)?.response?.id || (event as any)?.id || null;
 
@@ -512,6 +660,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         if (eventCount === 0) {
           console.warn("[Stream] No events received from OpenAI stream");
+        }
+        if (!fullText.trim()) {
+          fullText = NOT_ENOUGH_INFO_MESSAGE;
         }
 
         // Stop status updates
@@ -742,41 +893,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         threadId = thread.id;
       }
       
-      // Prepare the question with meta-instructions for focused responses
-      let questionToSend = validatedData.question;
-      
-      if (chatHistory.length > 0) {
-        // Add meta-instructions for context understanding and focused responses
-        questionToSend = `[Context-Aware Follow-up Question with Focus Directives]
-
-Previous conversation history is provided for context. Please follow these instructions:
-
-STEP 1 - Context Understanding:
-• Evaluate if this question contains pronouns or unclear references (e.g., "this", "it", "that", "these", "the above")
-• If such references exist, identify what they refer to based on the conversation history
-• Internally clarify the question to make it self-contained and explicit
-
-STEP 2 - Focused Response Generation:
-• Answer ONLY the specific question asked - be precise and direct
-• Include ONLY information that is immediately relevant to this specific question
-• Exclude tangential details, background context, or loosely related information
-• Be concise while remaining comprehensive on the core topic
-• Prioritize clarity and relevance over exhaustive coverage
-
-User's Question: ${validatedData.question}`;
-      } else {
-        // Add focus directives for initial questions
-        questionToSend = `[Focused Response Directive]
-
-Please follow these instructions when answering:
-• Answer ONLY the specific question asked - be precise and direct
-• Include ONLY information that is immediately relevant to this specific question
-• Exclude tangential details, background context, or loosely related information
-• Be concise while remaining comprehensive on the core topic
-• Prioritize clarity and relevance over exhaustive coverage
-
-User's Question: ${validatedData.question}`;
-      }
+      // Keep EKG retrieval input clean (raw user question) so stepback + KG search
+      // can operate on the actual intent, as in the original V2 workflow.
+      const questionToSend = validatedData.question;
       
       const domainResolution = domainRouter.resolve({
         question: validatedData.question,
@@ -806,14 +925,25 @@ User's Question: ${validatedData.question}`;
         matchedKeywords: domainResolution.matchedKeywords,
       });
 
+      const domainConfig = getDomainConfig(finalDomain);
+      const ekgDomain = mapDomainForEkg(domainConfig?.ekgDomain || finalDomain);
+      const vectorStoreId = resolveEkgVectorStoreId(
+        finalDomain,
+        domainConfig?.defaultVectorStoreId || undefined,
+      );
+
       // Prepare API request payload with correct structure
       const apiPayload: any = {
         question: questionToSend,
-        domain: finalDomain,
+        domain: ekgDomain,
         params: {
           _mode: validatedData.mode || "balanced"  // Send mode in params object
         }
       };
+
+      if (vectorStoreId) {
+        apiPayload.vectorstore_id = vectorStoreId;
+      }
       
       // Add conversation_id for long-running context (prioritize this over response_id)
       if (existingConversationId) {
@@ -831,23 +961,8 @@ User's Question: ${validatedData.question}`;
       
       console.log("EKG API request payload:", JSON.stringify(apiPayload, null, 2));
       
-      // Call the EKG API
-      const response = await fetch(`${EKG_API_URL}/v1/answer`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "User-Agent": "WealthForce-Knowledge-Agent/1.0"
-        },
-        body: JSON.stringify(apiPayload),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("EKG API error:", response.status, errorText);
-        throw new Error(`EKG API error: ${response.status} - ${errorText}`);
-      }
-
-      let result = await response.json();
+      // Call the embedded EKG engine (or explicitly configured external endpoint)
+      let result = await postEkgAnswer(apiPayload);
       console.log("EKG API response:", JSON.stringify(result, null, 2));
 
       // Track raw response for deep mode (before formatting)
@@ -1031,7 +1146,7 @@ User's Question: ${validatedData.question}`;
   });
 
   // Deep mode job status polling endpoints
-  app.get("/api/jobs/:jobId/status", requireAuth, async (req: AuthenticatedRequest, res) => {
+  app.get("/api/jobs/:jobId/status", requireAuth, async (req, res) => {
     try {
       const job = await jobStore.getJob(req.params.jobId);
       if (!job) {
@@ -1091,7 +1206,7 @@ User's Question: ${validatedData.question}`;
   });
 
   // Check for stuck jobs and recover them
-  app.post("/api/jobs/recover-stuck", requireAuth, async (req: AuthenticatedRequest, res) => {
+  app.post("/api/jobs/recover-stuck", requireAuth, async (req, res) => {
     try {
       const stuckJobs = await jobStore.getStuckJobs(40); // Align with 30m poll window to avoid false positives
       const recovered: string[] = [];
@@ -1137,7 +1252,7 @@ User's Question: ${validatedData.question}`;
   });
 
   // Get all jobs (for debugging)
-  app.get("/api/jobs", requireAuth, async (req: AuthenticatedRequest, res) => {
+  app.get("/api/jobs", requireAuth, async (req, res) => {
     try {
       const allJobs = await jobStore.getAllJobs();
       const stuckJobs = await jobStore.getStuckJobs(40);
@@ -1170,7 +1285,7 @@ User's Question: ${validatedData.question}`;
   });
 
   // Get completed job result
-  app.get("/api/jobs/:jobId/result", requireAuth, async (req: AuthenticatedRequest, res) => {
+  app.get("/api/jobs/:jobId/result", requireAuth, async (req, res) => {
     try {
       const job = await jobStore.getJob(req.params.jobId);
       if (!job) {
@@ -1262,7 +1377,7 @@ Return your response as valid JSON in this EXACT format (no additional text befo
   ]
 }`;
 
-      const userPrompt = `Based on the following conversation about wealth management, generate 3-5 multiple-choice quiz questions to test understanding of the key concepts discussed.
+      const userPrompt = `Based on the following conversation about PUDA urban development and administration, generate 3-5 multiple-choice quiz questions to test understanding of the key concepts discussed.
 
 CONVERSATION HISTORY:
 ${conversationContext.map((ctx, i) => `Q${i + 1}: ${ctx.question}\nA${i + 1}: ${ctx.answer}`).join('\n\n')}
@@ -1809,7 +1924,7 @@ Generate quiz questions that:
       });
       
       // Create prompt for RFP response generation
-      const prompt = `You are an expert RFP (Request for Proposal) response writer for a wealth management and financial services company.
+      const prompt = `You are an expert RFP (Request for Proposal) response writer for an urban development and administration authority (PUDA context).
 
 Category: ${requirement.category}
 Requirement: ${requirement.requirement}
@@ -2516,17 +2631,29 @@ Always cite relevant regulations and provide actionable guidance.`
       // 4. Query EKG for additional context
       let ekgContext = "";
       try {
-        const ekgResponse = await fetch(`${EKG_API_URL}/v1/answer`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question }),
-        });
+        const reportDomainConfig = getDomainConfig(DEFAULT_DOMAIN_ID);
+        const ekgPayload: any = {
+          question,
+          domain: mapDomainForEkg(
+            reportDomainConfig?.ekgDomain || DEFAULT_DOMAIN_ID,
+          ),
+          params: {
+            _mode: "balanced",
+          },
+        };
 
-        if (ekgResponse.ok) {
-          const ekgData = await ekgResponse.json();
-          if (ekgData.answer) {
-            ekgContext = `\n\nKnowledge Base Context:\n${cleanAnswer(ekgData.answer)}`;
-          }
+        const reportVectorStoreId = resolveEkgVectorStoreId(
+          DEFAULT_DOMAIN_ID,
+          reportDomainConfig?.defaultVectorStoreId || undefined,
+        );
+        if (reportVectorStoreId) {
+          ekgPayload.vectorstore_id = reportVectorStoreId;
+        }
+
+        const ekgData = await postEkgAnswer(ekgPayload);
+        const ekgAnswer = ekgData.answer || ekgData.markdown;
+        if (ekgAnswer) {
+          ekgContext = `\n\nKnowledge Base Context:\n${cleanAnswer(ekgAnswer)}`;
         }
       } catch (error) {
         console.log("EKG service unavailable, continuing without it");
@@ -2538,7 +2665,7 @@ Always cite relevant regulations and provide actionable guidance.`
 You have access to:
 - The report's description and metadata
 - All attached documents for analysis and reference
-- External knowledge from the EKG service
+- Internal EKG knowledge engine context
 - Historical best practices from the vector store
 ${templateId ? '- The selected template structure and section requirements' : ''}
 

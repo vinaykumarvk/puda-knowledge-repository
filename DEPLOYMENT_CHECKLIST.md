@@ -109,15 +109,20 @@
 
 Set these in Cloud Run:
 - `DATABASE_URL` - PostgreSQL connection string
-- `SUPABASE_URL` - Supabase project URL
-- `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key
-- `USE_SUPABASE_CLIENT` - Set to `true`
 - `OPENAI_API_KEY` or `AI_INTEGRATIONS_OPENAI_API_KEY` - OpenAI API key
+- `PUDA_ACTS_REGULATIONS_KG_PATH` - Required KG path (recommended `gs://...` in production)
 - `AI_INTEGRATIONS_OPENAI_BASE_URL` - (Optional) Custom OpenAI base URL
+- `DB_SSL` - (Optional) set to `true` when your PostgreSQL endpoint requires SSL
+
+## KG File Policy
+
+- Keep large KG JSON files in Cloud Storage, not in GitHub.
+- Local files like `master_kg.json` / `puda_master_kg.json` are gitignored.
+- Container images do not bundle local KG JSON files; set `PUDA_ACTS_REGULATIONS_KG_PATH` at deploy time.
 
 ## Notes
 
 - Vite dynamic import: The import statement is in the bundle but only executes in development mode due to the guard in `setupVite()`
 - PORT: Cloud Run automatically sets PORT, but we default to 8080 for consistency
-- Assets: All images and JSON files are included in the Docker image
+- Assets: Runtime assets are included, but local KG JSON files are excluded by design
 - Build: Successfully tested locally, ready for deployment

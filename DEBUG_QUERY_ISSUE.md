@@ -93,19 +93,9 @@ If this fails, the query endpoint will also fail.
 ### 7. Check Environment Variables
 
 Make sure these are set:
-- `DATABASE_URL` - Supabase connection string
-- `SUPABASE_URL` - Supabase project URL
-- `SUPABASE_SERVICE_ROLE_KEY` - Service role key
-- `USE_SUPABASE_CLIENT=true` - Enable Supabase JS client
+- `DATABASE_URL` - PostgreSQL connection string
 - `AI_INTEGRATIONS_OPENAI_API_KEY` - For embeddings/cache
 - `EKG_API_URL` - External API URL (or uses default)
-
-### 8. Check SupabaseStorage Implementation
-
-If using `USE_SUPABASE_CLIENT=true`, verify:
-- `SupabaseStorage` methods are implemented
-- No missing methods causing errors
-- Check server logs for "SupabaseStorage" errors
 
 ## Quick Fixes
 
@@ -117,7 +107,7 @@ If using `USE_SUPABASE_CLIENT=true`, verify:
 ### If 500 error:
 1. Check server logs for stack trace
 2. Verify all environment variables are set
-3. Check if Supabase tables exist
+3. Check if PostgreSQL tables exist
 
 ### If no status updates:
 1. Check browser Network tab for status polling requests

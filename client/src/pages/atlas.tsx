@@ -87,7 +87,7 @@ export default function AtlasPage() {
                     <div className="space-y-1">
                       <CardTitle>Interactive Knowledge Graph</CardTitle>
                       <CardDescription>
-                        Explore the wealth management knowledge base with {knowledgeGraph?.metadata?.consolidation_stats?.consolidated_nodes || 0} interconnected concepts
+                        Explore the PUDA urban administration knowledge base with {knowledgeGraph?.metadata?.consolidation_stats?.consolidated_nodes || 0} interconnected concepts
                       </CardDescription>
                     </div>
                     <div className="flex items-center gap-2 bg-muted rounded-lg p-1">

@@ -47,44 +47,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(data.user);
         } catch (jsonError) {
           console.error("Failed to parse user data:", jsonError);
-          // RBAC postponed - use default user when auth fails
-          setUser({
-            id: "default",
-            username: "user",
-            fullName: "Default User",
-            team: "admin",
-            email: null,
-            isActive: true,
-            createdAt: new Date().toISOString(),
-            lastLogin: null,
-          });
+          setUser(null);
         }
       } else {
-        // RBAC postponed - use default user when not authenticated
-        setUser({
-          id: "default",
-          username: "user",
-          fullName: "Default User",
-          team: "admin",
-          email: null,
-          isActive: true,
-          createdAt: new Date().toISOString(),
-          lastLogin: null,
-        });
+        setUser(null);
       }
     } catch (error) {
       console.error("Auth check failed:", error);
-      // RBAC postponed - use default user on error
-      setUser({
-        id: "default",
-        username: "user",
-        fullName: "Default User",
-        team: "admin",
-        email: null,
-        isActive: true,
-        createdAt: new Date().toISOString(),
-        lastLogin: null,
-      });
+      setUser(null);
     } finally {
       setLoading(false);
     }

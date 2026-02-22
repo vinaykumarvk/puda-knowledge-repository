@@ -1,9 +1,7 @@
-import { Wrench, FileEdit, FolderOpen, ListChecks, Clipboard, Shield, ScanSearch, LayoutDashboard, TrendingUp, Briefcase, CheckSquare, FileText } from "lucide-react";
+import { Wrench, FolderOpen, ListChecks, Clipboard, Shield, ScanSearch, TrendingUp, FileText } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useLocation } from "wouter";
 
 export default function WorkshopPage() {
-  const [, setLocation] = useLocation();
   const templates = [
     {
       name: "Report Portal",
@@ -55,7 +53,7 @@ export default function WorkshopPage() {
               Launchpad
             </h1>
             <p className="text-xs text-muted-foreground">
-              Pre-developed templates for wealth management professionals
+              Pre-developed templates for PUDA urban administration workflows
             </p>
           </div>
         </div>
@@ -66,17 +64,14 @@ export default function WorkshopPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {templates.map((template) => {
               const Icon = template.icon;
-              const hasRoute = "route" in template;
               const hasExternal = "externalUrl" in template;
               return (
                 <Card
                   key={template.name}
-                  className={`hover:shadow-lg hover:border-primary/50 transition-all ${(hasRoute || hasExternal) ? "cursor-pointer" : "cursor-default opacity-60"} bg-card`}
+                  className={`hover:shadow-lg hover:border-primary/50 transition-all ${hasExternal ? "cursor-pointer" : "cursor-default opacity-60"} bg-card`}
                   onClick={() => {
                     if (hasExternal && template.externalUrl) {
                       window.open(template.externalUrl, "_blank", "noopener,noreferrer");
-                    } else if (hasRoute && template.route) {
-                      setLocation(template.route);
                     }
                   }}
                   data-testid={`card-template-${template.name.toLowerCase().replace(/\s+/g, '-')}`}
