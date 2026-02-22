@@ -10,12 +10,15 @@
 
 ## Required Environment Variables
 
-Set these in Google Cloud Run/App Engine environment variables or Secret Manager:
+Set these in Cloud Run service variables (or Secret Manager-backed variables).
 
 ### Database
 - `DATABASE_URL` - PostgreSQL connection string (required)
-  - Format: `postgresql://user:password@host:port/database`
-  - Example: `postgresql://user:pass@ep-xxx.us-east-2.aws.neon.tech/dbname?sslmode=require`
+  - Local/proxy format: `postgresql://user:password@127.0.0.1:5432/ekg_product?sslmode=disable`
+  - Cloud Run + Cloud SQL socket format:
+    - `postgresql://user:password@/ekg_product?host=/cloudsql/wealth-report:europe-west1:puda-pg`
+  - Do **not** set this to the Cloud SQL connection name alone.
+    - Invalid example: `wealth-report:europe-west1:puda-pg`
 
 ### OpenAI/AI Integration
 - `OPENAI_API_KEY` - OpenAI API key (required for AI features)
@@ -23,10 +26,25 @@ Set these in Google Cloud Run/App Engine environment variables or Secret Manager
 - `AI_INTEGRATIONS_OPENAI_BASE_URL` - (Optional) Custom OpenAI base URL
 - `OPENAI_FORMATTER_MODEL` - (Optional) Model for formatting responses (default: "gpt-5.1")
 - `PUDA_ACTS_REGULATIONS_KG_PATH` - **Required** KG path (recommended: `gs://bucket/path/to/puda_master_kg.json`)
+- `DOC_VECTOR_STORE_ID` - **Required** document vector store id
+- `KG_VECTOR_STORE_ID` - **Required** KG vector store id
 
 ### Application
 - `NODE_ENV` - Set to `production` (automatically set in Dockerfile)
 - `PORT` - Port to listen on (default: 8080, automatically set in Dockerfile)
+- `EKG_DEEP_MODEL` - Recommended: `gpt-5.1`
+- `EKG_DEEP_BACKGROUND_MODE` - Recommended: `false`
+
+### Cloud Run Variables Checklist (PUDA)
+
+Set these exact keys in Cloud Run:
+- `DATABASE_URL`
+- `OPENAI_API_KEY` (prefer Secret Manager)
+- `DOC_VECTOR_STORE_ID`
+- `KG_VECTOR_STORE_ID`
+- `PUDA_ACTS_REGULATIONS_KG_PATH`
+- `EKG_DEEP_MODEL`
+- `EKG_DEEP_BACKGROUND_MODE`
 
 ### Optional
 - `PYTHON_API_URL` - Python API service URL (if using external vector store service)
@@ -49,23 +67,23 @@ Set these in Google Cloud Run/App Engine environment variables or Secret Manager
 
 2. **Set environment variables in Cloud Run:**
    ```bash
-   gcloud run services update ekg-product \
-     --region=us-central1 \
-     --set-env-vars="DATABASE_URL=your_db_url,OPENAI_API_KEY=your_key,PUDA_ACTS_REGULATIONS_KG_PATH=gs://your-bucket/path/to/puda_master_kg.json"
+   gcloud run services update puda-knowledge-agent \
+     --region=europe-west1 \
+     --update-env-vars="DATABASE_URL=postgresql://user:password@/ekg_product?host=/cloudsql/wealth-report:europe-west1:puda-pg,DOC_VECTOR_STORE_ID=vs_xxx,KG_VECTOR_STORE_ID=vs_xxx,PUDA_ACTS_REGULATIONS_KG_PATH=gs://wealth-report/kg/master_kg.json,EKG_DEEP_MODEL=gpt-5.1,EKG_DEEP_BACKGROUND_MODE=false"
    ```
 
 #### Manual Deployment
 
 1. **Build and push image:**
    ```bash
-   gcloud builds submit --tag gcr.io/YOUR_PROJECT_ID/ekg-product
+   gcloud builds submit --tag gcr.io/YOUR_PROJECT_ID/puda-knowledge-agent
    ```
 
 2. **Deploy to Cloud Run:**
    ```bash
-   gcloud run deploy ekg-product \
-     --image gcr.io/YOUR_PROJECT_ID/ekg-product \
-     --region us-central1 \
+   gcloud run deploy puda-knowledge-agent \
+     --image gcr.io/YOUR_PROJECT_ID/puda-knowledge-agent \
+     --region europe-west1 \
      --platform managed \
      --allow-unauthenticated \
      --port 8080 \
@@ -73,7 +91,8 @@ Set these in Google Cloud Run/App Engine environment variables or Secret Manager
      --cpu 2 \
      --min-instances 1 \
      --max-instances 10 \
-     --set-env-vars "DATABASE_URL=your_db_url,OPENAI_API_KEY=your_key,PUDA_ACTS_REGULATIONS_KG_PATH=gs://your-bucket/path/to/puda_master_kg.json"
+     --add-cloudsql-instances wealth-report:europe-west1:puda-pg \
+     --update-env-vars "DATABASE_URL=postgresql://user:password@/ekg_product?host=/cloudsql/wealth-report:europe-west1:puda-pg,DOC_VECTOR_STORE_ID=vs_xxx,KG_VECTOR_STORE_ID=vs_xxx,PUDA_ACTS_REGULATIONS_KG_PATH=gs://wealth-report/kg/master_kg.json,EKG_DEEP_MODEL=gpt-5.1,EKG_DEEP_BACKGROUND_MODE=false"
    ```
 
 ### KG File Placement
@@ -111,6 +130,7 @@ If using Cloud SQL, ensure:
 1. Cloud SQL Admin API is enabled
 2. Cloud Run service account has Cloud SQL Client role
 3. Connection string format: `postgresql://user:pass@/dbname?host=/cloudsql/PROJECT:REGION:INSTANCE`
+4. Cloud Run service is attached to the instance via `--add-cloudsql-instances`
 
 ## File Storage Considerations
 
@@ -161,14 +181,14 @@ Configured in:
 - Check build logs in Cloud Build console
 
 ### Runtime Errors
-- Check Cloud Run logs: `gcloud run services logs read ekg-product`
+- Check Cloud Run logs: `gcloud run services logs read puda-knowledge-agent --region=europe-west1`
 - Verify environment variables are set correctly
 - Check database connectivity
 
 ### Database Connection Issues
 - Verify `DATABASE_URL` is correct
 - Check database firewall rules allow Cloud Run IPs
-- For Cloud SQL, verify Cloud SQL Proxy is configured
+- For Cloud SQL, verify Cloud Run service has Cloud SQL attachment and `DATABASE_URL` uses `/cloudsql/...` host
 
 ### Static Files Not Loading
 - Verify build completed successfully (`dist/public` exists)

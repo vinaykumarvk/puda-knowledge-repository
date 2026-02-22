@@ -21,7 +21,7 @@
 - ✅ Dockerfile copies `attached_assets` and `docs` directories
 
 ### 4. OpenAI SDK Version
-- ✅ Updated to `6.15.0` (latest version)
+- ✅ Updated to `6.22.0` (current repo version)
 - ✅ Supports Responses API (`client.responses.create()`)
 - ✅ No version incompatibility issues
 
@@ -61,7 +61,7 @@
 - ✅ Uses `process.env.PORT` (Cloud Run default)
 - ✅ Defaults to 8080 in production
 - ✅ Defaults to 5000 in development
-- ✅ Dockerfile sets `ENV PORT=8080`
+- ✅ Dockerfile exposes `8080` and server reads Cloud Run `PORT`
 - ✅ Server listens on `0.0.0.0` (required for Cloud Run)
 
 ### 12. JSON Files in Docker
@@ -72,7 +72,7 @@
 ### 13. Build Testing
 - ✅ Local build successful: `npm run build`
 - ✅ Build outputs verified: `dist/index.js` and `dist/public/` exist
-- ⚠️ Docker build test failed (likely Docker daemon issue, not code issue)
+- ✅ Docker build successful
 
 ## Deployment Steps
 
@@ -93,24 +93,30 @@
 
 4. **Build Docker image:**
    ```bash
-   docker build -t ekg-product .
+   docker build -t puda-knowledge-agent .
    ```
 
 5. **Deploy to Cloud Run:**
    ```bash
-   gcloud run deploy ekg-product \
-     --image gcr.io/YOUR_PROJECT_ID/ekg-product \
+   gcloud run deploy puda-knowledge-agent \
+     --image gcr.io/YOUR_PROJECT_ID/puda-knowledge-agent \
      --platform managed \
-     --region us-central1 \
-     --allow-unauthenticated
+     --region europe-west1 \
+     --allow-unauthenticated \
+     --add-cloudsql-instances wealth-report:europe-west1:puda-pg
    ```
 
 ## Environment Variables Required
 
 Set these in Cloud Run:
-- `DATABASE_URL` - PostgreSQL connection string
+- `DATABASE_URL` - PostgreSQL connection string (Cloud SQL socket form:
+  `postgresql://user:password@/ekg_product?host=/cloudsql/wealth-report:europe-west1:puda-pg`)
 - `OPENAI_API_KEY` or `AI_INTEGRATIONS_OPENAI_API_KEY` - OpenAI API key
+- `DOC_VECTOR_STORE_ID` - Required vector store id
+- `KG_VECTOR_STORE_ID` - Required KG vector store id
 - `PUDA_ACTS_REGULATIONS_KG_PATH` - Required KG path (recommended `gs://...` in production)
+- `EKG_DEEP_MODEL` - Recommended `gpt-5.1`
+- `EKG_DEEP_BACKGROUND_MODE` - Recommended `false`
 - `AI_INTEGRATIONS_OPENAI_BASE_URL` - (Optional) Custom OpenAI base URL
 - `DB_SSL` - (Optional) set to `true` when your PostgreSQL endpoint requires SSL
 

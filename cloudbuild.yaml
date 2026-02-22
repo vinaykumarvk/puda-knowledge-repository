@@ -1,66 +1,74 @@
 # Google Cloud Build configuration for Cloud Run
+# NOTE:
+# - Runtime secrets/variables (DATABASE_URL, OPENAI_API_KEY, vector store IDs, KG path)
+#   are managed in the Cloud Run service configuration.
+# - This pipeline updates only safe defaults and preserves existing service-level vars.
 steps:
-  # Build the container image
-  - name: 'gcr.io/cloud-builders/docker'
+  # Build container image
+  - name: "gcr.io/cloud-builders/docker"
     args:
-      - 'build'
-      - '-t'
-      - 'gcr.io/$PROJECT_ID/ekg-product:$COMMIT_SHA'
-      - '-t'
-      - 'gcr.io/$PROJECT_ID/ekg-product:latest'
-      - '-f'
-      - 'Dockerfile'
-      - '.'
+      - "build"
+      - "-t"
+      - "gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$COMMIT_SHA"
+      - "-t"
+      - "gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest"
+      - "-f"
+      - "Dockerfile"
+      - "."
 
-  # Push the container image to Container Registry
-  - name: 'gcr.io/cloud-builders/docker'
+  # Push image tags
+  - name: "gcr.io/cloud-builders/docker"
     args:
-      - 'push'
-      - 'gcr.io/$PROJECT_ID/ekg-product:$COMMIT_SHA'
+      - "push"
+      - "gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$COMMIT_SHA"
 
-  - name: 'gcr.io/cloud-builders/docker'
+  - name: "gcr.io/cloud-builders/docker"
     args:
-      - 'push'
-      - 'gcr.io/$PROJECT_ID/ekg-product:latest'
+      - "push"
+      - "gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest"
 
-  # Deploy container image to Cloud Run
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  # Deploy to Cloud Run
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     entrypoint: gcloud
     args:
-      - 'run'
-      - 'deploy'
-      - 'ekg-product'
-      - '--image'
-      - 'gcr.io/$PROJECT_ID/ekg-product:$COMMIT_SHA'
-      - '--region'
-      - 'us-central1'
-      - '--platform'
-      - 'managed'
-      - '--allow-unauthenticated'
-      - '--port'
-      - '8080'
-      - '--memory'
-      - '4Gi'
-      - '--cpu'
-      - '2'
-      - '--min-instances'
-      - '1'
-      - '--max-instances'
-      - '10'
-      - '--timeout'
-      - '300'
-      - '--set-env-vars'
-      - 'NODE_ENV=production'
+      - "run"
+      - "deploy"
+      - "${_SERVICE_NAME}"
+      - "--image"
+      - "gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$COMMIT_SHA"
+      - "--region"
+      - "${_REGION}"
+      - "--platform"
+      - "managed"
+      - "--allow-unauthenticated"
+      - "--port"
+      - "8080"
+      - "--memory"
+      - "4Gi"
+      - "--cpu"
+      - "2"
+      - "--min-instances"
+      - "1"
+      - "--max-instances"
+      - "10"
+      - "--timeout"
+      - "300"
+      - "--add-cloudsql-instances"
+      - "${_CLOUDSQL_INSTANCE}"
+      - "--update-env-vars"
+      - "NODE_ENV=production,EKG_ENGINE_MODE=embedded,EKG_ENGINE_AUTO_START=true,EKG_DEEP_MODEL=gpt-5.1,EKG_DEEP_BACKGROUND_MODE=false"
 
-# Images to be pushed to the Container Registry
 images:
-  - 'gcr.io/$PROJECT_ID/ekg-product:$COMMIT_SHA'
-  - 'gcr.io/$PROJECT_ID/ekg-product:latest'
+  - "gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$COMMIT_SHA"
+  - "gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest"
 
-# Build options
+substitutions:
+  _SERVICE_NAME: "puda-knowledge-agent"
+  _REGION: "europe-west1"
+  _CLOUDSQL_INSTANCE: "wealth-report:europe-west1:puda-pg"
+
 options:
-  machineType: 'E2_HIGHCPU_8'
+  machineType: "E2_HIGHCPU_8"
   logging: CLOUD_LOGGING_ONLY
 
-timeout: '1200s'
-
+timeout: "1200s"
