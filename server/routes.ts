@@ -51,8 +51,7 @@ async function processDeepModeJob(
   responseId: string,
   question: string,
   mode: "concise" | "balanced" | "deep",
-  domainResolution: any,
-  refreshCache?: boolean
+  domainResolution: any
 ): Promise<void> {
   try {
     const job = await jobStore.getJob(jobId);
@@ -143,15 +142,7 @@ async function processDeepModeJob(
       metadata: metadataPayload,
     });
 
-    // Step 5: Save to cache
-    let originalCacheId: number | undefined;
-    if (refreshCache) {
-      const originalCached = await findSimilarCachedResponse(question, mode);
-      if (originalCached) {
-        originalCacheId = originalCached.id;
-      }
-    }
-
+    // Step 5: Save to cache (regenerate path must not read from cache)
     await saveCachedResponse(
       question,
       mode,
@@ -159,7 +150,7 @@ async function processDeepModeJob(
       rawResponse,
       metadataPayload,
       responseId,
-      originalCacheId
+      undefined
     );
 
     console.log(`[Deep Mode] Job ${jobId} completed successfully`);
@@ -778,9 +769,10 @@ User's Question: ${question}`;
     try {
       const validatedData = querySchema.parse(req.body);
       const { question, mode, refreshCache } = validatedData;
+      const bypassCache = Boolean(refreshCache);
       
       // Step 1: Check cache first (unless user explicitly wants to refresh)
-      if (!refreshCache) {
+      if (!bypassCache) {
         const cached = await findSimilarCachedResponse(question, mode);
         
         if (cached) {
@@ -1020,7 +1012,7 @@ User's Question: ${question}`;
         });
         
         // Start background polling (don't await)
-        processDeepModeJob(jobId, taskId, validatedData.question, mode, domainResolution, refreshCache).catch(async error => {
+        processDeepModeJob(jobId, taskId, validatedData.question, mode, domainResolution).catch(async error => {
           console.error(`[Deep Mode] Background job failed for ${jobId}:`, error);
           await jobStore.updateJobStatus(jobId, {
             status: 'failed',
@@ -1091,17 +1083,8 @@ User's Question: ${question}`;
         // Update thread timestamp
         await storage.updateThreadTimestamp(threadId!);
         
-        // Step 3: Save to cache (for all modes)
-        // Check if this was a refresh - if so, find the original cache entry
-        let originalCacheId: number | undefined;
-        if (refreshCache) {
-          const originalCached = await findSimilarCachedResponse(question, mode);
-          if (originalCached) {
-            originalCacheId = originalCached.id;
-          }
-        }
-        
-        // Save to cache
+        // Step 3: Save to cache without any cache reads.
+        // Regenerate requests intentionally bypass cache lookup and always use fresh LLM output.
         await saveCachedResponse(
           question,
           mode,
@@ -1109,7 +1092,7 @@ User's Question: ${question}`;
           rawResponseForCache, // Raw response for deep mode
           metadataPayload,
           result.response_id,
-          originalCacheId // Link to original if this was a refresh
+          undefined
         );
         
         // Get the message IDs that were just created
