@@ -14,13 +14,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -30,7 +23,6 @@ import {
   Send,
   Sparkles,
   User,
-  Download,
   RefreshCw,
   FileText,
   FileType,
@@ -424,156 +416,17 @@ function downloadMessagePDF(
   pdf.save(`answer-${new Date(timestamp).toISOString().slice(0, 10)}.pdf`);
 }
 
-// Helper function to download entire thread conversation as text
-function downloadThreadAsText(
-  messages: Message[],
-  threadTitle: string,
-  referenceMode: ReferenceDisplayMode,
-) {
-  let content = `Puda Knowledge Agent - Full Conversation Export
-Thread: ${threadTitle}
-Generated: ${new Date().toLocaleString()}
-
-========================================\n\n`;
-
-  for (let i = 0; i < messages.length; i += 2) {
-    const userMsg = messages[i];
-    const assistantMsg = messages[i + 1];
-    
-    if (userMsg && assistantMsg) {
-      const normalizedAssistant = normalizeAssistantContent(assistantMsg.content, referenceMode);
-      content += `[${new Date(userMsg.createdAt).toLocaleString()}]\n`;
-      content += `Question:\n${userMsg.content}\n\n`;
-      content += `Answer:\n${normalizedAssistant}\n\n`;
-      content += `========================================\n\n`;
-    }
-  }
-
-  const blob = new Blob([content], { type: 'text/plain' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `conversation-${threadTitle.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.txt`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-// Helper function to download entire thread conversation as PDF
-function downloadThreadAsPDF(
-  messages: Message[],
-  threadTitle: string,
-  referenceMode: ReferenceDisplayMode,
-) {
-  const pdf = new jsPDF();
-  const margin = 15;
-  const maxWidth = pdf.internal.pageSize.getWidth() - 2 * margin;
-  const pageHeight = pdf.internal.pageSize.getHeight();
-  let yPosition = margin;
-
-  // Title
-  pdf.setFontSize(16);
-  pdf.setFont('helvetica', 'bold');
-  pdf.text('Puda Knowledge Agent', margin, yPosition);
-  yPosition += 10;
-
-  pdf.setFontSize(12);
-  pdf.setFont('helvetica', 'normal');
-  pdf.text(`Thread: ${threadTitle}`, margin, yPosition);
-  yPosition += 6;
-  pdf.text(`Generated: ${new Date().toLocaleString()}`, margin, yPosition);
-  yPosition += 12;
-
-  // Process each Q&A pair
-  for (let i = 0; i < messages.length; i += 2) {
-    const userMsg = messages[i];
-    const assistantMsg = messages[i + 1];
-    
-    if (userMsg && assistantMsg) {
-      const normalizedAssistant = normalizeAssistantContent(assistantMsg.content, referenceMode);
-      // Check if we need a new page for this Q&A
-      if (yPosition + 40 > pageHeight - margin) {
-        pdf.addPage();
-        yPosition = margin;
-      }
-
-      // Timestamp
-      pdf.setFontSize(9);
-      pdf.setFont('helvetica', 'italic');
-      pdf.text(`[${new Date(userMsg.createdAt).toLocaleString()}]`, margin, yPosition);
-      yPosition += 8;
-
-      // Question
-      pdf.setFontSize(12);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('Question:', margin, yPosition);
-      yPosition += 7;
-
-      pdf.setFontSize(10);
-      pdf.setFont('helvetica', 'normal');
-      const questionLines = pdf.splitTextToSize(userMsg.content, maxWidth);
-      for (let j = 0; j < questionLines.length; j++) {
-        if (yPosition + 5 > pageHeight - margin) {
-          pdf.addPage();
-          yPosition = margin;
-        }
-        pdf.text(questionLines[j], margin, yPosition);
-        yPosition += 5;
-      }
-      yPosition += 5;
-
-      // Answer
-      pdf.setFontSize(12);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('Answer:', margin, yPosition);
-      yPosition += 7;
-
-      pdf.setFontSize(10);
-      pdf.setFont('helvetica', 'normal');
-      
-      // Clean the assistant message for PDF
-      const cleanAnswer = normalizedAssistant
-        .replace(/[#*_`]/g, '')
-        .replace(/\[(\d+)\]/g, '[$1]')
-        .replace(/<[^>]*>/g, '');
-      
-      const answerLines = pdf.splitTextToSize(cleanAnswer, maxWidth);
-      for (let j = 0; j < answerLines.length; j++) {
-        if (yPosition + 5 > pageHeight - margin) {
-          pdf.addPage();
-          yPosition = margin;
-        }
-        pdf.text(answerLines[j], margin, yPosition);
-        yPosition += 5;
-      }
-      
-      // Separator
-      yPosition += 8;
-      if (yPosition + 5 > pageHeight - margin) {
-        pdf.addPage();
-        yPosition = margin;
-      }
-      pdf.setLineWidth(0.5);
-      pdf.line(margin, yPosition, pdf.internal.pageSize.getWidth() - margin, yPosition);
-      yPosition += 10;
-    }
-  }
-
-  pdf.save(`conversation-${threadTitle.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.pdf`);
-}
-
 export default function ChatbotPage() {
   const [question, setQuestion] = useState("");
   const [currentThreadId, setCurrentThreadId] = useState<number | undefined>();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [mode, setMode] = useState<"concise" | "balanced" | "deep">("balanced");
   const [referenceDisplayMode, setReferenceDisplayMode] = useState<ReferenceDisplayMode>("with");
-  const [showDownloadDialog, setShowDownloadDialog] = useState(false);
   const [isWorkspaceSheetOpen, setWorkspaceSheetOpen] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const lastAssistantMessageRef = useRef<HTMLDivElement>(null);
+  const questionInputRef = useRef<HTMLTextAreaElement>(null);
   const { toast } = useToast();
 
   // Store active polling intervals to allow cleanup
@@ -774,12 +627,6 @@ export default function ChatbotPage() {
     const interval = setInterval(poll, 2 * 60 * 1000);
     pollingIntervalsRef.current.set(jobId, interval);
   }, [toast, setMessages, queryClient]);
-
-  // Fetch current thread details
-  const { data: currentThread } = useQuery<Thread>({
-    queryKey: [`/api/threads/${currentThreadId}`],
-    enabled: !!currentThreadId,
-  });
 
   // Streaming handler for concise mode (SSE-style over fetch)
   const streamConciseAnswer = useCallback(async (promptText: string) => {
@@ -1237,37 +1084,23 @@ export default function ChatbotPage() {
     },
   });
 
-  const refreshDomainsMutation = useMutation({
-    mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/domains/refresh", {
-        force: true,
-      });
-      return response.json();
-    },
-    onSuccess: (data) => {
-      if (!data?.success) {
-        toast({
-          title: "Refresh failed",
-          description: data?.error || "Unable to refresh domain registry",
-          variant: "destructive",
-        });
-        return;
-      }
+  const autoResizeQuestionInput = useCallback(() => {
+    const input = questionInputRef.current;
+    if (!input) {
+      return;
+    }
 
-      const domainCount = Array.isArray(data?.domains) ? data.domains.length : 0;
-      toast({
-        title: "Domain registry updated",
-        description: `Synced ${domainCount} domains${data?.lastSyncedAt ? ` at ${new Date(data.lastSyncedAt).toLocaleString()}` : ""}.`,
-      });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Refresh failed",
-        description: error.message || "Unable to refresh domain registry",
-        variant: "destructive",
-      });
-    },
-  });
+    const minHeight = 60;
+    const maxHeight = 220;
+    input.style.height = `${minHeight}px`;
+    const nextHeight = Math.min(input.scrollHeight, maxHeight);
+    input.style.height = `${Math.max(nextHeight, minHeight)}px`;
+    input.style.overflowY = input.scrollHeight > maxHeight ? "auto" : "hidden";
+  }, []);
+
+  useEffect(() => {
+    autoResizeQuestionInput();
+  }, [question, autoResizeQuestionInput]);
 
   const handleSubmit = (promptText?: string) => {
     const questionToSubmit = promptText || question;
@@ -1389,30 +1222,6 @@ export default function ChatbotPage() {
                   />
                 </SheetContent>
               </Sheet>
-
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-2"
-                onClick={() => refreshDomainsMutation.mutate()}
-                disabled={refreshDomainsMutation.isPending}
-              >
-                <RefreshCw className={`h-4 w-4 ${refreshDomainsMutation.isPending ? "animate-spin" : ""}`} />
-                Refresh Domains
-              </Button>
-
-              {currentThreadId && hasMessages && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  data-testid="button-download-thread"
-                  onClick={() => setShowDownloadDialog(true)}
-                  className="gap-2"
-                >
-                  <Download className="h-4 w-4" />
-                  Download
-                </Button>
-              )}
             </div>
           </div>
         </header>
@@ -1720,12 +1529,13 @@ export default function ChatbotPage() {
 
             <div className="flex gap-3">
               <Textarea
+                ref={questionInputRef}
                 data-testid="input-question"
                 placeholder="Ask a question..."
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
                 onKeyDown={handleKeyDown}
-                className="min-h-[60px] max-h-[160px] flex-1 resize-none rounded-xl border border-border/60 bg-background/90"
+                className="h-[60px] flex-1 resize-none rounded-xl border border-border/60 bg-background/90"
                 disabled={isLoading}
               />
               <Button
@@ -1746,60 +1556,6 @@ export default function ChatbotPage() {
         </div>
       </div>
 
-      {/* Download Format Selection Dialog */}
-      <Dialog open={showDownloadDialog} onOpenChange={setShowDownloadDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Download Conversation</DialogTitle>
-            <DialogDescription>
-              Choose your preferred format to download this conversation thread.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-3 py-4">
-            <Button
-              variant="outline"
-              size="lg"
-              className="w-full justify-start gap-3"
-              data-testid="button-download-text"
-              onClick={() => {
-                downloadThreadAsText(messages, currentThread?.title || "Conversation", referenceDisplayMode);
-                setShowDownloadDialog(false);
-                toast({
-                  title: "Download Started",
-                  description: "Your conversation is being downloaded as a text file.",
-                });
-              }}
-            >
-              <FileText className="w-5 h-5" />
-              <div className="text-left">
-                <div className="font-semibold">Text File (.txt)</div>
-                <div className="text-xs text-muted-foreground">Plain text format, easy to edit</div>
-              </div>
-            </Button>
-            
-            <Button
-              variant="outline"
-              size="lg"
-              className="w-full justify-start gap-3"
-              data-testid="button-download-pdf"
-              onClick={() => {
-                downloadThreadAsPDF(messages, currentThread?.title || "Conversation", referenceDisplayMode);
-                setShowDownloadDialog(false);
-                toast({
-                  title: "Download Started",
-                  description: "Your conversation is being downloaded as a PDF file.",
-                });
-              }}
-            >
-              <FileType className="w-5 h-5" />
-              <div className="text-left">
-                <div className="font-semibold">PDF Document (.pdf)</div>
-                <div className="text-xs text-muted-foreground">Professional format, ready to share</div>
-              </div>
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
