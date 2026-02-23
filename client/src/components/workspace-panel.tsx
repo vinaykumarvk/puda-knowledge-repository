@@ -5,6 +5,7 @@ import { ThreadSidebar } from "@/components/thread-sidebar";
 interface WorkspacePanelProps {
   onSelectThread: (thread: Thread) => void;
   onNewChat: () => void;
+  onRenameThread: (id: number, currentTitle: string) => void;
   onDeleteThread: (id: number) => void;
   selectedThreadId?: number;
   layout?: "desktop" | "mobile";
@@ -14,6 +15,7 @@ interface WorkspacePanelProps {
 export function WorkspacePanel({
   onSelectThread,
   onNewChat,
+  onRenameThread,
   onDeleteThread,
   selectedThreadId,
   layout = "desktop",
@@ -30,6 +32,7 @@ export function WorkspacePanel({
       <ThreadSidebar
         onSelectThread={onSelectThread}
         onNewChat={onNewChat}
+        onRenameThread={onRenameThread}
         onDeleteThread={onDeleteThread}
         selectedThreadId={selectedThreadId}
         variant="panel"

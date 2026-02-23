@@ -1559,6 +1559,35 @@ Generate quiz questions that:
     }
   });
 
+  // Rename thread title
+  app.patch("/api/threads/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (Number.isNaN(id)) {
+        return res.status(400).json({ error: "Invalid thread id" });
+      }
+
+      const title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
+      if (!title) {
+        return res.status(400).json({ error: "Title is required" });
+      }
+
+      if (title.length > 120) {
+        return res.status(400).json({ error: "Title must be 120 characters or fewer" });
+      }
+
+      const updatedThread = await storage.updateThreadTitle(id, title);
+      res.json(updatedThread);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      if (message.includes("not found")) {
+        return res.status(404).json({ error: "Thread not found" });
+      }
+      console.error("Error renaming thread:", error);
+      res.status(500).json({ error: "Failed to rename thread" });
+    }
+  });
+
   // Get messages for a thread
   app.get("/api/threads/:id/messages", async (req, res) => {
     try {

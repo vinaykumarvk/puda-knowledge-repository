@@ -1174,6 +1174,28 @@ export default function ChatbotPage() {
     }
   };
 
+  const handleRenameThread = async (id: number, currentTitle: string) => {
+    const nextTitle = window.prompt("Rename conversation", currentTitle)?.trim();
+    if (!nextTitle || nextTitle === currentTitle.trim()) {
+      return;
+    }
+
+    try {
+      await apiRequest("PATCH", `/api/threads/${id}`, { title: nextTitle });
+      queryClient.invalidateQueries({ queryKey: ["/api/threads"] });
+      toast({
+        title: "Thread renamed",
+        description: "Conversation title updated successfully.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to rename thread",
+        variant: "destructive",
+      });
+    }
+  };
+
   const isLoading = queryMutation.isPending || isStreaming;
   const hasMessages = messages.length > 0;
 
@@ -1240,6 +1262,7 @@ export default function ChatbotPage() {
         layout="desktop"
         onSelectThread={handleSelectThread}
         onNewChat={handleNewChat}
+        onRenameThread={handleRenameThread}
         onDeleteThread={handleDeleteThread}
         selectedThreadId={currentThreadId}
       />
@@ -1272,6 +1295,7 @@ export default function ChatbotPage() {
                     layout="mobile"
                     onSelectThread={handleSelectThread}
                     onNewChat={handleNewChat}
+                    onRenameThread={handleRenameThread}
                     onDeleteThread={handleDeleteThread}
                     selectedThreadId={currentThreadId}
                   />

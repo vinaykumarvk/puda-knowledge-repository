@@ -1,17 +1,19 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { Trash2, MessageSquarePlus, Search, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { Trash2, MessageSquarePlus, Search, ChevronLeft, ChevronRight, Loader2, MoreHorizontal, Pencil } from "lucide-react";
 
 import type { Thread } from "@shared/schema";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 interface ThreadSidebarProps {
   onSelectThread: (thread: Thread) => void;
   onNewChat: () => void;
+  onRenameThread: (id: number, currentTitle: string) => void;
   onDeleteThread: (id: number) => void;
   selectedThreadId?: number;
   variant?: "default" | "panel";
@@ -21,6 +23,7 @@ interface ThreadSidebarProps {
 export function ThreadSidebar({
   onSelectThread,
   onNewChat,
+  onRenameThread,
   onDeleteThread,
   selectedThreadId,
   variant = "default",
@@ -201,21 +204,46 @@ export function ThreadSidebar({
                     {thread.updatedAt ? formatDistanceToNow(new Date(thread.updatedAt), { addSuffix: true }) : 'recently'}
                   </p>
                 </div>
-                <Button
-                  data-testid={`button-delete-thread-${thread.id}`}
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0 flex-shrink-0 hover:bg-destructive hover:text-destructive-foreground text-destructive"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (confirm("Delete this conversation? This action cannot be undone.")) {
-                      onDeleteThread(thread.id);
-                    }
-                  }}
-                  title="Delete thread"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      data-testid={`button-thread-menu-${thread.id}`}
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 flex-shrink-0"
+                      onClick={(e) => e.stopPropagation()}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      title="Thread actions"
+                    >
+                      <MoreHorizontal className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenuItem
+                      data-testid={`button-rename-thread-${thread.id}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRenameThread(thread.id, thread.title);
+                      }}
+                    >
+                      <Pencil className="mr-2 w-4 h-4" />
+                      Rename
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      data-testid={`button-delete-thread-${thread.id}`}
+                      className="text-destructive focus:text-destructive"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm("Delete this conversation? This action cannot be undone.")) {
+                          onDeleteThread(thread.id);
+                        }
+                      }}
+                    >
+                      <Trash2 className="mr-2 w-4 h-4" />
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             ))
           )}

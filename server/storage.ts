@@ -96,6 +96,7 @@ export interface IStorage {
   getThreads(): Promise<Thread[]>;
   getThread(id: number): Promise<Thread | undefined>;
   createThread(thread: InsertThread): Promise<Thread>;
+  updateThreadTitle(id: number, title: string): Promise<Thread>;
   updateThreadTimestamp(id: number): Promise<void>;
   updateThreadConversationId(id: number, conversationId: string): Promise<void>;
   deleteThread(id: number): Promise<void>;
@@ -342,6 +343,20 @@ export class DatabaseStorage implements IStorage {
       .insert(threads)
       .values(insertThread)
       .returning();
+    return thread;
+  }
+
+  async updateThreadTitle(id: number, title: string): Promise<Thread> {
+    const [thread] = await db
+      .update(threads)
+      .set({ title, updatedAt: new Date() })
+      .where(eq(threads.id, id))
+      .returning();
+
+    if (!thread) {
+      throw new Error(`Thread ${id} not found`);
+    }
+
     return thread;
   }
 
