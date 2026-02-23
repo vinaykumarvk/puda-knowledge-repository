@@ -6,14 +6,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -28,7 +20,7 @@ import {
   FileType,
   ThumbsUp,
   ThumbsDown,
-  MoreHorizontal,
+  Copy,
 } from "lucide-react";
 import jsPDF from "jspdf";
 import ReactMarkdown from "react-markdown";
@@ -167,6 +159,19 @@ const referenceDisplayOptions = [
     value: "without" as const,
     label: "No refs",
     description: "Hide inline citations and the sources section.",
+  },
+];
+
+const cacheModeOptions = [
+  {
+    value: "on" as const,
+    label: "On",
+    description: "Allow response cache for faster repeated answers.",
+  },
+  {
+    value: "off" as const,
+    label: "Off",
+    description: "Always bypass cache and force a fresh LLM response.",
   },
 ];
 
@@ -421,7 +426,8 @@ export default function ChatbotPage() {
   const [currentThreadId, setCurrentThreadId] = useState<number | undefined>();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [mode, setMode] = useState<"concise" | "balanced" | "deep">("balanced");
-  const [referenceDisplayMode, setReferenceDisplayMode] = useState<ReferenceDisplayMode>("with");
+  const [referenceDisplayMode, setReferenceDisplayMode] = useState<ReferenceDisplayMode>("without");
+  const [cacheMode, setCacheMode] = useState<"on" | "off">("on");
   const [isWorkspaceSheetOpen, setWorkspaceSheetOpen] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -932,7 +938,7 @@ export default function ChatbotPage() {
   }, [messages]);
 
   const queryMutation = useMutation({
-    mutationFn: async (payload: { question: string; threadId?: number; refreshCache?: boolean }) => {
+    mutationFn: async (payload: { question: string; threadId?: number; refreshCache?: boolean; isRegenerate?: boolean }) => {
       const response = await apiRequest("POST", "/api/query", {
         question: payload.question,
         mode: mode,
@@ -999,7 +1005,7 @@ export default function ChatbotPage() {
           // Normal synchronous response
           // For regenerate (refreshCache), we should replace the old assistant message
           // For new queries, we add new messages
-          const isRegenerate = variables.refreshCache;
+          const isRegenerate = Boolean(variables.isRegenerate);
           
           if (isRegenerate && currentThreadId) {
             // Regenerate: Replace the last assistant message with the new one
@@ -1118,6 +1124,8 @@ export default function ChatbotPage() {
     queryMutation.mutate({
       question: questionToSubmit,
       threadId: currentThreadId,
+      refreshCache: cacheMode === "off",
+      isRegenerate: false,
     });
     
     // Clear the input if submitting from the textarea
@@ -1177,6 +1185,53 @@ export default function ChatbotPage() {
           ? "We'll keep responses focused on what resonated."
           : "We're refining future answers based on your signal.",
     });
+  };
+
+  const handleRegenerate = (userQuestion: string) => {
+    queryMutation.mutate({
+      question: userQuestion,
+      threadId: currentThreadId,
+      refreshCache: true,
+      isRegenerate: true,
+    });
+  };
+
+  const handleCopyMessage = async (messageId: number, messageContent: string) => {
+    const answerNode = document.querySelector(`[data-testid="assistant-content-${messageId}"]`);
+    const visibleText =
+      (answerNode?.textContent || "").trim() ||
+      normalizeAssistantContent(messageContent, referenceDisplayMode);
+
+    if (!visibleText) {
+      toast({
+        title: "Nothing to copy",
+        description: "No visible answer content was found.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(visibleText);
+      toast({
+        title: "Copied",
+        description: "Response copied to clipboard.",
+      });
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = visibleText;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+      toast({
+        title: "Copied",
+        description: "Response copied to clipboard.",
+      });
+    }
   };
 
   return (
@@ -1308,7 +1363,10 @@ export default function ChatbotPage() {
                           )}
                           {/* Actual content */}
                           {message.content ? (
-                            <div className="prose prose-sm max-w-none dark:prose-invert prose-a:text-primary prose-a:no-underline hover:prose-a:underline">
+                            <div
+                              className="prose prose-sm max-w-none dark:prose-invert prose-a:text-primary prose-a:no-underline hover:prose-a:underline"
+                              data-testid={`assistant-content-${message.id}`}
+                            >
                               <ReactMarkdown 
                                 rehypePlugins={[rehypeRaw]}
                                 remarkPlugins={[remarkGfm]}
@@ -1329,24 +1387,6 @@ export default function ChatbotPage() {
                     {/* Action buttons for assistant messages */}
                     {message.role === "assistant" && userMessage && (
                       <div className="mt-2 flex items-center gap-2">
-                        {(message as any).isCached && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8 gap-2 text-xs"
-                            onClick={() => {
-                              queryMutation.mutate({
-                                question: userMessage.content,
-                                threadId: currentThreadId,
-                                refreshCache: true,
-                              });
-                            }}
-                            disabled={isLoading}
-                          >
-                            <RefreshCw className="h-3 w-3" />
-                            Refresh Answer
-                          </Button>
-                        )}
                         <Button
                           variant="ghost"
                           size="icon"
@@ -1365,20 +1405,13 @@ export default function ChatbotPage() {
                         >
                           <ThumbsDown className="h-4 w-4" />
                         </Button>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
                             <Button
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8"
-                              data-testid={`button-message-actions-${message.id}`}
-                            >
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="start" className="w-56">
-                            <DropdownMenuLabel>Response actions</DropdownMenuLabel>
-                            <DropdownMenuItem
+                              data-testid={`button-download-md-${message.id}`}
                               onClick={() =>
                                 downloadMessageMarkdown(
                                   userMessage.content,
@@ -1390,10 +1423,18 @@ export default function ChatbotPage() {
                                 )
                               }
                             >
-                              <FileText className="mr-2 h-4 w-4" />
-                              Download as Markdown (.md)
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
+                              <FileText className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">Download .md</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              data-testid={`button-download-pdf-${message.id}`}
                               onClick={() =>
                                 downloadMessagePDF(
                                   userMessage.content,
@@ -1405,24 +1446,40 @@ export default function ChatbotPage() {
                                 )
                               }
                             >
-                              <FileType className="mr-2 h-4 w-4" />
-                              Download as PDF (.pdf)
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() =>
-                                queryMutation.mutate({
-                                  question: userMessage.content,
-                                  threadId: currentThreadId,
-                                  refreshCache: true,
-                                })
-                              }
+                              <FileType className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">Download .pdf</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              data-testid={`button-copy-response-${message.id}`}
+                              onClick={() => handleCopyMessage(message.id, message.content)}
                             >
-                              <RefreshCw className="mr-2 h-4 w-4" />
-                              Regenerate response
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">Copy response</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              data-testid={`button-regenerate-${message.id}`}
+                              onClick={() => handleRegenerate(userMessage.content)}
+                              disabled={isLoading}
+                            >
+                              <RefreshCw className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">Regenerate</TooltipContent>
+                        </Tooltip>
                       </div>
                     )}
                   </div>
@@ -1480,6 +1537,32 @@ export default function ChatbotPage() {
                   className="flex gap-1"
                 >
                   {responseModeOptions.map((option) => (
+                    <Tooltip key={option.value}>
+                      <TooltipTrigger asChild>
+                        <span>
+                          <ToggleGroupItem
+                            value={option.value}
+                            className="rounded-full px-3 py-1.5 text-xs data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                          >
+                            {option.label}
+                          </ToggleGroupItem>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">{option.description}</TooltipContent>
+                    </Tooltip>
+                  ))}
+                </ToggleGroup>
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Cache
+                </Label>
+                <ToggleGroup
+                  type="single"
+                  value={cacheMode}
+                  onValueChange={(value) => value && setCacheMode(value as "on" | "off")}
+                  className="flex gap-1"
+                  data-testid="toggle-cache-mode"
+                >
+                  {cacheModeOptions.map((option) => (
                     <Tooltip key={option.value}>
                       <TooltipTrigger asChild>
                         <span>
